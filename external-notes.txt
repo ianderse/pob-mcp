@@ -1,0 +1,5 @@
+This repository is modified by an external MCP workflow to add a TCP JSON API server for headless/live control.
+Env vars:
+- POB_API_TCP=1 to enable TCP server inside GUI run
+- POB_API_TCP_PORT (default 31337)
+

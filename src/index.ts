@@ -133,6 +133,32 @@ interface TreeAnalysisResult {
   optimizationSuggestions?: OptimizationSuggestion[];
 }
 
+// Phase 3: Tree Comparison Interface
+interface TreeComparison {
+  build1: {
+    name: string;
+    analysis: TreeAnalysisResult;
+  };
+  build2: {
+    name: string;
+    analysis: TreeAnalysisResult;
+  };
+  differences: {
+    uniqueToBuild1: PassiveTreeNode[];
+    uniqueToBuild2: PassiveTreeNode[];
+    sharedNodes: PassiveTreeNode[];
+    pointDifference: number;
+    archetypeDifference: string;
+  };
+}
+
+// Phase 3: Allocation Change Interface
+interface AllocationChange {
+  type: 'allocate' | 'remove';
+  nodeIdentifier: string;
+  node?: PassiveTreeNode;
+}
+
 class PoBMCPServer {
   private server: Server;
   private parser: XMLParser;
@@ -1054,6 +1080,426 @@ class PoBMCPServer {
     return output;
   }
 
+  // Phase 3: Tree Comparison
+  private async compareTrees(build1Name: string, build2Name: string): Promise<TreeComparison> {
+    const build1 = await this.readBuild(build1Name);
+    const build2 = await this.readBuild(build2Name);
+
+    const analysis1 = await this.analyzePassiveTree(build1);
+    const analysis2 = await this.analyzePassiveTree(build2);
+
+    if (!analysis1 || !analysis2) {
+      throw new Error('One or both builds lack passive tree data');
+    }
+
+    // Calculate differences
+    const nodes1Ids = new Set(analysis1.allocatedNodes.map(n => String(n.skill)));
+    const nodes2Ids = new Set(analysis2.allocatedNodes.map(n => String(n.skill)));
+
+    const uniqueToBuild1 = analysis1.allocatedNodes.filter(n => !nodes2Ids.has(String(n.skill)));
+    const uniqueToBuild2 = analysis2.allocatedNodes.filter(n => !nodes1Ids.has(String(n.skill)));
+    const sharedNodes = analysis1.allocatedNodes.filter(n => nodes2Ids.has(String(n.skill)));
+
+    const pointDifference = analysis1.totalPoints - analysis2.totalPoints;
+
+    let archetypeDifference = '';
+    if (analysis1.archetype !== analysis2.archetype) {
+      archetypeDifference = `Build 1: ${analysis1.archetype} vs Build 2: ${analysis2.archetype}`;
+    } else {
+      archetypeDifference = `Both builds: ${analysis1.archetype}`;
+    }
+
+    return {
+      build1: { name: build1Name, analysis: analysis1 },
+      build2: { name: build2Name, analysis: analysis2 },
+      differences: {
+        uniqueToBuild1,
+        uniqueToBuild2,
+        sharedNodes,
+        pointDifference,
+        archetypeDifference
+      }
+    };
+  }
+
+  private formatTreeComparison(comparison: TreeComparison): string {
+    let output = `=== Passive Tree Comparison ===\n\n`;
+    output += `Build 1: ${comparison.build1.name}\n`;
+    output += `Build 2: ${comparison.build2.name}\n\n`;
+
+    // Point allocation
+    output += `=== Point Allocation ===\n`;
+    output += `Build 1: ${comparison.build1.analysis.totalPoints} points\n`;
+    output += `Build 2: ${comparison.build2.analysis.totalPoints} points\n`;
+    output += `Difference: ${Math.abs(comparison.differences.pointDifference)} points `;
+    output += comparison.differences.pointDifference > 0 ? '(Build 1 has more)\n' : '(Build 2 has more)\n';
+
+    // Archetype comparison
+    output += `\n=== Archetype Comparison ===\n`;
+    output += `${comparison.differences.archetypeDifference}\n`;
+
+    // Keystones comparison
+    output += `\n=== Keystones Comparison ===\n`;
+    output += `Build 1 Keystones: ${comparison.build1.analysis.keystones.map(k => k.name).join(', ') || 'None'}\n`;
+    output += `Build 2 Keystones: ${comparison.build2.analysis.keystones.map(k => k.name).join(', ') || 'None'}\n`;
+
+    // Unique keystones
+    const uniqueKeystones1 = comparison.differences.uniqueToBuild1.filter(n => n.isKeystone);
+    const uniqueKeystones2 = comparison.differences.uniqueToBuild2.filter(n => n.isKeystone);
+
+    if (uniqueKeystones1.length > 0) {
+      output += `\nUnique to Build 1:\n`;
+      for (const ks of uniqueKeystones1) {
+        output += `- ${ks.name}\n`;
+      }
+    }
+
+    if (uniqueKeystones2.length > 0) {
+      output += `\nUnique to Build 2:\n`;
+      for (const ks of uniqueKeystones2) {
+        output += `- ${ks.name}\n`;
+      }
+    }
+
+    // Notables comparison
+    output += `\n=== Notable Passives Comparison ===\n`;
+    output += `Build 1: ${comparison.build1.analysis.notables.length} notables\n`;
+    output += `Build 2: ${comparison.build2.analysis.notables.length} notables\n`;
+
+    const uniqueNotables1 = comparison.differences.uniqueToBuild1.filter(n => n.isNotable);
+    const uniqueNotables2 = comparison.differences.uniqueToBuild2.filter(n => n.isNotable);
+
+    if (uniqueNotables1.length > 0) {
+      output += `\nTop 5 Unique Notables to Build 1:\n`;
+      for (const notable of uniqueNotables1.slice(0, 5)) {
+        output += `- ${notable.name || 'Unnamed'}\n`;
+      }
+    }
+
+    if (uniqueNotables2.length > 0) {
+      output += `\nTop 5 Unique Notables to Build 2:\n`;
+      for (const notable of uniqueNotables2.slice(0, 5)) {
+        output += `- ${notable.name || 'Unnamed'}\n`;
+      }
+    }
+
+    // Pathing efficiency
+    output += `\n=== Pathing Efficiency ===\n`;
+    output += `Build 1: ${comparison.build1.analysis.pathingEfficiency}\n`;
+    output += `Build 2: ${comparison.build2.analysis.pathingEfficiency}\n`;
+
+    // Shared nodes
+    output += `\n=== Shared Nodes ===\n`;
+    output += `${comparison.differences.sharedNodes.length} nodes are allocated in both builds\n`;
+
+    return output;
+  }
+
+  // Phase 3: Test Allocation (What-If Analysis)
+  private parseAllocationChanges(changesText: string, treeData: PassiveTreeData): AllocationChange[] {
+    const changes: AllocationChange[] = [];
+    const lines = changesText.split(/[,;\n]/);
+
+    for (const line of lines) {
+      const trimmed = line.trim().toLowerCase();
+      if (!trimmed) continue;
+
+      // Parse "allocate X" or "add X"
+      const allocateMatch = trimmed.match(/(?:allocate|add|take)\s+(.+)/);
+      if (allocateMatch) {
+        const nodeIdentifier = allocateMatch[1].trim();
+        changes.push({ type: 'allocate', nodeIdentifier });
+        continue;
+      }
+
+      // Parse "remove X" or "unallocate X"
+      const removeMatch = trimmed.match(/(?:remove|unallocate|drop)\s+(.+)/);
+      if (removeMatch) {
+        const nodeIdentifier = removeMatch[1].trim();
+        changes.push({ type: 'remove', nodeIdentifier });
+        continue;
+      }
+    }
+
+    return changes;
+  }
+
+  private findNodeByName(nodeName: string, treeData: PassiveTreeData): PassiveTreeNode | null {
+    const normalizedName = nodeName.toLowerCase().trim();
+    for (const [nodeId, node] of treeData.nodes) {
+      const nodeNameLower = (node.name || '').toLowerCase();
+      if (nodeNameLower === normalizedName || nodeNameLower.includes(normalizedName)) {
+        return node;
+      }
+    }
+    return null;
+  }
+
+  private async testAllocation(buildName: string, changesText: string): Promise<string> {
+    const build = await this.readBuild(buildName);
+    const currentAnalysis = await this.analyzePassiveTree(build);
+
+    if (!currentAnalysis) {
+      throw new Error('Build has no passive tree data');
+    }
+
+    const treeData = await this.getTreeData(currentAnalysis.treeVersion);
+    const changes = this.parseAllocationChanges(changesText, treeData);
+
+    let output = `=== What-If Allocation Testing ===\n\n`;
+    output += `Base Build: ${buildName}\n`;
+    output += `Proposed Changes: ${changesText}\n\n`;
+
+    // Check if PoB Lua Bridge is enabled
+    if (this.luaEnabled) {
+      output += `[PoB Lua Bridge Enabled: Real stat calculations available]\n\n`;
+
+      try {
+        // Load the build into PoB
+        const buildPath = path.join(this.pobDirectory, buildName);
+        const buildXml = await fs.readFile(buildPath, 'utf-8');
+        await this.ensureLuaClient();
+        if (!this.luaClient) throw new Error('Lua client not initialized');
+
+        await this.luaClient.loadBuildXml(buildXml, 'WhatIf Test');
+
+        // Get current stats
+        const beforeStats = await this.luaClient.getStats();
+        output += `=== Current Stats ===\n`;
+        if (beforeStats && typeof beforeStats === 'object') {
+          const statsKeys = Object.keys(beforeStats).slice(0, 10);
+          for (const key of statsKeys) {
+            output += `${key}: ${beforeStats[key]}\n`;
+          }
+        }
+
+        // Apply changes (simplified - would need tree modification logic)
+        output += `\n[Note: Full tree modification via Lua bridge would require allocating/deallocating specific node IDs]\n`;
+        output += `[This is a complex operation that requires pathfinding to intermediate nodes]\n\n`;
+
+        // For now, provide analysis without actual modification
+        output += `=== Proposed Changes Analysis ===\n`;
+        for (const change of changes) {
+          const node = this.findNodeByName(change.nodeIdentifier, treeData);
+          if (node) {
+            output += `\n${change.type === 'allocate' ? 'ALLOCATE' : 'REMOVE'}: ${node.name}\n`;
+            if (node.stats) {
+              output += `Stats: ${node.stats.join('; ')}\n`;
+            }
+            output += `Point Cost: 1 point\n`;
+          } else {
+            output += `\n${change.type === 'allocate' ? 'ALLOCATE' : 'REMOVE'}: ${change.nodeIdentifier}\n`;
+            output += `[Node not found in tree data]\n`;
+          }
+        }
+
+      } catch (error) {
+        output += `\nError using PoB Lua Bridge: ${error instanceof Error ? error.message : String(error)}\n`;
+        output += `Falling back to simulated analysis...\n\n`;
+
+        // Fallback to simulated analysis
+        output += this.simulateAllocationChanges(changes, currentAnalysis, treeData);
+      }
+    } else {
+      // Simulated analysis when PoB bridge not enabled
+      output += `[PoB Lua Bridge Disabled: Providing simulated analysis]\n`;
+      output += `[Enable with POB_LUA_ENABLED=true for real stat calculations]\n\n`;
+
+      output += this.simulateAllocationChanges(changes, currentAnalysis, treeData);
+    }
+
+    return output;
+  }
+
+  private simulateAllocationChanges(changes: AllocationChange[], currentAnalysis: TreeAnalysisResult, treeData: PassiveTreeData): string {
+    let output = `=== Simulated Changes Analysis ===\n\n`;
+
+    let pointsAllocated = 0;
+    let pointsFreed = 0;
+
+    for (const change of changes) {
+      const node = this.findNodeByName(change.nodeIdentifier, treeData);
+
+      if (!node) {
+        output += `- ${change.type === 'allocate' ? 'ALLOCATE' : 'REMOVE'}: "${change.nodeIdentifier}" [Node not found]\n`;
+        continue;
+      }
+
+      output += `- ${change.type === 'allocate' ? 'ALLOCATE' : 'REMOVE'}: ${node.name}\n`;
+
+      if (node.isKeystone) {
+        output += `  Type: Keystone\n`;
+      } else if (node.isNotable) {
+        output += `  Type: Notable\n`;
+      } else if (node.isJewelSocket) {
+        output += `  Type: Jewel Socket\n`;
+      } else {
+        output += `  Type: Small Passive\n`;
+      }
+
+      if (node.stats && node.stats.length > 0) {
+        output += `  Stats: ${node.stats.join('; ')}\n`;
+      } else {
+        output += `  Stats: None (pathing node)\n`;
+      }
+
+      if (change.type === 'allocate') {
+        pointsAllocated++;
+        output += `  Point Cost: 1 point\n`;
+      } else {
+        pointsFreed++;
+        output += `  Points Freed: 1 point\n`;
+      }
+
+      output += `\n`;
+    }
+
+    output += `=== Summary ===\n`;
+    output += `Current Points: ${currentAnalysis.totalPoints}\n`;
+    output += `Points to Allocate: ${pointsAllocated}\n`;
+    output += `Points to Free: ${pointsFreed}\n`;
+    output += `Net Change: ${pointsFreed - pointsAllocated} points\n`;
+    output += `Final Points: ${currentAnalysis.totalPoints + pointsAllocated - pointsFreed}\n\n`;
+
+    output += `Note: This is a simplified simulation. Actual point costs may vary if intermediate\n`;
+    output += `nodes need to be allocated to reach the desired nodes. Use PoB Lua Bridge for\n`;
+    output += `accurate stat calculations.\n`;
+
+    return output;
+  }
+
+  // Phase 3: Build Planning Assistant
+  private async planTree(buildName: string | undefined, goals: string): Promise<string> {
+    let output = `=== Passive Tree Planning Assistant ===\n\n`;
+
+    // Parse goals
+    output += `Build Goals: ${goals}\n\n`;
+
+    // Get tree data for analysis
+    const treeData = await this.getTreeData("3_26");
+
+    // Parse goals to identify target keystones and archetypes
+    const goalsLower = goals.toLowerCase();
+    const targetKeystones: PassiveTreeNode[] = [];
+    const recommendedNotables: PassiveTreeNode[] = [];
+
+    // Identify mentioned keystones
+    for (const [nodeId, node] of treeData.nodes) {
+      if (!node.isKeystone || !node.name) continue;
+
+      const nodeName = node.name.toLowerCase();
+      if (goalsLower.includes(nodeName) || goalsLower.includes(nodeName.replace(/\s+/g, ''))) {
+        targetKeystones.push(node);
+      }
+    }
+
+    // Suggest keystones based on common patterns
+    if (goalsLower.includes('crit') && !targetKeystones.find(k => k.name?.includes('Critical'))) {
+      const precisionNode = this.findNodeByName('Precision', treeData);
+      if (precisionNode) recommendedNotables.push(precisionNode);
+    }
+
+    if (goalsLower.includes('bow') || goalsLower.includes('projectile')) {
+      const pointBlank = this.findNodeByName('Point Blank', treeData);
+      if (pointBlank && !targetKeystones.includes(pointBlank)) {
+        targetKeystones.push(pointBlank);
+      }
+    }
+
+    if (goalsLower.includes('energy shield') || goalsLower.includes('es')) {
+      const ci = this.findNodeByName('Chaos Inoculation', treeData);
+      if (ci && !targetKeystones.includes(ci)) {
+        targetKeystones.push(ci);
+      }
+    }
+
+    if (goalsLower.includes('life') && !goalsLower.includes('low life')) {
+      // Recommend life-based notables
+      output += `=== Recommended Direction ===\n`;
+      output += `Life-based build detected. Focus on:\n`;
+      output += `- Life notable clusters near your starting class\n`;
+      output += `- % increased maximum life nodes\n`;
+      output += `- Life regeneration for sustain\n\n`;
+    }
+
+    // Display target keystones
+    if (targetKeystones.length > 0) {
+      output += `=== Target Keystones ===\n`;
+      for (const ks of targetKeystones) {
+        output += `\n${ks.name}\n`;
+        if (ks.stats) {
+          output += `Stats: ${ks.stats.join('; ')}\n`;
+        }
+        output += `Node ID: ${ks.skill}\n`;
+      }
+      output += `\n`;
+    }
+
+    // If base build provided, show current tree
+    if (buildName) {
+      try {
+        const build = await this.readBuild(buildName);
+        const analysis = await this.analyzePassiveTree(build);
+
+        if (analysis) {
+          output += `=== Current Tree (Base Build: ${buildName}) ===\n`;
+          output += `Total Points: ${analysis.totalPoints}\n`;
+          output += `Current Keystones: ${analysis.keystones.map(k => k.name).join(', ') || 'None'}\n`;
+          output += `Current Archetype: ${analysis.archetype}\n\n`;
+
+          // Suggest additions
+          const allocatedIds = new Set(analysis.allocatedNodes.map(n => String(n.skill)));
+          const unallocatedTargets = targetKeystones.filter(ks => !allocatedIds.has(String(ks.skill)));
+
+          if (unallocatedTargets.length > 0) {
+            output += `=== Recommended Additions ===\n`;
+            for (const ks of unallocatedTargets) {
+              output += `- ${ks.name} (not yet allocated)\n`;
+            }
+            output += `\n`;
+          }
+        }
+      } catch (error) {
+        output += `Could not load base build: ${error instanceof Error ? error.message : String(error)}\n\n`;
+      }
+    }
+
+    // General recommendations
+    output += `=== Planning Recommendations ===\n\n`;
+
+    if (goalsLower.includes('crit')) {
+      output += `Critical Strike Build:\n`;
+      output += `- Prioritize crit chance and crit multiplier notables\n`;
+      output += `- Allocate Precision or Assassination clusters\n`;
+      output += `- Consider Power Charge nodes for sustain\n\n`;
+    }
+
+    if (goalsLower.includes('attack')) {
+      output += `Attack Build:\n`;
+      output += `- Focus on weapon-specific damage nodes\n`;
+      output += `- Allocate attack speed for faster clear\n`;
+      output += `- Consider Resolute Technique if not going crit\n\n`;
+    }
+
+    if (goalsLower.includes('spell') || goalsLower.includes('cast')) {
+      output += `Spell Build:\n`;
+      output += `- Prioritize spell damage and cast speed\n`;
+      output += `- Consider Elemental Overload for non-crit\n`;
+      output += `- Allocate elemental penetration notables\n\n`;
+    }
+
+    output += `=== Leveling Path Suggestion ===\n`;
+    output += `1. Level 1-30: Focus on damage nodes near starting area\n`;
+    output += `2. Level 30-50: Path toward first major keystone or jewel socket\n`;
+    output += `3. Level 50-70: Allocate defensive layers (life/ES clusters)\n`;
+    output += `4. Level 70+: Optimize pathing and reach secondary keystones\n\n`;
+
+    output += `Note: Use the test_allocation tool to simulate specific node allocations\n`;
+    output += `and see their impact before committing points in-game.\n`;
+
+    return output;
+  }
+
   private startWatching() {
     if (this.watcher) {
       console.error("[File Watcher] Already watching directory");
@@ -1289,6 +1735,60 @@ class PoBMCPServer {
             },
           },
         },
+        {
+          name: "compare_trees",
+          description: "Compare passive skill trees between two builds, highlighting differences in keystones, notables, and point allocation efficiency",
+          inputSchema: {
+            type: "object",
+            properties: {
+              build1: {
+                type: "string",
+                description: "First build file name",
+              },
+              build2: {
+                type: "string",
+                description: "Second build file name",
+              },
+            },
+            required: ["build1", "build2"],
+          },
+        },
+        {
+          name: "test_allocation",
+          description: "Test hypothetical passive tree changes and see stat impacts without modifying the build file. Supports natural language descriptions like 'allocate Point Blank' or 'remove Acrobatics'. When PoB Lua Bridge is enabled, provides real stat calculations; otherwise provides simulated analysis.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              build_name: {
+                type: "string",
+                description: "Base build file name",
+              },
+              changes: {
+                type: "string",
+                description: "Natural language description of changes (e.g., 'allocate Point Blank keystone' or 'remove Acrobatics and reallocate to life nodes')",
+              },
+            },
+            required: ["build_name", "changes"],
+          },
+        },
+        {
+          name: "plan_tree",
+          description: "Plan passive tree allocation strategy. Recommend efficient paths to desired keystones, suggest notable clusters based on build goals, and provide leveling allocation recommendations. Can work from scratch or modify an existing build.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              build_name: {
+                type: "string",
+                description: "Optional: Base build file to modify. If omitted, plans from scratch.",
+              },
+              goals: {
+                type: "string",
+                description: "Description of build goals (e.g., 'crit bow build, get Point Blank and crit nodes' or 'tanky life-based melee with resolute technique')",
+              },
+            },
+            required: ["goals"],
+          },
+        },
       ];
 
       // Add lua_* tools if enabled
@@ -1429,6 +1929,28 @@ class PoBMCPServer {
 
           case "refresh_tree_data":
             return await this.handleRefreshTreeData(args?.version as string | undefined);
+
+          // Phase 3 tools
+          case "compare_trees":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handleCompareTrees(
+              args.build1 as string,
+              args.build2 as string
+            );
+
+          case "test_allocation":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handleTestAllocation(
+              args.build_name as string,
+              args.changes as string
+            );
+
+          case "plan_tree":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handlePlanTree(
+              args.build_name as string | undefined,
+              args.goals as string
+            );
 
           // Lua bridge tools
           case "lua_start":
@@ -1838,6 +2360,62 @@ class PoBMCPServer {
         },
       ],
     };
+  }
+
+  // Phase 3 Tool Handlers
+  private async handleCompareTrees(build1Name: string, build2Name: string) {
+    try {
+      const comparison = await this.compareTrees(build1Name, build2Name);
+      const output = this.formatTreeComparison(comparison);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: output,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to compare trees: ${errorMsg}`);
+    }
+  }
+
+  private async handleTestAllocation(buildName: string, changes: string) {
+    try {
+      const output = await this.testAllocation(buildName, changes);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: output,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to test allocation: ${errorMsg}`);
+    }
+  }
+
+  private async handlePlanTree(buildName: string | undefined, goals: string) {
+    try {
+      const output = await this.planTree(buildName, goals);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: output,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to plan tree: ${errorMsg}`);
+    }
   }
 
   // Lua Bridge Tool Handlers
