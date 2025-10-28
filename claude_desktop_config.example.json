@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "pob": {
+      "command": "node",
+      "args": [
+        "/CHANGE/THIS/PATH/pob-mcp-server/build/index.js"
+      ],
+      "env": {
+        "POB_DIRECTORY": "/Users/YOUR_USERNAME/Documents/Path of Building/Builds"
+      }
+    }
+  }
+}

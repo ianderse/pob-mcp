@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PathOfBuilding>
+  <Build level="90" targetVersion="3_0" bandit="None" className="Ranger" ascendClassName="Deadeye">
+    <PlayerStat stat="Life" value="4500"/>
+    <PlayerStat stat="EnergyShield" value="0"/>
+    <PlayerStat stat="Mana" value="800"/>
+    <PlayerStat stat="TotalDPS" value="2500000"/>
+    <PlayerStat stat="PhysicalDamageReduction" value="45"/>
+    <PlayerStat stat="ChanceToEvade" value="75"/>
+  </Build>
+  <Tree activeSpec="1">
+    <Spec title="Main Build" treeVersion="3_21">
+      <URL>https://www.pathofexile.com/passive-skill-tree/AAAABQIBAQABAgMEBQYHCAk=</URL>
+      <Sockets>
+        <Socket nodeId="1234" itemId="1"/>
+        <Socket nodeId="5678" itemId="2"/>
+      </Sockets>
+    </Spec>
+  </Tree>
+  <Items activeItemSet="1">
+    <ItemSet id="1" title="Main Gear">
+      <Slot name="Weapon 1">
+        <Item>The Saviour
+Rarity: UNIQUE
+Legion Sword
+Quality: 20
+Physical Damage: 200-350
+Critical Strike Chance: 5%
+Attacks per Second: 1.8</Item>
+      </Slot>
+      <Slot name="Body Armour">
+        <Item>Rare Body Armour
+Rarity: RARE
+Astral Plate
+Quality: 20
+Armour: 2000
++100 to maximum Life
++50% to Fire Resistance</Item>
+      </Slot>
+    </ItemSet>
+  </Items>
+  <Skills activeSkillSet="1">
+    <SkillSet id="1">
+      <Skill enabled="true" slot="1" mainActiveSkill="1">
+        <Gem name="Tornado Shot" level="21" quality="23"/>
+        <Gem name="Greater Multiple Projectiles Support" level="20" quality="20"/>
+        <Gem name="Elemental Damage with Attacks Support" level="20" quality="20"/>
+        <Gem name="Inspiration Support" level="20" quality="20"/>
+      </Skill>
+    </SkillSet>
+  </Skills>
+  <Notes>
+This is a Tornado Shot Deadeye build focusing on high projectile damage and clear speed.
+  </Notes>
+</PathOfBuilding>
