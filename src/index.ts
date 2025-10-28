@@ -1791,6 +1791,22 @@ class PoBMCPServer {
         },
       ];
 
+      // Add get_build_xml helper tool
+      tools.push({
+        name: "get_build_xml",
+        description: "Get the raw XML content of a build file. Useful for passing to lua_load_build or debugging.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            build_name: {
+              type: "string",
+              description: "Name of the build file (e.g., 'MyBuild.xml')",
+            },
+          },
+          required: ["build_name"],
+        },
+      });
+
       // Add lua_* tools if enabled
       if (this.luaEnabled) {
         tools.push(
@@ -1951,6 +1967,10 @@ class PoBMCPServer {
               args.build_name as string | undefined,
               args.goals as string
             );
+
+          case "get_build_xml":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handleGetBuildXml(args.build_name as string);
 
           // Lua bridge tools
           case "lua_start":
@@ -2415,6 +2435,25 @@ class PoBMCPServer {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to plan tree: ${errorMsg}`);
+    }
+  }
+
+  private async handleGetBuildXml(buildName: string) {
+    try {
+      const buildPath = path.join(this.pobDirectory, buildName);
+      const xml = await fs.readFile(buildPath, "utf-8");
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: xml,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to read build XML: ${errorMsg}`);
     }
   }
 
