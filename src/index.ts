@@ -12,6 +12,7 @@ import { XMLParser } from "fast-xml-parser";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
+import chokidar from "chokidar";
 
 // Path of Building build interface
 interface PoBBuild {
@@ -46,10 +47,21 @@ interface PoBBuild {
   Notes?: string;
 }
 
+// Build cache entry interface
+interface CachedBuild {
+  data: PoBBuild;
+  timestamp: number;
+}
+
 class PoBMCPServer {
   private server: Server;
   private parser: XMLParser;
   private pobDirectory: string;
+  private watcher: ReturnType<typeof chokidar.watch> | null = null;
+  private buildCache: Map<string, CachedBuild> = new Map();
+  private recentChanges: Array<{file: string; timestamp: number; type: string}> = [];
+  private watchEnabled: boolean = false;
+  private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
 
   constructor() {
     this.server = new Server(
@@ -83,9 +95,88 @@ class PoBMCPServer {
     };
     
     process.on("SIGINT", async () => {
+      await this.stopWatching();
       await this.server.close();
       process.exit(0);
     });
+  }
+
+  private startWatching() {
+    if (this.watcher) {
+      console.error("[File Watcher] Already watching directory");
+      return;
+    }
+
+    console.error(`[File Watcher] Starting to watch: ${this.pobDirectory}`);
+
+    this.watcher = chokidar.watch(this.pobDirectory, {
+      ignored: /(^|[\/\\])\../, // ignore dotfiles
+      persistent: true,
+      ignoreInitial: true, // don't trigger for existing files
+      awaitWriteFinish: {
+        stabilityThreshold: 500, // wait for file writes to finish
+        pollInterval: 100
+      }
+    });
+
+    this.watcher
+      .on("add", (filePath: string) => this.handleFileChange(filePath, "added"))
+      .on("change", (filePath: string) => this.handleFileChange(filePath, "modified"))
+      .on("unlink", (filePath: string) => this.handleFileChange(filePath, "deleted"))
+      .on("error", (error: unknown) => console.error("[File Watcher] Error:", error));
+
+    this.watchEnabled = true;
+  }
+
+  private async stopWatching() {
+    if (this.watcher) {
+      console.error("[File Watcher] Stopping watch");
+      await this.watcher.close();
+      this.watcher = null;
+      this.watchEnabled = false;
+    }
+  }
+
+  private handleFileChange(filePath: string, changeType: string) {
+    const fileName = path.basename(filePath);
+
+    // Only process .xml files
+    if (!fileName.endsWith(".xml")) {
+      return;
+    }
+
+    // Clear any existing debounce timer for this file
+    const existingTimer = this.debounceTimers.get(fileName);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // Set new debounce timer (500ms)
+    const timer = setTimeout(() => {
+      this.processFileChange(fileName, changeType);
+      this.debounceTimers.delete(fileName);
+    }, 500);
+
+    this.debounceTimers.set(fileName, timer);
+  }
+
+  private processFileChange(fileName: string, changeType: string) {
+    console.error(`[File Watcher] Build ${changeType}: ${fileName}`);
+
+    // Invalidate cache for this build
+    this.buildCache.delete(fileName);
+
+    // Track recent change
+    this.recentChanges.push({
+      file: fileName,
+      timestamp: Date.now(),
+      type: changeType
+    });
+
+    // Keep only last 50 changes
+    if (this.recentChanges.length > 50) {
+      this.recentChanges = this.recentChanges.slice(-50);
+    }
   }
 
   private setupHandlers() {
@@ -196,6 +287,43 @@ class PoBMCPServer {
               required: ["build_name"],
             },
           },
+          {
+            name: "start_watching",
+            description: "Start monitoring the builds directory for changes. Builds will be auto-reloaded when saved in PoB.",
+            inputSchema: {
+              type: "object",
+              properties: {},
+            },
+          },
+          {
+            name: "stop_watching",
+            description: "Stop monitoring the builds directory for changes.",
+            inputSchema: {
+              type: "object",
+              properties: {},
+            },
+          },
+          {
+            name: "get_recent_changes",
+            description: "Get a list of recently changed build files.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                limit: {
+                  type: "number",
+                  description: "Maximum number of recent changes to return (default: 10)",
+                },
+              },
+            },
+          },
+          {
+            name: "watch_status",
+            description: "Check if file watching is currently enabled.",
+            inputSchema: {
+              type: "object",
+              properties: {},
+            },
+          },
         ],
       };
     });
@@ -223,7 +351,19 @@ class PoBMCPServer {
           case "get_build_stats":
             if (!args) throw new Error("Missing arguments");
             return await this.handleGetBuildStats(args.build_name as string);
-          
+
+          case "start_watching":
+            return this.handleStartWatching();
+
+          case "stop_watching":
+            return await this.handleStopWatching();
+
+          case "get_recent_changes":
+            return this.handleGetRecentChanges(args?.limit as number | undefined);
+
+          case "watch_status":
+            return this.handleWatchStatus();
+
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -251,10 +391,27 @@ class PoBMCPServer {
   }
 
   private async readBuild(buildName: string): Promise<PoBBuild> {
+    // Check cache first
+    const cached = this.buildCache.get(buildName);
+    if (cached) {
+      console.error(`[Cache] Hit for ${buildName}`);
+      return cached.data;
+    }
+
+    // Cache miss - read from file
+    console.error(`[Cache] Miss for ${buildName}`);
     const buildPath = path.join(this.pobDirectory, buildName);
     const content = await fs.readFile(buildPath, "utf-8");
     const parsed = this.parser.parse(content);
-    return parsed.PathOfBuilding;
+    const buildData = parsed.PathOfBuilding;
+
+    // Store in cache
+    this.buildCache.set(buildName, {
+      data: buildData,
+      timestamp: Date.now()
+    });
+
+    return buildData;
   }
 
   private generateBuildSummary(build: PoBBuild): string {
@@ -394,21 +551,21 @@ class PoBMCPServer {
 
   private async handleGetBuildStats(buildName: string) {
     const build = await this.readBuild(buildName);
-    
+
     let statsText = `=== Stats for ${buildName} ===\n\n`;
-    
+
     if (build.Build?.PlayerStat) {
       const stats = Array.isArray(build.Build.PlayerStat)
         ? build.Build.PlayerStat
         : [build.Build.PlayerStat];
-      
+
       for (const stat of stats) {
         statsText += `${stat.stat}: ${stat.value}\n`;
       }
     } else {
       statsText += "No stats found in build.\n";
     }
-    
+
     return {
       content: [
         {
@@ -417,6 +574,120 @@ class PoBMCPServer {
         },
       ],
     };
+  }
+
+  private handleStartWatching() {
+    if (this.watchEnabled) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "File watching is already enabled.",
+          },
+        ],
+      };
+    }
+
+    this.startWatching();
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: `File watching started for: ${this.pobDirectory}\n\nYour builds will now be automatically reloaded when saved in Path of Building.`,
+        },
+      ],
+    };
+  }
+
+  private async handleStopWatching() {
+    if (!this.watchEnabled) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "File watching is not currently enabled.",
+          },
+        ],
+      };
+    }
+
+    await this.stopWatching();
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: "File watching stopped.",
+        },
+      ],
+    };
+  }
+
+  private handleGetRecentChanges(limit?: number) {
+    const maxChanges = limit || 10;
+    const changes = this.recentChanges.slice(-maxChanges).reverse();
+
+    if (changes.length === 0) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "No recent changes detected.\n\nMake sure file watching is enabled with 'start_watching'.",
+          },
+        ],
+      };
+    }
+
+    let text = `=== Recent Build Changes (Last ${changes.length}) ===\n\n`;
+
+    for (const change of changes) {
+      const timeAgo = this.formatTimeAgo(Date.now() - change.timestamp);
+      text += `[${change.type.toUpperCase()}] ${change.file} - ${timeAgo}\n`;
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text,
+        },
+      ],
+    };
+  }
+
+  private handleWatchStatus() {
+    const cacheSize = this.buildCache.size;
+    const changeCount = this.recentChanges.length;
+
+    let text = `=== File Watching Status ===\n\n`;
+    text += `Status: ${this.watchEnabled ? "ENABLED" : "DISABLED"}\n`;
+    text += `Directory: ${this.pobDirectory}\n`;
+    text += `Cached builds: ${cacheSize}\n`;
+    text += `Recent changes tracked: ${changeCount}\n`;
+
+    if (!this.watchEnabled) {
+      text += `\nUse 'start_watching' to enable automatic build reloading.`;
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text,
+        },
+      ],
+    };
+  }
+
+  private formatTimeAgo(ms: number): string {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (seconds < 60) return `${seconds}s ago`;
+    if (minutes < 60) return `${minutes}m ago`;
+    return `${hours}h ago`;
   }
 
   async run() {

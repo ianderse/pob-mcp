@@ -8,6 +8,8 @@ An MCP (Model Context Protocol) server that enables Claude to analyze and work w
 - **Analyze Builds**: Extract detailed information from builds including stats, skills, items, and passive trees
 - **Compare Builds**: Side-by-side comparison of two builds
 - **Get Stats**: Quick access to build statistics
+- **File Watching**: Real-time monitoring of build changes with automatic cache invalidation
+- **Build Cache**: Intelligent caching for faster repeated analysis
 
 ## Installation
 
@@ -99,6 +101,25 @@ Compares two builds side by side, highlighting differences in:
 
 ### `get_build_stats`
 Quickly retrieves all statistics from a build.
+
+### `start_watching`
+Starts monitoring the builds directory for changes. When enabled:
+- Changes are detected within 2 seconds
+- Build cache is automatically invalidated
+- Recent changes are tracked
+
+### `stop_watching`
+Stops monitoring the builds directory.
+
+### `watch_status`
+Shows current file watching status, including:
+- Whether watching is enabled
+- Directory being monitored
+- Number of cached builds
+- Number of recent changes tracked
+
+### `get_recent_changes`
+Lists recently modified builds with timestamps. Useful for seeing what builds have been updated in PoB.
 
 ## Development
 
