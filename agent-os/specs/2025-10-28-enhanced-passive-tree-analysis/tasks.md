@@ -825,6 +825,8 @@ All Phase 2 tasks have been completed successfully. The implementation includes:
 
 ### PHASE 3: ADVANCED FEATURES (Week 2-3) - NOT STARTED
 
+Refer to /Users/ianderse/Projects/pob-mcp-server/agent-os/specs/2025-10-28-enhanced-passive-tree-analysis/POB_BRIDGE.md for current Lua API status
+
 (Phase 3 task groups omitted for brevity - not started)
 
 ---

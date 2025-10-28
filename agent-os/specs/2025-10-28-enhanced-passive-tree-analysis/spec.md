@@ -1083,6 +1083,8 @@ Tree data cache error detected. Attempting to reload...
 
 ### Live Build Editing via Lua API
 
+Reffer to /Users/ianderse/Projects/pob-mcp-server/agent-os/specs/2025-10-28-enhanced-passive-tree-analysis/POB_BRIDGE.md for current Lua API status
+
 **Long-term (Roadmap Phase 5):**
 - Modify passive tree allocations directly in PoB
 - Real-time stat updates from allocation changes

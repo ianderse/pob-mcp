@@ -14,6 +14,7 @@ import path from "path";
 import os from "os";
 import chokidar from "chokidar";
 import https from "https";
+import { PoBLuaApiClient, PoBLuaTcpClient } from "./pobLuaBridge.js";
 
 // Passive Tree Data Interfaces
 interface PassiveTreeNode {
@@ -143,6 +144,11 @@ class PoBMCPServer {
   private watchEnabled: boolean = false;
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
 
+  // PoB Lua Bridge
+  private luaClient: PoBLuaApiClient | PoBLuaTcpClient | null = null;
+  private luaEnabled: boolean = false;
+  private useTcpMode: boolean = false;
+
   constructor() {
     this.server = new Server(
       {
@@ -171,6 +177,19 @@ class PoBMCPServer {
 
     this.pobDirectory = process.env.POB_DIRECTORY || defaultPoBPath;
 
+    // Check if Lua bridge is enabled
+    this.luaEnabled = process.env.POB_LUA_ENABLED === 'true';
+    this.useTcpMode = process.env.POB_API_TCP === 'true';
+
+    if (this.luaEnabled) {
+      console.error('[MCP Server] PoB Lua Bridge enabled');
+      if (this.useTcpMode) {
+        console.error('[MCP Server] Using TCP mode for GUI integration');
+      } else {
+        console.error('[MCP Server] Using stdio mode for headless integration');
+      }
+    }
+
     this.setupHandlers();
 
     // Error handling
@@ -180,9 +199,62 @@ class PoBMCPServer {
 
     process.on("SIGINT", async () => {
       await this.stopWatching();
+      await this.stopLuaClient();
       await this.server.close();
       process.exit(0);
     });
+  }
+
+  // Lua Bridge Methods
+  private async ensureLuaClient(): Promise<void> {
+    if (!this.luaEnabled) {
+      throw new Error('PoB Lua Bridge is not enabled. Set POB_LUA_ENABLED=true to use lua_* tools.');
+    }
+
+    if (this.luaClient) {
+      return; // Already initialized
+    }
+
+    console.error('[Lua Bridge] Initializing client...');
+
+    try {
+      if (this.useTcpMode) {
+        const tcpClient = new PoBLuaTcpClient({
+          host: process.env.POB_API_TCP_HOST,
+          port: process.env.POB_API_TCP_PORT ? parseInt(process.env.POB_API_TCP_PORT) : undefined,
+          timeoutMs: process.env.POB_TIMEOUT_MS ? parseInt(process.env.POB_TIMEOUT_MS) : undefined,
+        });
+        await tcpClient.start();
+        this.luaClient = tcpClient;
+      } else {
+        const stdioClient = new PoBLuaApiClient({
+          cwd: process.env.POB_FORK_PATH,
+          cmd: process.env.POB_CMD,
+          args: process.env.POB_ARGS ? [process.env.POB_ARGS] : undefined,
+          timeoutMs: process.env.POB_TIMEOUT_MS ? parseInt(process.env.POB_TIMEOUT_MS) : undefined,
+        });
+        await stdioClient.start();
+        this.luaClient = stdioClient;
+      }
+
+      console.error('[Lua Bridge] Client initialized successfully');
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error('[Lua Bridge] Failed to initialize:', errorMsg);
+      throw new Error(`Failed to start PoB Lua Bridge: ${errorMsg}`);
+    }
+  }
+
+  private async stopLuaClient(): Promise<void> {
+    if (this.luaClient) {
+      console.error('[Lua Bridge] Stopping client...');
+      try {
+        await this.luaClient.stop();
+      } catch (error) {
+        console.error('[Lua Bridge] Error stopping client:', error);
+      }
+      this.luaClient = null;
+    }
   }
 
   // Tree Data Fetching
@@ -1112,114 +1184,211 @@ class PoBMCPServer {
 
     // List available tools
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return {
-        tools: [
-          {
-            name: "analyze_build",
-            description: "Analyze a Path of Building build file and extract detailed information including stats, skills, gear, passive skill tree analysis with keystones, notables, jewel sockets, build archetype detection, and optimization suggestions",
-            inputSchema: {
-              type: "object",
-              properties: {
-                build_name: {
-                  type: "string",
-                  description: "Name of the build file (e.g., 'MyBuild.xml')",
-                },
+      const tools: any[] = [
+        {
+          name: "analyze_build",
+          description: "Analyze a Path of Building build file and extract detailed information including stats, skills, gear, passive skill tree analysis with keystones, notables, jewel sockets, build archetype detection, and optimization suggestions",
+          inputSchema: {
+            type: "object",
+            properties: {
+              build_name: {
+                type: "string",
+                description: "Name of the build file (e.g., 'MyBuild.xml')",
               },
-              required: ["build_name"],
+            },
+            required: ["build_name"],
+          },
+        },
+        {
+          name: "compare_builds",
+          description: "Compare two Path of Building builds side by side",
+          inputSchema: {
+            type: "object",
+            properties: {
+              build1: {
+                type: "string",
+                description: "First build file name",
+              },
+              build2: {
+                type: "string",
+                description: "Second build file name",
+              },
+            },
+            required: ["build1", "build2"],
+          },
+        },
+        {
+          name: "list_builds",
+          description: "List all available Path of Building builds",
+          inputSchema: {
+            type: "object",
+            properties: {},
+          },
+        },
+        {
+          name: "get_build_stats",
+          description: "Extract specific stats from a build (Life, DPS, resistances, etc.)",
+          inputSchema: {
+            type: "object",
+            properties: {
+              build_name: {
+                type: "string",
+                description: "Name of the build file",
+              },
+            },
+            required: ["build_name"],
+          },
+        },
+        {
+          name: "start_watching",
+          description: "Start monitoring the builds directory for changes. Builds will be auto-reloaded when saved in PoB.",
+          inputSchema: {
+            type: "object",
+            properties: {},
+          },
+        },
+        {
+          name: "stop_watching",
+          description: "Stop monitoring the builds directory for changes.",
+          inputSchema: {
+            type: "object",
+            properties: {},
+          },
+        },
+        {
+          name: "get_recent_changes",
+          description: "Get a list of recently changed build files.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              limit: {
+                type: "number",
+                description: "Maximum number of recent changes to return (default: 10)",
+              },
             },
           },
-          {
-            name: "compare_builds",
-            description: "Compare two Path of Building builds side by side",
-            inputSchema: {
-              type: "object",
-              properties: {
-                build1: {
-                  type: "string",
-                  description: "First build file name",
-                },
-                build2: {
-                  type: "string",
-                  description: "Second build file name",
-                },
+        },
+        {
+          name: "watch_status",
+          description: "Check if file watching is currently enabled.",
+          inputSchema: {
+            type: "object",
+            properties: {},
+          },
+        },
+        {
+          name: "refresh_tree_data",
+          description: "Manually refresh the cached passive skill tree data from the PoB repository. Use this if you know PoB has updated or if tree data seems outdated.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              version: {
+                type: "string",
+                description: "Optional: Specific tree version to refresh (e.g., '3_26'). If omitted, refreshes all cached versions.",
               },
-              required: ["build1", "build2"],
             },
           },
+        },
+      ];
+
+      // Add lua_* tools if enabled
+      if (this.luaEnabled) {
+        tools.push(
           {
-            name: "list_builds",
-            description: "List all available Path of Building builds",
+            name: "lua_start",
+            description: "Start the PoB headless API process. This will spawn the LuaJIT process that can load builds and compute stats using the actual PoB calculation engine.",
             inputSchema: {
               type: "object",
               properties: {},
             },
           },
           {
-            name: "get_build_stats",
-            description: "Extract specific stats from a build (Life, DPS, resistances, etc.)",
+            name: "lua_stop",
+            description: "Stop the PoB headless API process.",
+            inputSchema: {
+              type: "object",
+              properties: {},
+            },
+          },
+          {
+            name: "lua_load_build",
+            description: "Load a Path of Building build from XML into the PoB headless session. The build will be parsed and ready for stat calculations.",
             inputSchema: {
               type: "object",
               properties: {
-                build_name: {
+                build_xml: {
                   type: "string",
-                  description: "Name of the build file",
+                  description: "Raw XML content of the PoB build file",
+                },
+                name: {
+                  type: "string",
+                  description: "Optional name for the build (default: 'MCP Build')",
                 },
               },
-              required: ["build_name"],
+              required: ["build_xml"],
             },
           },
           {
-            name: "start_watching",
-            description: "Start monitoring the builds directory for changes. Builds will be auto-reloaded when saved in PoB.",
-            inputSchema: {
-              type: "object",
-              properties: {},
-            },
-          },
-          {
-            name: "stop_watching",
-            description: "Stop monitoring the builds directory for changes.",
-            inputSchema: {
-              type: "object",
-              properties: {},
-            },
-          },
-          {
-            name: "get_recent_changes",
-            description: "Get a list of recently changed build files.",
+            name: "lua_get_stats",
+            description: "Get computed stats from the PoB calculation engine. Returns actual calculated values like Life, ES, DPS, resistances, etc.",
             inputSchema: {
               type: "object",
               properties: {
-                limit: {
+                fields: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Optional array of specific stat fields to return. If omitted, returns all available stats.",
+                },
+              },
+            },
+          },
+          {
+            name: "lua_get_tree",
+            description: "Get the current passive tree data from PoB, including allocated nodes, class, ascendancy, and mastery selections.",
+            inputSchema: {
+              type: "object",
+              properties: {},
+            },
+          },
+          {
+            name: "lua_set_tree",
+            description: "Set the passive tree in PoB (class, ascendancy, allocated nodes, mastery effects). This will recalculate all stats based on the new tree.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                classId: {
                   type: "number",
-                  description: "Maximum number of recent changes to return (default: 10)",
+                  description: "Class ID (0=Scion, 1=Marauder, 2=Ranger, 3=Witch, 4=Duelist, 5=Templar, 6=Shadow)",
                 },
-              },
-            },
-          },
-          {
-            name: "watch_status",
-            description: "Check if file watching is currently enabled.",
-            inputSchema: {
-              type: "object",
-              properties: {},
-            },
-          },
-          {
-            name: "refresh_tree_data",
-            description: "Manually refresh the cached passive skill tree data from the PoB repository. Use this if you know PoB has updated or if tree data seems outdated.",
-            inputSchema: {
-              type: "object",
-              properties: {
-                version: {
+                ascendClassId: {
+                  type: "number",
+                  description: "Ascendancy class ID",
+                },
+                secondaryAscendClassId: {
+                  type: "number",
+                  description: "Optional secondary ascendancy class ID (for Scion)",
+                },
+                nodes: {
+                  type: "array",
+                  items: { type: "number" },
+                  description: "Array of allocated passive node IDs",
+                },
+                masteryEffects: {
+                  type: "object",
+                  description: "Optional object mapping mastery node IDs to selected effect IDs",
+                },
+                treeVersion: {
                   type: "string",
-                  description: "Optional: Specific tree version to refresh (e.g., '3_26'). If omitted, refreshes all cached versions.",
+                  description: "Optional tree version string (e.g., '3_26')",
                 },
               },
+              required: ["classId", "ascendClassId", "nodes"],
             },
-          },
-        ],
-      };
+          }
+        );
+      }
+
+      return { tools };
     });
 
     // Handle tool calls
@@ -1261,15 +1430,40 @@ class PoBMCPServer {
           case "refresh_tree_data":
             return await this.handleRefreshTreeData(args?.version as string | undefined);
 
+          // Lua bridge tools
+          case "lua_start":
+            return await this.handleLuaStart();
+
+          case "lua_stop":
+            return await this.handleLuaStop();
+
+          case "lua_load_build":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handleLuaLoadBuild(
+              args.build_xml as string,
+              args.name as string | undefined
+            );
+
+          case "lua_get_stats":
+            return await this.handleLuaGetStats(args?.fields as string[] | undefined);
+
+          case "lua_get_tree":
+            return await this.handleLuaGetTree();
+
+          case "lua_set_tree":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handleLuaSetTree(args);
+
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
       } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
         return {
           content: [
             {
               type: "text",
-              text: `Error: ${error}`,
+              text: `Error: ${errorMsg}`,
             },
           ],
         };
@@ -1644,6 +1838,197 @@ class PoBMCPServer {
         },
       ],
     };
+  }
+
+  // Lua Bridge Tool Handlers
+  private async handleLuaStart() {
+    try {
+      await this.ensureLuaClient();
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: this.useTcpMode
+              ? `PoB Lua Bridge started successfully in TCP mode.\n\nConnected to PoB GUI at ${process.env.POB_API_TCP_HOST || '127.0.0.1'}:${process.env.POB_API_TCP_PORT || '31337'}`
+              : `PoB Lua Bridge started successfully in headless mode.\n\nThe PoB calculation engine is now ready to load builds and compute stats.`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(errorMsg);
+    }
+  }
+
+  private async handleLuaStop() {
+    await this.stopLuaClient();
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: "PoB Lua Bridge stopped successfully.",
+        },
+      ],
+    };
+  }
+
+  private async handleLuaLoadBuild(buildXml: string, name?: string) {
+    try {
+      await this.ensureLuaClient();
+
+      if (!this.luaClient) {
+        throw new Error('Lua client not initialized');
+      }
+
+      await this.luaClient.loadBuildXml(buildXml, name);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Build "${name || 'MCP Build'}" loaded successfully into PoB.\n\nYou can now use lua_get_stats, lua_get_tree, and lua_set_tree to interact with this build.`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to load build: ${errorMsg}`);
+    }
+  }
+
+  private async handleLuaGetStats(fields?: string[]) {
+    try {
+      await this.ensureLuaClient();
+
+      if (!this.luaClient) {
+        throw new Error('Lua client not initialized');
+      }
+
+      const stats = await this.luaClient.getStats(fields);
+
+      let text = "=== PoB Calculated Stats ===\n\n";
+
+      if (stats && typeof stats === 'object') {
+        for (const [key, value] of Object.entries(stats)) {
+          text += `${key}: ${value}\n`;
+        }
+      } else {
+        text += "No stats available.\n";
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to get stats: ${errorMsg}`);
+    }
+  }
+
+  private async handleLuaGetTree() {
+    try {
+      await this.ensureLuaClient();
+
+      if (!this.luaClient) {
+        throw new Error('Lua client not initialized');
+      }
+
+      const tree = await this.luaClient.getTree();
+
+      let text = "=== PoB Passive Tree ===\n\n";
+
+      if (tree && typeof tree === 'object') {
+        text += `Tree Version: ${tree.treeVersion || 'Unknown'}\n`;
+        text += `Class ID: ${tree.classId || 'Unknown'}\n`;
+        text += `Ascendancy ID: ${tree.ascendClassId || 'Unknown'}\n`;
+
+        if (tree.secondaryAscendClassId) {
+          text += `Secondary Ascendancy ID: ${tree.secondaryAscendClassId}\n`;
+        }
+
+        if (tree.nodes && Array.isArray(tree.nodes)) {
+          text += `\nAllocated Nodes: ${tree.nodes.length} nodes\n`;
+          text += `Node IDs: ${tree.nodes.slice(0, 20).join(', ')}`;
+          if (tree.nodes.length > 20) {
+            text += ` ... and ${tree.nodes.length - 20} more`;
+          }
+          text += '\n';
+        }
+
+        if (tree.masteryEffects && typeof tree.masteryEffects === 'object') {
+          const effectCount = Object.keys(tree.masteryEffects).length;
+          text += `\nMastery Effects: ${effectCount} selected\n`;
+        }
+      } else {
+        text += "No tree data available.\n";
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to get tree: ${errorMsg}`);
+    }
+  }
+
+  private async handleLuaSetTree(args: any) {
+    try {
+      await this.ensureLuaClient();
+
+      if (!this.luaClient) {
+        throw new Error('Lua client not initialized');
+      }
+
+      // Validate required fields
+      if (typeof args.classId !== 'number') {
+        throw new Error('classId must be a number');
+      }
+      if (typeof args.ascendClassId !== 'number') {
+        throw new Error('ascendClassId must be a number');
+      }
+      if (!Array.isArray(args.nodes)) {
+        throw new Error('nodes must be an array');
+      }
+
+      const tree = await this.luaClient.setTree({
+        classId: args.classId,
+        ascendClassId: args.ascendClassId,
+        secondaryAscendClassId: args.secondaryAscendClassId,
+        nodes: args.nodes,
+        masteryEffects: args.masteryEffects,
+        treeVersion: args.treeVersion,
+      });
+
+      let text = "=== Passive Tree Updated ===\n\n";
+      text += `Successfully updated passive tree in PoB.\n`;
+      text += `Allocated ${args.nodes.length} nodes.\n\n`;
+      text += `Stats have been recalculated. Use lua_get_stats to see updated values.`;
+
+      return {
+        content: [
+          {
+            type: "text",
+            text,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to set tree: ${errorMsg}`);
+    }
   }
 
   private formatTimeAgo(ms: number): string {
