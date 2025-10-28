@@ -58,17 +58,34 @@ export class PoBLuaApiClient {
       }
     });
 
-    // Wait for ready banner
-    const ready = await this.readLineWithTimeout(this.options.timeoutMs);
-    try {
-      const msg = JSON.parse(ready);
-      if (!msg || msg.ready !== true) {
-        throw new Error(`Unexpected banner: ${ready}`);
+    // Wait for ready banner (skip non-JSON lines like log messages)
+    let ready: string = "";
+    let attempts = 0;
+    const maxAttempts = 50; // 50 lines max to find JSON banner
+
+    while (attempts < maxAttempts) {
+      ready = await this.readLineWithTimeout(this.options.timeoutMs);
+      attempts++;
+
+      // Skip empty lines or lines that don't start with '{'
+      if (!ready.trim() || !ready.trim().startsWith('{')) {
+        continue;
       }
-    } catch (e) {
-      throw new Error(`Failed to parse ready banner: ${e}`);
+
+      // Try to parse as JSON
+      try {
+        const msg = JSON.parse(ready);
+        if (msg && msg.ready === true) {
+          this.ready = true;
+          return; // Successfully initialized
+        }
+      } catch (e) {
+        // Not valid JSON, keep looking
+        continue;
+      }
     }
-    this.ready = true;
+
+    throw new Error(`Failed to find valid ready banner after ${maxAttempts} lines`);
   }
 
   private onStdout(chunk: string) {
