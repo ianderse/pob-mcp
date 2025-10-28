@@ -4,7 +4,7 @@
 
 This roadmap outlines the development path for Exile's AI Companion, progressing from foundational build file analysis to advanced real-time AI-powered optimization. The approach is deliberately incremental - each phase delivers standalone value while building toward the ultimate vision of an intelligent build optimization companion that works seamlessly with Path of Building.
 
-**Completed Work:** Phases 0-1 establish the foundation with basic build reading and real-time file monitoring.
+**Completed Work:** Phases 0-1 establish the foundation with basic build reading and real-time file monitoring. Enhanced Passive Tree Analysis (Phase 1) provides comprehensive passive skill tree understanding.
 
 **Near-Term Focus:** Phases 2-4 complete comprehensive static analysis capabilities, enabling the AI to understand every aspect of a build and provide intelligent validation and optimization suggestions.
 
@@ -41,7 +41,7 @@ Implemented intelligent file watching that detects changes within 2 seconds, pro
 
 ## Development Roadmap
 
-1. [ ] Enhanced Passive Tree Analysis - Complete passive skill tree parsing including allocated nodes, keystones, notable passives, jewel sockets, cluster jewel identification, and point investment analysis. Enables AI to understand build archetype and provide tree optimization suggestions. `M`
+1. [x] Enhanced Passive Tree Analysis (Phase 1 Complete) - Complete passive skill tree parsing including allocated nodes, keystones, notable passives, jewel sockets, cluster jewel identification, and point investment analysis. Enables AI to understand build archetype and provide tree optimization suggestions. `M`
 
 2. [ ] Comprehensive Jewel Parsing - Parse all jewel types (regular, abyss, cluster) with complete mod extraction, jewel socket placement analysis, and cluster jewel notable identification. Essential for understanding build power sources and optimization opportunities. `S`
 
@@ -92,6 +92,7 @@ Implemented intelligent file watching that detects changes within 2 seconds, pro
 - Can see every aspect of a build including complex systems (cluster jewels, configuration)
 - Ready to provide contextual, intelligent analysis
 - Approximate timeline: 3-4 weeks from Phase 1
+- **Status:** Item 1 complete (Phase 1 of Enhanced Passive Tree Analysis)
 
 **Milestone 2 (Items 5-9 Complete):** Full-featured static analysis tool
 - Detects common mistakes and provides optimization suggestions
@@ -185,9 +186,9 @@ Once the core roadmap is complete, potential expansions include:
 
 ## Getting Started
 
-**Current Status:** Phase 1 complete - file watching operational
+**Current Status:** Phase 1 complete - file watching operational, Enhanced Passive Tree Analysis (Phase 1) complete
 
-**Next Action:** Begin Item 1 - Enhanced Passive Tree Analysis
+**Next Action:** Begin Item 2 - Comprehensive Jewel Parsing
 
 **For Developers:**
 ```bash
@@ -196,11 +197,11 @@ npm run build
 npm test
 
 # Start next feature branch
-git checkout -b feature/passive-tree-analysis
+git checkout -b feature/jewel-parsing
 
 # Implementation focuses on src/index.ts
-# Add passive tree parsing to PoBBuild interface
-# Implement passive node extraction and analysis
+# Add jewel parsing to PoBBuild interface
+# Implement jewel mod extraction and analysis
 ```
 
 ---

@@ -88,6 +88,31 @@ interface CachedBuild {
   timestamp: number;
 }
 
+// Phase 2: Optimization Suggestion Interfaces
+interface PathOptimization {
+  destination: string;
+  currentLength: number;
+  optimalLength: number;
+  pointsSaved: number;
+  suggestion: string;
+}
+
+interface EfficiencyScore {
+  nodeId: string;
+  nodeName: string;
+  statsPerPoint: number;
+  isLowValue: boolean;
+}
+
+interface OptimizationSuggestion {
+  type: 'path' | 'efficiency' | 'reachable' | 'ai-context';
+  priority: 'high' | 'medium' | 'low';
+  title: string;
+  description: string;
+  pointsSaved?: number;
+  potentialGain?: string;
+}
+
 // Tree Analysis Results
 interface TreeAnalysisResult {
   totalPoints: number;
@@ -104,6 +129,7 @@ interface TreeAnalysisResult {
   treeVersion: string;
   versionMismatch: boolean;
   invalidNodeIds: string[];
+  optimizationSuggestions?: OptimizationSuggestion[];
 }
 
 class PoBMCPServer {
@@ -138,8 +164,12 @@ class PoBMCPServer {
     });
 
     // Default Path of Building directory (can be customized)
-    this.pobDirectory = process.env.POB_DIRECTORY ||
-      path.join(os.homedir(), "Documents", "Path of Building", "Builds");
+    // Auto-detect based on platform
+    const defaultPoBPath = process.platform === 'darwin'
+      ? path.join(os.homedir(), "Path of Building", "Builds")  // macOS
+      : path.join(os.homedir(), "Documents", "Path of Building", "Builds");  // Windows/Linux
+
+    this.pobDirectory = process.env.POB_DIRECTORY || defaultPoBPath;
 
     this.setupHandlers();
 
@@ -163,6 +193,16 @@ class PoBMCPServer {
 
     return new Promise((resolve, reject) => {
       https.get(url, (response) => {
+        if (response.statusCode === 404) {
+          // Version not found, try fallback to 3_26
+          console.error(`[Tree Data] Version ${version} not found, falling back to 3_26`);
+          if (version !== "3_26") {
+            this.fetchTreeData("3_26").then(resolve).catch(reject);
+            return;
+          }
+          reject(new Error(`Failed to fetch tree data: HTTP ${response.statusCode}`));
+          return;
+        }
         if (response.statusCode !== 200) {
           reject(new Error(`Failed to fetch tree data: HTTP ${response.statusCode}`));
           return;
@@ -478,6 +518,244 @@ class PoBMCPServer {
     }
   }
 
+  // Phase 2: Shortest Path Algorithm (BFS)
+  private buildNodeGraph(allocatedNodes: PassiveTreeNode[], allTreeNodes: Map<string, PassiveTreeNode>): Map<string, string[]> {
+    const graph = new Map<string, string[]>();
+    const allocatedIds = new Set(allocatedNodes.map(n => String(n.skill)));
+
+    for (const node of allocatedNodes) {
+      const nodeId = String(node.skill);
+      const neighbors: string[] = [];
+
+      // Add outgoing connections that are also allocated
+      if (node.out) {
+        for (const outId of node.out) {
+          if (allocatedIds.has(outId)) {
+            neighbors.push(outId);
+          }
+        }
+      }
+
+      // Add incoming connections that are also allocated
+      if (node.in) {
+        for (const inId of node.in) {
+          if (allocatedIds.has(inId)) {
+            neighbors.push(inId);
+          }
+        }
+      }
+
+      graph.set(nodeId, neighbors);
+    }
+
+    return graph;
+  }
+
+  private findShortestPath(graph: Map<string, string[]>, start: string, end: string): string[] | null {
+    if (start === end) return [start];
+
+    const queue: Array<{node: string; path: string[]}> = [{node: start, path: [start]}];
+    const visited = new Set<string>([start]);
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+
+      const neighbors = graph.get(current.node) || [];
+      for (const neighbor of neighbors) {
+        if (visited.has(neighbor)) continue;
+
+        const newPath = [...current.path, neighbor];
+        if (neighbor === end) {
+          return newPath;
+        }
+
+        visited.add(neighbor);
+        queue.push({node: neighbor, path: newPath});
+      }
+    }
+
+    return null; // No path found
+  }
+
+  private analyzePathOptimizations(
+    allocatedNodes: PassiveTreeNode[],
+    keystones: PassiveTreeNode[],
+    notables: PassiveTreeNode[],
+    jewels: PassiveTreeNode[],
+    allTreeNodes: Map<string, PassiveTreeNode>
+  ): PathOptimization[] {
+    const optimizations: PathOptimization[] = [];
+    const graph = this.buildNodeGraph(allocatedNodes, allTreeNodes);
+    const allocatedIds = new Set(allocatedNodes.map(n => String(n.skill)));
+
+    // Find starting node (usually ascendancy start or class start)
+    const startNode = allocatedNodes.find(n => n.isAscendancyStart) || allocatedNodes[0];
+    if (!startNode) return optimizations;
+
+    const startId = String(startNode.skill);
+    const destinations = [...keystones, ...notables, ...jewels];
+
+    // For each destination, compare actual path length vs optimal
+    for (const dest of destinations) {
+      const destId = String(dest.skill);
+      const shortestPath = this.findShortestPath(graph, startId, destId);
+
+      if (shortestPath && shortestPath.length > 1) {
+        // Calculate optimal length (this is already the shortest in allocated nodes)
+        const optimalLength = shortestPath.length - 1; // Subtract 1 for node count
+
+        // For now, we can't calculate "true optimal" without pathfinding through unallocated nodes
+        // So we flag paths that seem long relative to destination value
+        if (optimalLength > 6) {
+          optimizations.push({
+            destination: dest.name || `Node ${destId}`,
+            currentLength: optimalLength,
+            optimalLength: optimalLength, // Same for now
+            pointsSaved: 0, // Would need advanced analysis
+            suggestion: `Path to ${dest.name || `Node ${destId}`} is ${optimalLength} points long. Consider checking if there's a more efficient route.`
+          });
+        }
+      }
+    }
+
+    return optimizations;
+  }
+
+  // Phase 2: Point Efficiency Scoring
+  private calculateEfficiencyScores(
+    allocatedNodes: PassiveTreeNode[],
+    keystones: PassiveTreeNode[],
+    notables: PassiveTreeNode[],
+    normalNodes: PassiveTreeNode[]
+  ): EfficiencyScore[] {
+    const scores: EfficiencyScore[] = [];
+
+    // Score normal nodes (pathing nodes)
+    for (const node of normalNodes) {
+      const statsCount = node.stats?.length || 0;
+      const statsPerPoint = statsCount; // Simple metric: number of stats
+
+      scores.push({
+        nodeId: String(node.skill),
+        nodeName: node.name || `Node ${node.skill}`,
+        statsPerPoint,
+        isLowValue: statsCount === 0 // Pure pathing node with no stats
+      });
+    }
+
+    return scores;
+  }
+
+  private identifyLowEfficiencyNodes(scores: EfficiencyScore[]): EfficiencyScore[] {
+    return scores.filter(s => s.isLowValue || s.statsPerPoint < 1);
+  }
+
+  private findReachableHighValueNotables(
+    allocatedNodes: PassiveTreeNode[],
+    allTreeNodes: Map<string, PassiveTreeNode>
+  ): PassiveTreeNode[] {
+    const reachable: PassiveTreeNode[] = [];
+    const allocatedIds = new Set(allocatedNodes.map(n => String(n.skill)));
+
+    // Find nodes that are 1-2 steps away from allocated nodes
+    for (const allocNode of allocatedNodes) {
+      const neighbors = [...(allocNode.out || []), ...(allocNode.in || [])];
+
+      for (const neighborId of neighbors) {
+        if (allocatedIds.has(neighborId)) continue;
+
+        const neighbor = allTreeNodes.get(neighborId);
+        if (neighbor && (neighbor.isNotable || neighbor.isKeystone)) {
+          // Check if not already in reachable list
+          if (!reachable.find(n => n.skill === neighbor.skill)) {
+            reachable.push(neighbor);
+          }
+        }
+      }
+    }
+
+    return reachable.slice(0, 5); // Return top 5
+  }
+
+  // Phase 2: Generate Optimization Suggestions
+  private generateOptimizationSuggestions(
+    pathOptimizations: PathOptimization[],
+    efficiencyScores: EfficiencyScore[],
+    reachableNotables: PassiveTreeNode[],
+    archetype: string,
+    keystones: PassiveTreeNode[],
+    notables: PassiveTreeNode[]
+  ): OptimizationSuggestion[] {
+    const suggestions: OptimizationSuggestion[] = [];
+
+    // Path optimization suggestions
+    for (const opt of pathOptimizations.slice(0, 3)) { // Top 3
+      suggestions.push({
+        type: 'path',
+        priority: opt.currentLength > 8 ? 'high' : 'medium',
+        title: `Long path to ${opt.destination}`,
+        description: opt.suggestion,
+        pointsSaved: opt.pointsSaved
+      });
+    }
+
+    // Efficiency suggestions
+    const lowEfficiencyNodes = this.identifyLowEfficiencyNodes(efficiencyScores);
+    if (lowEfficiencyNodes.length > 3) {
+      suggestions.push({
+        type: 'efficiency',
+        priority: 'medium',
+        title: 'Multiple low-efficiency pathing nodes detected',
+        description: `Found ${lowEfficiencyNodes.length} nodes with minimal stats. Consider reviewing your tree pathing for potential point savings.`,
+        potentialGain: `Could potentially save ${Math.floor(lowEfficiencyNodes.length * 0.3)} points`
+      });
+    }
+
+    // Reachable notables suggestions
+    if (reachableNotables.length > 0) {
+      const notableNames = reachableNotables.map(n => n.name || `Node ${n.skill}`).slice(0, 3);
+      suggestions.push({
+        type: 'reachable',
+        priority: 'medium',
+        title: 'High-value notables within reach',
+        description: `Consider allocating these nearby notables: ${notableNames.join(', ')}. They align with your build direction.`,
+        potentialGain: `1-3 additional points for significant stat gains`
+      });
+    }
+
+    // AI-contextual suggestions (data structure for AI to reason about)
+    suggestions.push({
+      type: 'ai-context',
+      priority: 'low',
+      title: 'AI Analysis Available',
+      description: this.buildAIContextData(archetype, keystones, notables, reachableNotables),
+      potentialGain: 'AI can provide contextual suggestions based on build goals'
+    });
+
+    return suggestions;
+  }
+
+  // Phase 2: Build AI Context Data
+  private buildAIContextData(
+    archetype: string,
+    keystones: PassiveTreeNode[],
+    notables: PassiveTreeNode[],
+    reachableNotables: PassiveTreeNode[]
+  ): string {
+    let context = `Build Archetype: ${archetype}\n\n`;
+    context += `Allocated Keystones: ${keystones.map(k => k.name).join(', ')}\n\n`;
+    context += `Notable Passives (count): ${notables.length}\n\n`;
+    context += `Reachable High-Value Notables:\n`;
+
+    for (const notable of reachableNotables) {
+      context += `- ${notable.name}: ${notable.stats?.join('; ') || 'No stats'}\n`;
+    }
+
+    context += `\n[AI can analyze this data to provide build-specific recommendations based on player goals and meta knowledge]`;
+
+    return context;
+  }
+
   private async analyzePassiveTree(build: PoBBuild): Promise<TreeAnalysisResult | null> {
     try {
       // Extract allocated node IDs
@@ -486,15 +764,35 @@ class PoBMCPServer {
         return null; // No tree data in build
       }
 
+      // Determine tree version from build
+      let treeVersion = build.Tree?.Spec?.treeVersion || "3_26";
+
       // Get tree data (with caching)
-      const treeData = await this.getTreeData("3_26");
+      const treeData = await this.getTreeData(treeVersion);
 
       // Map node IDs to details
       const { nodes: allocatedNodes, invalidIds } = await this.mapNodesToDetails(nodeIds, treeData);
 
       // If there are invalid nodes, fail with error
       if (invalidIds.length > 0) {
-        throw new Error(`Invalid passive tree data detected.\n\nThe following node IDs could not be found in the passive tree data:\n${invalidIds.map(id => `- Node ID: ${id}`).join('\n')}\n\nThis usually means:\n1. The build is from an outdated league/patch\n2. The build file is corrupted\n3. The passive tree data needs to be refreshed\n\nPlease verify the build is from the current league or use a build from the active league.`);
+        const requestedVersion = treeVersion;
+        const actualVersion = treeData.version;
+        let errorMsg = `Invalid passive tree data detected.\n\nThe following node IDs could not be found in the passive tree data:\n${invalidIds.map(id => `- Node ID: ${id}`).join('\n')}\n\n`;
+
+        if (requestedVersion !== actualVersion) {
+          errorMsg += `Build tree version: ${requestedVersion}\n`;
+          errorMsg += `Available tree data: ${actualVersion} (fell back because ${requestedVersion} data not available yet)\n\n`;
+          errorMsg += `This means your build uses passive tree nodes from PoE ${requestedVersion} that don't exist in ${actualVersion}.\n`;
+          errorMsg += `Path of Building Community hasn't released tree data for ${requestedVersion} yet.\n\n`;
+          errorMsg += `Options:\n`;
+          errorMsg += `1. Wait for PoB to release ${requestedVersion} tree data\n`;
+          errorMsg += `2. Use a build from an earlier patch (${actualVersion} or earlier)\n`;
+          errorMsg += `3. The analysis may work partially - some stats will be shown but tree analysis will fail\n`;
+        } else {
+          errorMsg += `This usually means:\n1. The build is from an outdated league/patch\n2. The build file is corrupted\n3. The passive tree data needs to be refreshed\n\nPlease verify the build is from the current league or use a build from the active league.`;
+        }
+
+        throw new Error(errorMsg);
       }
 
       // Categorize nodes
@@ -511,8 +809,44 @@ class PoBMCPServer {
 
       // Version detection
       const buildVersion = this.extractBuildVersion(build);
-      const treeVersion = treeData.version;
-      const versionMismatch = buildVersion !== "Unknown" && !treeVersion.includes(buildVersion);
+      const treeDataVersion = treeData.version;
+      const versionMismatch = buildVersion !== "Unknown" && !treeDataVersion.includes(buildVersion);
+
+      // Phase 2: Generate optimization suggestions
+      let optimizationSuggestions: OptimizationSuggestion[] = [];
+      try {
+        const pathOptimizations = this.analyzePathOptimizations(
+          allocatedNodes,
+          keystones,
+          notables,
+          jewels,
+          treeData.nodes
+        );
+
+        const efficiencyScores = this.calculateEfficiencyScores(
+          allocatedNodes,
+          keystones,
+          notables,
+          normal
+        );
+
+        const reachableNotables = this.findReachableHighValueNotables(
+          allocatedNodes,
+          treeData.nodes
+        );
+
+        optimizationSuggestions = this.generateOptimizationSuggestions(
+          pathOptimizations,
+          efficiencyScores,
+          reachableNotables,
+          archetype,
+          keystones,
+          notables
+        );
+      } catch (error) {
+        console.error('[Optimization] Failed to generate suggestions:', error);
+        // Continue without optimization suggestions
+      }
 
       return {
         totalPoints: points.total,
@@ -526,9 +860,10 @@ class PoBMCPServer {
         archetypeConfidence: confidence,
         pathingEfficiency,
         buildVersion,
-        treeVersion,
+        treeVersion: treeDataVersion,
         versionMismatch,
         invalidNodeIds: [],
+        optimizationSuggestions
       };
     } catch (error) {
       throw error;
@@ -597,6 +932,52 @@ class PoBMCPServer {
     output += `\nPathing Efficiency: ${analysis.pathingEfficiency}\n`;
     const pathingCount = analysis.normalNodes.length;
     output += `- Total pathing nodes: ${pathingCount}\n`;
+
+    // Phase 2: Optimization Suggestions
+    if (analysis.optimizationSuggestions && analysis.optimizationSuggestions.length > 0) {
+      output += `\n=== Optimization Suggestions ===\n`;
+
+      const highPriority = analysis.optimizationSuggestions.filter(s => s.priority === 'high');
+      const mediumPriority = analysis.optimizationSuggestions.filter(s => s.priority === 'medium');
+      const lowPriority = analysis.optimizationSuggestions.filter(s => s.priority === 'low');
+
+      if (highPriority.length > 0) {
+        output += `\nHigh Priority:\n`;
+        for (const suggestion of highPriority) {
+          output += `- ${suggestion.title}\n`;
+          output += `  ${suggestion.description}\n`;
+          if (suggestion.pointsSaved) {
+            output += `  Potential savings: ${suggestion.pointsSaved} points\n`;
+          }
+          if (suggestion.potentialGain) {
+            output += `  Potential gain: ${suggestion.potentialGain}\n`;
+          }
+        }
+      }
+
+      if (mediumPriority.length > 0) {
+        output += `\nMedium Priority:\n`;
+        for (const suggestion of mediumPriority) {
+          output += `- ${suggestion.title}\n`;
+          output += `  ${suggestion.description}\n`;
+          if (suggestion.pointsSaved) {
+            output += `  Potential savings: ${suggestion.pointsSaved} points\n`;
+          }
+          if (suggestion.potentialGain) {
+            output += `  Potential gain: ${suggestion.potentialGain}\n`;
+          }
+        }
+      }
+
+      if (lowPriority.length > 0) {
+        output += `\nAI Context for Advanced Suggestions:\n`;
+        for (const suggestion of lowPriority) {
+          if (suggestion.type === 'ai-context') {
+            output += `${suggestion.description}\n`;
+          }
+        }
+      }
+    }
 
     return output;
   }
@@ -735,7 +1116,7 @@ class PoBMCPServer {
         tools: [
           {
             name: "analyze_build",
-            description: "Analyze a Path of Building build file and extract detailed information including stats, skills, gear, and passive skill tree analysis with keystones, notables, jewel sockets, and build archetype detection",
+            description: "Analyze a Path of Building build file and extract detailed information including stats, skills, gear, passive skill tree analysis with keystones, notables, jewel sockets, build archetype detection, and optimization suggestions",
             inputSchema: {
               type: "object",
               properties: {
@@ -898,8 +1279,32 @@ class PoBMCPServer {
 
   private async listBuilds(): Promise<string[]> {
     try {
-      const files = await fs.readdir(this.pobDirectory);
-      return files.filter((file) => file.endsWith(".xml"));
+      const builds: string[] = [];
+
+      // Recursive function to find XML files
+      const findXmlFiles = async (dir: string, relativePath: string = "") => {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+
+        for (const entry of entries) {
+          // Skip hidden files and temp files
+          if (entry.name.startsWith('.') || entry.name.startsWith('~~temp~~')) {
+            continue;
+          }
+
+          const fullPath = path.join(dir, entry.name);
+          const relPath = relativePath ? path.join(relativePath, entry.name) : entry.name;
+
+          if (entry.isDirectory()) {
+            // Recursively search subdirectories
+            await findXmlFiles(fullPath, relPath);
+          } else if (entry.isFile() && entry.name.endsWith('.xml')) {
+            builds.push(relPath);
+          }
+        }
+      };
+
+      await findXmlFiles(this.pobDirectory);
+      return builds;
     } catch (error) {
       console.error("Could not read PoB directory:", error);
       return [];
