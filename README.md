@@ -21,9 +21,12 @@ An MCP (Model Context Protocol) server that enables Claude to analyze and work w
 ### High-Fidelity Calculations (Lua Bridge - Optional)
 - **Live Stat Calculation**: Use PoB's actual calculation engine for accurate stats
 - **Tree Modification**: Add/remove passive nodes and see live stat updates
+- **Optimal Node Suggestions**: Recommend high-efficiency nodes for goals like DPS, life, ES, and resists
+- **Tree Optimization**: Automatically optimize entire passive trees by adding AND removing nodes
 - **What-If Analysis**: Preview stat changes before committing to tree modifications
 - **Tree Comparison**: Compare stat differences between different passive tree allocations
 - **Build Planning**: Get intelligent node recommendations for new builds
+- **Defensive Analysis**: Identify resist gaps, EHP issues, mitigation and sustain weaknesses
 - **Interactive Sessions**: Load builds and modify them programmatically
 
 ## Installation
@@ -44,8 +47,10 @@ npm run build
 ### Basic Setup (XML Features Only)
 
 By default, the server looks for builds in:
-- Windows: `Documents/Path of Building/Builds`
-- Mac/Linux: `~/Documents/Path of Building/Builds`
+- macOS: `~/Path of Building/Builds`
+- Windows/Linux: `~/Documents/Path of Building/Builds`
+
+If your builds are in a different location (for example, `~/Documents/Path of Building/Builds` on some macOS setups), set `POB_DIRECTORY` explicitly.
 
 To use a custom directory, set the `POB_DIRECTORY` environment variable.
 
@@ -308,6 +313,27 @@ Lists recently modified builds with timestamps. Useful for seeing what builds ha
 
 **Returns**: List of changed builds with timestamps
 
+#### `refresh_tree_data`
+Refresh the cached passive tree data.
+
+**Parameters**:
+- `version` (optional): Specific tree version string (e.g., "3_26"). If omitted, clears all cached versions and refetches on demand.
+
+**Returns**: Confirmation message
+
+#### `get_build_xml`
+Return the raw XML content of a build file.
+
+**Parameters**:
+- `build_name` (required): Name of the build file (e.g., "MyBuild.xml")
+
+**Returns**: Raw XML content
+
+### Helper Tools
+
+- `refresh_tree_data`: Refresh cached passive tree data. Use when PoB updates or if versions mismatch.
+- `get_build_xml`: Return raw XML for a build file. Useful for debugging or piping to `lua_load_build`.
+
 ### Lua Bridge Tools (When POB_LUA_ENABLED=true)
 
 #### `lua_start`
@@ -379,54 +405,64 @@ Update the passive tree and recalculate stats.
 
 ### Phase 3 Tools (Require Lua Bridge)
 
+These planning tools help discover, path to, and test node allocations.
+
 #### `compare_trees`
-Compare stat differences between different passive tree allocations.
+Compare passive tree differences between two builds.
 
 **Parameters**:
-- `current_nodes` (required): Array of current node IDs
-- `new_nodes` (required): Array of new node IDs to compare
-- `class_id` (optional): Class ID if different from current
-- `ascend_class_id` (optional): Ascendancy ID if different
+- `build1` (required): First build filename
+- `build2` (required): Second build filename
 
-**Returns**:
-- Current stats
-- New stats
-- Differences (with +/- indicators)
+**Returns**: Differences in keystones/notables, point allocation, and stat comparison
 
-**Example**: "Compare my current tree with adding these defense nodes"
-
-#### `preview_allocation`
-Preview stat changes without modifying the loaded build (what-if analysis).
+#### `test_allocation`
+What-if analysis: preview adding/removing nodes without modifying the loaded build.
 
 **Parameters**:
-- `add_nodes` (optional): Array of node IDs to add
-- `remove_nodes` (optional): Array of node IDs to remove
-- `use_full_dps` (optional): Whether to use full DPS calculation
+- `build_name` (required): Base build filename
+- `changes` (required): Natural language description (e.g., "allocate Point Blank", "remove Acrobatics")
 
-**Returns**:
-- Base stats (current build)
-- Modified stats (with changes)
-- Differences
+**Returns**: Base vs simulated stats and differences
 
-**Example**: "Preview what happens if I take Constitution and remove this STR node"
-
-#### `plan_build`
-Get intelligent passive node recommendations for a build archetype.
+#### `plan_tree`
+Plan passive tree allocation strategy based on goals.
 
 **Parameters**:
-- `class_name` (required): Class name (e.g., "Witch", "Ranger")
-- `ascendancy` (optional): Ascendancy name (e.g., "Occultist", "Deadeye")
-- `focus` (required): Build focus (e.g., "Cold DoT", "crit bow", "max block")
-- `level` (optional): Target level (default: 90)
+- `goals` (required): Description of build goals (e.g., "crit bow Deadeye, get Point Blank")
+- `build_name` (optional): Base build to plan from
 
-**Returns**:
-- Starting area suggestions
-- Notable passive clusters to prioritize
-- Keystone recommendations
-- Pathing suggestions
-- General build advice
+**Returns**: Target keystones, notable suggestions, and planning guidance
 
-**Example**: "Help me plan a Cold DoT Occultist build"
+#### `get_nearby_nodes`
+List unallocated notables/keystones near the current allocation with distance and path cost.
+
+**Parameters**:
+- `build_name` (required)
+- `max_distance` (optional): Travel nodes to search (default 5)
+- `filter` (optional): Keyword filter (e.g., "life", "critical")
+
+**Returns**: Candidates with stats, distance, and cost
+
+#### `find_path_to_node`
+Find shortest path to a target node ID, including intermediate nodes and total cost.
+
+**Parameters**:
+- `build_name` (required)
+- `target_node_id` (required): Node ID string
+- `show_alternatives` (optional): Show up to 3 alternatives
+
+**Returns**: Path nodes and total point cost
+
+#### `allocate_nodes`
+Allocate specific node IDs and calculate exact before/after stats using PoB.
+
+**Parameters**:
+- `build_name` (required)
+- `node_ids` (required): Array of node ID strings
+- `show_full_stats` (optional)
+
+**Returns**: Before/after stats and confirmation
 
 ### Phase 4 Tools (Require Lua Bridge)
 
@@ -518,6 +554,38 @@ Set which skill group to use for stat calculations.
 - Compare DPS between different skills
 - Test different 6-links
 - Switch between hit and DoT portions
+
+### Phase 6 Tools (Require Lua Bridge)
+
+#### `analyze_defenses`
+Analyze defensive stats and identify weaknesses. Provides prioritized recommendations.
+
+**Parameters**:
+- `build_name` (required)
+
+**Returns**: Defensive summary, gaps, and recommended fixes
+
+#### `suggest_optimal_nodes`
+Suggest the best nearby nodes to allocate for a goal (DPS, life, ES, resists, balanced, etc.). Ranks by efficiency and includes paths and projections.
+
+**Parameters**:
+- `build_name` (required)
+- `goal` (required)
+- `max_points`, `max_distance`, `min_efficiency`, `include_keystones` (optional)
+
+**Returns**: Ranked recommendations with paths and projected stats
+
+See `SUGGEST_OPTIMAL_NODES_GUIDE.md` for detailed guidance.
+
+#### `optimize_tree`
+Full tree optimizer that can add and remove nodes to meet a goal within constraints.
+
+**Parameters**:
+- `build_name` (required)
+- `goal` (required)
+- `max_points`, `max_iterations`, `constraints` (optional)
+
+**Returns**: Optimized allocation and stat outcome
 
 ## Development
 
@@ -780,9 +848,9 @@ Quick test checklist:
 ### Phase 3: Lua Bridge Integration ✅
 - High-fidelity stat calculation
 - Tree modification with recalculation
-- What-if analysis (`preview_allocation`)
+- What-if analysis (`test_allocation`)
 - Tree comparison (`compare_trees`)
-- Build planning assistance (`plan_build`)
+- Build planning assistance (`plan_tree`)
 
 ### Phase 4: Item & Skill Management ✅
 - Item addition from PoE text format (`add_item`)
@@ -805,6 +873,7 @@ Quick test checklist:
 - ✅ Pathfinding to target nodes (`find_path_to_node`)
 - ✅ Direct node allocation with stat calculations (`allocate_nodes`)
 - ✅ **Intelligent node recommendations** (`suggest_optimal_nodes`) 🎯
+- ✅ Full reallocation optimizer (`optimize_tree`)
 - ✅ Fixed Lua bridge timeless jewel data loading (Glorious Vanity, etc.)
 - ✅ Fixed passive tree connection parsing for proper graph traversal
 - ⏸️ Item upgrade recommendations

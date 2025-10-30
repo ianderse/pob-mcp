@@ -36,6 +36,8 @@ POB_API_TCP_PORT="31337"                           # TCP port
 | `stop_watching` | Stop monitoring | "Stop watching" |
 | `watch_status` | Check watch status | "Watch status" |
 | `get_recent_changes` | Show recent changes | "What changed recently?" |
+| `refresh_tree_data` | Refresh cached tree data | "Refresh tree data" |
+| `get_build_xml` | Get raw XML | "Get XML for MyBuild.xml" |
 
 ### Lua Bridge Tools (When Enabled)
 
@@ -52,9 +54,12 @@ POB_API_TCP_PORT="31337"                           # TCP port
 
 | Tool | Purpose | Example |
 |------|---------|---------|
-| `compare_trees` | Compare allocations | "Compare current tree vs adding nodes [list]" |
-| `preview_allocation` | What-if analysis | "Preview adding nodes [list]" |
-| `plan_build` | Get recommendations | "Help me plan a Cold DoT Occultist" |
+| `compare_trees` | Compare builds' trees | "Compare BuildA.xml and BuildB.xml" |
+| `test_allocation` | What-if analysis | "Test allocating Point Blank" |
+| `plan_tree` | Plan from goals | "Plan crit bow Deadeye pathing" |
+| `get_nearby_nodes` | Discover nearby notables | "Nearby life notables within 5" |
+| `find_path_to_node` | Shortest path to node | "Path to node 26725" |
+| `allocate_nodes` | Apply node IDs and diff stats | "Allocate [12345,23456] on MyBuild.xml" |
 
 ### Phase 4 Tools (Require Lua Bridge)
 
@@ -65,6 +70,14 @@ POB_API_TCP_PORT="31337"                           # TCP port
 | `toggle_flask` | Activate/deactivate flask | "Activate flask 1" |
 | `get_skill_setup` | View skill configuration | "Show me my skill setup" |
 | `set_main_skill` | Change main skill | "Set main skill to socket group 2" |
+
+### Phase 6 Tools (Require Lua Bridge)
+
+| Tool | Purpose | Example |
+|------|---------|---------|
+| `analyze_defenses` | Identify defensive gaps | "Analyze defenses for MyBuild.xml" |
+| `suggest_optimal_nodes` | Rank best nodes for a goal | "Suggest nodes to maximize life" |
+| `optimize_tree` | Full reallocation optimizer | "Optimize tree for balanced goals" |
 
 ## Common Workflows
 
@@ -86,10 +99,10 @@ POB_API_TCP_PORT="31337"                           # TCP port
 ```
 1. "Start Lua bridge"
 2. "Load MyBuild.xml"
-3. "Get current tree"
-4. "Preview adding nodes [defense nodes]"
-5. "Preview adding nodes [offense nodes]"
-6. "Compare both options"
+3. "Nearby life notables within 5"
+4. "Path to node 26725"
+5. "Allocate [<path node ids>] on MyBuild.xml"
+6. "Test allocating Point Blank" (what-if)
 7. "Stop bridge"
 ```
 
@@ -108,8 +121,8 @@ POB_API_TCP_PORT="31337"                           # TCP port
 1. "Start Lua bridge"
 2. "Load BuildA.xml"
 3. "Get stats"
-4. "Compare tree with BuildB.xml's allocation"
-5. "Preview the tree from BuildB"
+4. "Compare BuildA.xml and BuildB.xml"
+5. "Test allocating [list] on BuildA.xml"
 6. "Stop bridge"
 ```
 

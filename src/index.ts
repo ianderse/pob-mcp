@@ -27,6 +27,17 @@ import {
   getNodeType,
   extractSecondaryBenefits,
 } from "./nodeOptimizer.js";
+import {
+  type OptimizationConstraints,
+  type OptimizationResult,
+  type OptimizationGoal,
+  calculateScore,
+  meetsConstraints,
+  getGoalDescription as getOptGoalDescription,
+  findRemovableNodes,
+  formatOptimizationResult,
+  parseOptimizationGoal,
+} from "./treeOptimizer.js";
 
 // Passive Tree Data Interfaces
 interface PassiveTreeNode {
@@ -2457,6 +2468,50 @@ class PoBMCPServer {
               },
               required: ["build_name", "goal"],
             },
+          },
+          {
+            name: "optimize_tree",
+            description: "Full passive tree optimization that can both add AND remove nodes to find the best overall allocation. More powerful than suggest_optimal_nodes because it can reallocate existing points. Supports constraints (min life, min resists, etc.) and protected nodes. Goals: 'maximize_dps', 'maximize_life', 'maximize_es', 'maximize_ehp', 'balanced', 'league_start'. Uses iterative greedy algorithm with node swapping to maximize target stat while respecting constraints.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                build_name: {
+                  type: "string",
+                  description: "Name of the build file to optimize (e.g., 'MyBuild.xml')",
+                },
+                goal: {
+                  type: "string",
+                  description: "Optimization goal: 'maximize_dps', 'maximize_life', 'maximize_es', 'maximize_ehp', 'balanced', 'league_start'. Use 'balanced' to optimize both offense and defense, or 'league_start' to prioritize survivability.",
+                },
+                max_points: {
+                  type: "number",
+                  description: "Maximum total passive points to use (default: current allocation + 5). Set this to your target level's point budget.",
+                },
+                max_iterations: {
+                  type: "number",
+                  description: "Maximum optimization iterations (default: 20). Higher values may find better results but take longer.",
+                },
+                constraints: {
+                  type: "object",
+                  description: "Defensive constraints that must be maintained (e.g., {minLife: 4000, minFireResist: 75})",
+                  properties: {
+                    minLife: { type: "number" },
+                    minES: { type: "number" },
+                    minEHP: { type: "number" },
+                    minFireResist: { type: "number" },
+                    minColdResist: { type: "number" },
+                    minLightningResist: { type: "number" },
+                    minChaosResist: { type: "number" },
+                    protectedNodes: {
+                      type: "array",
+                      items: { type: "string" },
+                      description: "Node IDs that cannot be removed during optimization",
+                    },
+                  },
+                },
+              },
+              required: ["build_name", "goal"],
+            },
           }
         );
       }
@@ -2609,6 +2664,16 @@ class PoBMCPServer {
               args.max_distance as number | undefined,
               args.min_efficiency as number | undefined,
               args.include_keystones as boolean | undefined
+            );
+
+          case "optimize_tree":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handleOptimizeTree(
+              args.build_name as string,
+              args.goal as string,
+              args.max_points as number | undefined,
+              args.max_iterations as number | undefined,
+              args.constraints as OptimizationConstraints | undefined
             );
 
           default:
@@ -4125,6 +4190,269 @@ class PoBMCPServer {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to suggest optimal nodes: ${errorMsg}`);
+    }
+  }
+
+  /**
+   * Full passive tree optimization with node addition AND removal
+   */
+  private async handleOptimizeTree(
+    buildName: string,
+    goalString: string,
+    maxPoints?: number,
+    maxIterations?: number,
+    constraints?: OptimizationConstraints
+  ) {
+    try {
+      // Parse parameters
+      const goal = parseOptimizationGoal(goalString);
+      const iterationLimit = maxIterations || 20;
+      const constraintsObj = constraints || {};
+
+      console.error(`[OptimizeTree] Build: ${buildName}, Goal: ${goal}, MaxIter: ${iterationLimit}`);
+
+      // Step 1: Load build and tree data
+      const build = await this.readBuild(buildName);
+      if (!build.Tree?.Spec) {
+        throw new Error("Build has no passive tree data");
+      }
+
+      const allocatedNodeIds = this.parseAllocatedNodes(build);
+      const treeVersion = this.extractBuildVersion(build);
+      const treeData = await this.getTreeData(treeVersion);
+      const buildAscendancy = build.Build?.ascendClassName;
+
+      console.error(`[OptimizeTree] Starting with ${allocatedNodeIds.length} allocated nodes`);
+
+      // Step 2: Initialize Lua bridge
+      await this.ensureLuaClient();
+      if (!this.luaClient) {
+        throw new Error('Lua bridge required for tree optimization. Enable POB_LUA_ENABLED.');
+      }
+
+      const buildPath = path.join(this.pobDirectory, buildName);
+      const buildXml = await fs.readFile(buildPath, 'utf-8');
+      await this.luaClient.loadBuildXml(buildXml, 'Tree Optimization');
+
+      // Get baseline
+      const baselineStats = await this.luaClient.getStats();
+      const baselineTree = await this.luaClient.getTree();
+      const baselineScore = calculateScore(baselineStats, goal);
+
+      // Determine point budget
+      const pointBudget = maxPoints || (baselineTree.nodes.length + 5);
+      console.error(`[OptimizeTree] Point budget: ${pointBudget}, Baseline score: ${baselineScore.toFixed(0)}`);
+
+      // Step 3: Iterative optimization
+      let currentTree = baselineTree;
+      let currentScore = baselineScore;
+      let currentStats = baselineStats;
+      let iteration = 0;
+      let improvementFound = true;
+
+      const nodesAdded: string[] = [];
+      const nodesRemoved: string[] = [];
+
+      while (iteration < iterationLimit && improvementFound) {
+        iteration++;
+        improvementFound = false;
+
+        console.error(`[OptimizeTree] Iteration ${iteration}/${iterationLimit}, Score: ${currentScore.toFixed(0)}, Points: ${currentTree.nodes.length}/${pointBudget}`);
+
+        // Phase A: Try adding beneficial nodes (if under budget)
+        if (currentTree.nodes.length < pointBudget) {
+          const allocatedNodes = new Set<string>(currentTree.nodes.map((n: number) => String(n)));
+
+          // Find nearby candidates
+          const candidates = this.findNearbyNodes(allocatedNodes, treeData, 3); // Search distance: 3
+
+          // Filter by ascendancy
+          const filteredCandidates = candidates.filter(c => {
+            if (c.node.ascendancyName && buildAscendancy) {
+              return c.node.ascendancyName === buildAscendancy;
+            }
+            return true;
+          });
+
+          console.error(`[OptimizeTree]   Testing ${filteredCandidates.length} add candidates...`);
+
+          let bestAddNode: string | null = null;
+          let bestAddScore = currentScore;
+          let bestAddPath: string[] = [];
+
+          for (const candidate of filteredCandidates.slice(0, 30)) { // Limit to 30 for performance
+            // Find path to this node
+            const paths = this.findShortestPaths(allocatedNodes, candidate.nodeId, treeData, 1);
+            if (paths.length === 0) continue;
+
+            const path = paths[0];
+
+            // Skip if exceeds budget
+            if (currentTree.nodes.length + path.cost > pointBudget) continue;
+
+            // Test allocation
+            try {
+              const testNodes = [...currentTree.nodes, ...path.nodes.map(n => parseInt(n))];
+              await this.luaClient.setTree({ ...currentTree, nodes: testNodes });
+
+              const testStats = await this.luaClient.getStats();
+
+              // Check constraints
+              if (!meetsConstraints(testStats, constraintsObj)) {
+                await this.luaClient.setTree(currentTree);
+                continue;
+              }
+
+              const testScore = calculateScore(testStats, goal);
+
+              if (testScore > bestAddScore) {
+                bestAddNode = candidate.nodeId;
+                bestAddScore = testScore;
+                bestAddPath = path.nodes;
+              }
+
+              await this.luaClient.setTree(currentTree);
+            } catch (error) {
+              console.error(`[OptimizeTree] Error testing add ${candidate.nodeId}:`, error);
+              await this.luaClient.setTree(currentTree);
+              continue;
+            }
+          }
+
+          // Apply best addition if found
+          if (bestAddNode) {
+            currentTree = { ...currentTree, nodes: [...currentTree.nodes, ...bestAddPath.map(n => parseInt(n))] };
+            await this.luaClient.setTree(currentTree);
+            currentStats = await this.luaClient.getStats();
+            currentScore = bestAddScore;
+            nodesAdded.push(...bestAddPath);
+            improvementFound = true;
+            console.error(`[OptimizeTree]   ✓ Added node ${bestAddNode} (+${(bestAddScore - currentScore).toFixed(0)} score)`);
+          }
+        }
+
+        // Phase B: Try removing inefficient nodes
+        const allocatedSet = new Set<string>(currentTree.nodes.map((n: number) => String(n)));
+        const removableCandidates = findRemovableNodes(allocatedSet, treeData, constraintsObj);
+
+        console.error(`[OptimizeTree]   Testing ${removableCandidates.length} remove candidates...`);
+
+        let bestRemoveNode: string | null = null;
+        let bestRemoveScore = currentScore;
+
+        for (const nodeId of removableCandidates.slice(0, 20)) { // Limit to 20 for performance
+          try {
+            const testNodes = currentTree.nodes.filter((n: number) => String(n) !== nodeId);
+            await this.luaClient.setTree({ ...currentTree, nodes: testNodes });
+
+            const testStats = await this.luaClient.getStats();
+
+            // Check constraints
+            if (!meetsConstraints(testStats, constraintsObj)) {
+              await this.luaClient.setTree(currentTree);
+              continue;
+            }
+
+            const testScore = calculateScore(testStats, goal);
+
+            // Accept removal if score doesn't drop much (within 1% is OK for saving a point)
+            if (testScore >= currentScore * 0.99) {
+              bestRemoveNode = nodeId;
+              bestRemoveScore = testScore;
+            }
+
+            await this.luaClient.setTree(currentTree);
+          } catch (error) {
+            console.error(`[OptimizeTree] Error testing remove ${nodeId}:`, error);
+            await this.luaClient.setTree(currentTree);
+            continue;
+          }
+        }
+
+        // Apply best removal if found
+        if (bestRemoveNode) {
+          currentTree = { ...currentTree, nodes: currentTree.nodes.filter((n: number) => String(n) !== bestRemoveNode) };
+          await this.luaClient.setTree(currentTree);
+          currentStats = await this.luaClient.getStats();
+          currentScore = bestRemoveScore;
+          nodesRemoved.push(bestRemoveNode);
+          improvementFound = true;
+          console.error(`[OptimizeTree]   ✓ Removed node ${bestRemoveNode} (saved point, score: ${bestRemoveScore.toFixed(0)})`);
+        }
+
+        // If no improvement in this iteration, stop
+        if (!improvementFound) {
+          console.error(`[OptimizeTree] No improvements found, stopping.`);
+          break;
+        }
+      }
+
+      // Step 4: Build result
+      const finalStats = await this.luaClient.getStats();
+      const finalScore = calculateScore(finalStats, goal);
+
+      const result: OptimizationResult = {
+        goal: goal,
+        goalDescription: getOptGoalDescription(goal),
+        buildName: buildName,
+        startingStats: {
+          targetValue: baselineScore,
+          life: parseFloat(baselineStats.Life || 0),
+          es: parseFloat(baselineStats.EnergyShield || 0),
+          dps: parseFloat(baselineStats.TotalDPS || 0),
+          pointsAllocated: baselineTree.nodes.length
+        },
+        finalStats: {
+          targetValue: finalScore,
+          life: parseFloat(finalStats.Life || 0),
+          es: parseFloat(finalStats.EnergyShield || 0),
+          dps: parseFloat(finalStats.TotalDPS || 0),
+          pointsAllocated: currentTree.nodes.length
+        },
+        improvements: {
+          targetValueGain: finalScore - baselineScore,
+          targetValuePercent: baselineScore > 0 ? ((finalScore - baselineScore) / baselineScore) * 100 : 0,
+          lifeChange: parseFloat(finalStats.Life || 0) - parseFloat(baselineStats.Life || 0),
+          esChange: parseFloat(finalStats.EnergyShield || 0) - parseFloat(baselineStats.EnergyShield || 0),
+          dpsChange: parseFloat(finalStats.TotalDPS || 0) - parseFloat(baselineStats.TotalDPS || 0),
+          pointsChange: currentTree.nodes.length - baselineTree.nodes.length
+        },
+        iterations: iteration,
+        nodesAdded: [...new Set(nodesAdded)], // Deduplicate
+        nodesRemoved: [...new Set(nodesRemoved)],
+        constraintsMet: meetsConstraints(finalStats, constraintsObj),
+        warnings: [],
+        formattedTree: {
+          classId: currentTree.classId,
+          ascendClassId: currentTree.ascendClassId,
+          nodes: currentTree.nodes
+        }
+      };
+
+      // Add warnings
+      if (iteration >= iterationLimit) {
+        result.warnings.push(`Reached maximum iterations (${iterationLimit}). Further optimizations may be possible.`);
+      }
+      if (nodesAdded.length === 0 && nodesRemoved.length === 0) {
+        result.warnings.push(`Tree is already optimal for the given goal and constraints.`);
+      }
+      if (!result.constraintsMet) {
+        result.warnings.push(`Final tree does not meet all constraints! Review carefully.`);
+      }
+
+      // Format and return
+      const formattedText = formatOptimizationResult(result);
+
+      return {
+        content: [{
+          type: "text",
+          text: formattedText
+        }]
+      };
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to optimize tree: ${errorMsg}`);
     }
   }
 

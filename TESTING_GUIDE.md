@@ -712,6 +712,43 @@ Expected: Error prompting to start bridge
 - No conflicts between tree and item modifications
 - Can combine all features in single session
 
+## Phase 6: Optimization Tests
+
+### Test 6.1: Defensive Analysis
+**Objective**: Identify defensive gaps and recommended fixes
+
+**Steps**:
+1. Start bridge and load a build with low resists/life
+2. Ask: "Analyze defenses for [BuildName.xml]"
+
+**Expected Results**:
+- Summary of resistances, life/ES, mitigation, sustain
+- Prioritized recommendations with actionable guidance
+
+### Test 6.2: Suggest Optimal Nodes
+**Objective**: Get ranked node recommendations for a goal
+
+**Steps**:
+1. Load a build
+2. Ask: "Suggest nodes to maximize life for [BuildName.xml]"
+
+**Expected Results**:
+- Top recommendations ranked by efficiency (gain per point)
+- Path nodes and target ID shown
+- Projected stat improvements
+
+### Test 6.3: Full Tree Optimization
+**Objective**: Optimize allocation under constraints
+
+**Steps**:
+1. Load a build
+2. Ask: "Optimize tree for balanced goals on [BuildName.xml] with minLife 4000"
+
+**Expected Results**:
+- Optimized allocation returned
+- Constraints respected (e.g., min life/resists)
+- Clear description of changes and outcomes
+
 ## Performance Testing
 
 ### Test P.1: Build Load Time
@@ -745,7 +782,7 @@ Expected: Error prompting to start bridge
 
 **Steps**:
 1. Load a build
-2. Preview 10 different node additions
+2. Test 10 different node additions (what-if)
 3. Measure each
 
 **Expected Results**:
@@ -808,8 +845,13 @@ After any code changes, verify:
 
 ### Phase 3 Features Still Work
 - [ ] compare_trees
-- [ ] preview_allocation
-- [ ] plan_build
+- [ ] test_allocation
+- [ ] plan_tree
+- [ ] get_nearby_nodes
+- [ ] find_path_to_node
+- [ ] allocate_nodes
+- [ ] get_build_xml
+- [ ] refresh_tree_data
 
 ### Phase 4 Features Still Work
 - [ ] add_item
@@ -817,6 +859,11 @@ After any code changes, verify:
 - [ ] toggle_flask
 - [ ] get_skill_setup
 - [ ] set_main_skill
+
+### Phase 6 Features Still Work
+- [ ] analyze_defenses
+- [ ] suggest_optimal_nodes
+- [ ] optimize_tree
 
 ### Build Process
 - [ ] `npm run build` completes without errors

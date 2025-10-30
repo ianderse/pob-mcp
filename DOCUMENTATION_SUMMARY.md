@@ -97,6 +97,17 @@ This document provides an overview of all documentation created for the PoB MCP 
 
 **Audience**: Developers, technical reviewers
 
+### 7. SUGGEST_OPTIMAL_NODES_GUIDE.md (How-To)
+**Purpose**: Practical guide and examples for `suggest_optimal_nodes`
+
+**Contents**:
+- Goals and natural language mapping
+- Parameters and tuning tips
+- Example workflows and outputs
+- Troubleshooting and performance notes
+
+**Audience**: Power users optimizing builds
+
 ## Documentation Hierarchy
 
 ```
@@ -104,6 +115,8 @@ This document provides an overview of all documentation created for the PoB MCP 
 ├── QUICK_REFERENCE.md                  [Quick lookups]
 ├── TESTING_GUIDE.md                    [Testing procedures]
 ├── PHASE3_COMPLETE.md                  [Phase 3 milestone]
+├── PHASE6.*.md                         [Phase 6 milestones]
+├── SUGGEST_OPTIMAL_NODES_GUIDE.md      [Optimization how-to]
 ├── ROADMAP.md                          [Future plans]
 ├── DOCUMENTATION_SUMMARY.md            [This file]
 └── agent-os/specs/.../
@@ -182,9 +195,11 @@ This document provides an overview of all documentation created for the PoB MCP 
 ## Documentation Coverage
 
 ### Features Documented
-- ✅ All XML-based tools (8 tools)
-- ✅ All Lua bridge tools (6 tools)
-- ✅ All Phase 3 tools (3 tools)
+- ✅ All XML-based tools (including refresh_tree_data/get_build_xml)
+- ✅ All Lua bridge tools
+- ✅ Phase 3 planning tools (compare_trees, test_allocation, plan_tree, get_nearby_nodes, find_path_to_node, allocate_nodes)
+- ✅ Phase 4 item/skill tools
+- ✅ Phase 6 optimization tools (analyze_defenses, suggest_optimal_nodes, optimize_tree)
 - ✅ Environment variables (12 variables)
 - ✅ Error messages and troubleshooting
 - ✅ Setup and configuration
@@ -218,7 +233,7 @@ This document provides an overview of all documentation created for the PoB MCP 
 
 ### Completeness
 - All features documented: 100%
-- All tools documented: 100%
+- All tools documented: 100% (30+ tools)
 - All environment variables documented: 100%
 - Common errors covered: ~95%
 - Usage examples provided: 100%
@@ -304,8 +319,8 @@ All documentation follows Markdown best practices and is designed to be:
 ## Summary
 
 The PoB MCP Server now has comprehensive documentation covering:
-- **6 documentation files** (7 including this summary)
-- **17 total tools** fully documented
+- **8+ documentation files** (including this summary)
+- **30+ tools** fully documented
 - **12 environment variables** explained
 - **30+ test cases** defined
 - **10+ usage examples** provided

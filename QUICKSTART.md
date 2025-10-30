@@ -19,6 +19,8 @@ See `TRANSFER_GUIDE.md` for detailed instructions, but basically:
 - Copy all `.xml` files
 - Put them on Mac: `~/Documents/Path of Building/Builds/`
 
+Tip: If your builds are not detected, set `POB_DIRECTORY` in your Claude config to the exact folder path (the server’s default on macOS is `~/Path of Building/Builds`).
+
 ### 2. Configure Claude Desktop
 
 Edit: `~/Library/Application Support/Claude/claude_desktop_config.json`
