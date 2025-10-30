@@ -56,6 +56,16 @@ POB_API_TCP_PORT="31337"                           # TCP port
 | `preview_allocation` | What-if analysis | "Preview adding nodes [list]" |
 | `plan_build` | Get recommendations | "Help me plan a Cold DoT Occultist" |
 
+### Phase 4 Tools (Require Lua Bridge)
+
+| Tool | Purpose | Example |
+|------|---------|---------|
+| `add_item` | Add item from text | "Add this weapon: [item text]" |
+| `get_equipped_items` | View equipped items | "What items do I have equipped?" |
+| `toggle_flask` | Activate/deactivate flask | "Activate flask 1" |
+| `get_skill_setup` | View skill configuration | "Show me my skill setup" |
+| `set_main_skill` | Change main skill | "Set main skill to socket group 2" |
+
 ## Common Workflows
 
 ### Workflow 1: Quick Build Check
@@ -101,6 +111,28 @@ POB_API_TCP_PORT="31337"                           # TCP port
 4. "Compare tree with BuildB.xml's allocation"
 5. "Preview the tree from BuildB"
 6. "Stop bridge"
+```
+
+### Workflow 6: Test Gear Upgrade (Phase 4)
+```
+1. "Start bridge and load build"
+2. "What items do I have equipped?"
+3. "Get current DPS"
+4. "Add this weapon: [item text from trade]"
+5. "Activate diamond flask"
+6. "Get new DPS"
+7. "Calculate upgrade value"
+```
+
+### Workflow 7: Complete Build Creation (Phase 4)
+```
+1. "Start bridge, load template"
+2. "Set tree to [optimized nodes]"
+3. "Add items: [paste all gear]"
+4. "Set main skill to group 1"
+5. "Activate damage flasks"
+6. "Get final stats"
+7. "Export as [BuildName.xml]"
 ```
 
 ## Class and Ascendancy IDs
@@ -187,6 +219,38 @@ Common keystones you might reference:
 | Unwavering Stance | 20551 | Cannot evade, cannot be stunned |
 | Vaal Pact | 28127 | Instant leech, no regen |
 | Zealot's Oath | 3655 | Regen to ES instead of life |
+
+## Equipment Slot Names (Phase 4)
+
+Use these exact slot names with `add_item`:
+
+### Weapons & Shields
+- `"Weapon 1"`, `"Weapon 2"` - Main hand / off hand
+- `"Weapon 1 Swap"`, `"Weapon 2 Swap"` - Weapon swap set
+
+### Armour
+- `"Helmet"`
+- `"Body Armour"`
+- `"Gloves"`
+- `"Boots"`
+
+### Accessories
+- `"Amulet"`
+- `"Ring 1"`, `"Ring 2"`
+- `"Belt"`
+
+### Flasks
+- `"Flask 1"` through `"Flask 5"`
+
+### Jewels
+- `"Jewel 1"`, `"Jewel 2"`, etc. (based on tree allocation)
+- Abyssal sockets in items
+
+### Example Usage
+```
+"Add this ring to Ring 2: [item text]"
+"Add this flask to Flask 1: [item text]"
+```
 
 ## Common Node Clusters
 
@@ -359,8 +423,17 @@ Use these when asking for build planning help:
 
 ## Version Information
 
-- **Current Version**: Phase 3 Complete
+- **Current Version**: Phase 4 Complete
+- **Total Tools**: 22 (8 XML + 6 Lua Bridge + 3 Phase 3 + 5 Phase 4)
 - **MCP SDK**: @modelcontextprotocol/sdk
 - **Node.js**: 14+ required
 - **LuaJIT**: 2.0+ required (for bridge)
 - **PoB Fork**: Compatible with LocalIdentity's fork
+
+### What's New in Phase 4
+- Item management (add items from PoE text)
+- Equipment viewing
+- Flask activation control
+- Skill configuration
+- Main skill selection
+- Complete build modification workflows

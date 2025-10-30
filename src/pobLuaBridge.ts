@@ -34,7 +34,19 @@ export class PoBLuaApiClient {
 
   async start(): Promise<void> {
     if (this.proc) return;
-    const env = { ...process.env, ...this.options.env, POB_API_STDIO: "1" } as NodeJS.ProcessEnv;
+
+    // Set up Lua paths for runtime modules
+    const pobForkPath = this.options.cwd || process.env.POB_FORK_PATH || '';
+    const runtimeLuaPath = pobForkPath.replace(/\/src$/, '/runtime/lua');
+    const luaRocksPath = process.env.HOME + '/.luarocks/lib/lua/5.1';
+
+    const env = {
+      ...process.env,
+      ...this.options.env,
+      POB_API_STDIO: "1",
+      LUA_PATH: `${runtimeLuaPath}/?.lua;${runtimeLuaPath}/?/init.lua;;`,
+      LUA_CPATH: `${luaRocksPath}/?.so;;`,
+    } as NodeJS.ProcessEnv;
     this.proc = spawn(this.options.cmd!, this.options.args!, {
       cwd: this.options.cwd,
       env,
@@ -46,8 +58,8 @@ export class PoBLuaApiClient {
 
     this.proc.stdout.on("data", (chunk: string) => this.onStdout(chunk));
     this.proc.stderr.on("data", (chunk: string) => {
-      // Keep stderr visible for debugging but don’t reject requests by default
-      // console.error("[PoB API stderr]", chunk.trim());
+      // Keep stderr visible for debugging but don't reject requests by default
+      console.error("[PoB API stderr]", chunk.trim());
     });
 
     this.proc.on("exit", (code, signal) => {
@@ -89,6 +101,7 @@ export class PoBLuaApiClient {
   }
 
   private onStdout(chunk: string) {
+    console.error("[PoB API stdout]", chunk.trim());
     this.buffer += chunk;
   }
 
@@ -112,14 +125,32 @@ export class PoBLuaApiClient {
     if (this.pending) throw new Error("Concurrent request not supported");
 
     this.proc.stdin.write(JSON.stringify(obj) + "\n");
-    const line = await this.readLineWithTimeout(this.options.timeoutMs);
-    let res: any;
-    try {
-      res = JSON.parse(line);
-    } catch (e) {
-      throw new Error(`Invalid JSON from server: ${line}`);
+
+    // Read lines until we get valid JSON response
+    // Skip non-JSON lines (like "LOADING", warnings, etc.)
+    let attempts = 0;
+    const maxAttempts = 100;
+
+    while (attempts < maxAttempts) {
+      const line = await this.readLineWithTimeout(this.options.timeoutMs);
+      attempts++;
+
+      // Skip empty lines or lines that don't look like JSON
+      if (!line.trim() || !line.trim().startsWith('{')) {
+        continue;
+      }
+
+      // Try to parse as JSON
+      try {
+        const res = JSON.parse(line);
+        return res;
+      } catch (e) {
+        // Not valid JSON, keep looking
+        continue;
+      }
     }
-    return res;
+
+    throw new Error(`Failed to receive valid JSON response after ${maxAttempts} lines`);
   }
 
   async ping(): Promise<boolean> {
@@ -127,9 +158,10 @@ export class PoBLuaApiClient {
     return !!res.ok;
   }
 
-  async loadBuildXml(xml: string, name = "API Build"): Promise<void> {
+  async loadBuildXml(xml: string, name = "API Build"): Promise<any> {
     const res = await this.send({ action: "load_build_xml", params: { xml, name } });
     if (!res.ok) throw new Error(res.error || "load_build_xml failed");
+    return res;
   }
 
   async getStats(fields?: string[]): Promise<Record<string, any>> {
@@ -151,6 +183,39 @@ export class PoBLuaApiClient {
     if (!res.ok) throw new Error(res.error || "get_items failed");
     return res.items;
   }
+
+  async addItem(itemText: string, slotName?: string, noAutoEquip?: boolean): Promise<any> {
+    const res = await this.send({
+      action: "add_item_text",
+      params: { text: itemText, slotName, noAutoEquip },
+    });
+    if (!res.ok) throw new Error(res.error || "add_item_text failed");
+    return res.result;
+  }
+
+  async setFlaskActive(flaskIndex: number, active: boolean): Promise<void> {
+    const res = await this.send({
+      action: "set_flask_active",
+      params: { index: flaskIndex, active },
+    });
+    if (!res.ok) throw new Error(res.error || "set_flask_active failed");
+  }
+
+  async getSkills(): Promise<any> {
+    const res = await this.send({ action: "get_skills" });
+    if (!res.ok) throw new Error(res.error || "get_skills failed");
+    return res.result;
+  }
+
+  async setMainSelection(params: {
+    mainSocketGroup?: number;
+    mainActiveSkill?: number;
+    skillPart?: number;
+  }): Promise<void> {
+    const res = await this.send({ action: "set_main_selection", params });
+    if (!res.ok) throw new Error(res.error || "set_main_selection failed");
+  }
+
 async setTree(params: {
     classId: number;
     ascendClassId: number;
@@ -162,6 +227,35 @@ async setTree(params: {
     const res = await this.send({ action: "set_tree", params });
     if (!res.ok) throw new Error(res.error || "set_tree failed");
     return res.tree;
+  }
+
+  async exportBuildXml(): Promise<string> {
+    const res = await this.send({ action: "export_build_xml" });
+    if (!res.ok) throw new Error(res.error || "export_build_xml failed");
+    return res.xml;
+  }
+
+  async getBuildInfo(): Promise<any> {
+    const res = await this.send({ action: "get_build_info" });
+    if (!res.ok) throw new Error(res.error || "get_build_info failed");
+    return res.info;
+  }
+
+  async setLevel(level: number): Promise<void> {
+    const res = await this.send({ action: "set_level", params: { level } });
+    if (!res.ok) throw new Error(res.error || "set_level failed");
+  }
+
+  async getConfig(): Promise<any> {
+    const res = await this.send({ action: "get_config" });
+    if (!res.ok) throw new Error(res.error || "get_config failed");
+    return res.config;
+  }
+
+  async setConfig(params: { bandit?: string; pantheonMajorGod?: string; pantheonMinorGod?: string; enemyLevel?: number; }): Promise<any> {
+    const res = await this.send({ action: "set_config", params });
+    if (!res.ok) throw new Error(res.error || "set_config failed");
+    return res.config;
   }
 
   async stop(): Promise<void> {
@@ -241,14 +335,32 @@ export class PoBLuaTcpClient {
     if (!this.socket) throw new Error("Socket not connected");
     if (!this.ready) throw new Error("Not ready");
     this.socket.write(JSON.stringify(obj) + "\n");
-    const line = await this.readLineWithTimeout(this.timeoutMs);
-    let res: any;
-    try {
-      res = JSON.parse(line);
-    } catch (e) {
-      throw new Error(`Invalid JSON from server: ${line}`);
+
+    // Read lines until we get valid JSON response
+    // Skip non-JSON lines (like "LOADING", warnings, etc.)
+    let attempts = 0;
+    const maxAttempts = 100;
+
+    while (attempts < maxAttempts) {
+      const line = await this.readLineWithTimeout(this.timeoutMs);
+      attempts++;
+
+      // Skip empty lines or lines that don't look like JSON
+      if (!line.trim() || !line.trim().startsWith('{')) {
+        continue;
+      }
+
+      // Try to parse as JSON
+      try {
+        const res = JSON.parse(line);
+        return res;
+      } catch (e) {
+        // Not valid JSON, keep looking
+        continue;
+      }
     }
-    return res;
+
+    throw new Error(`Failed to receive valid JSON response after ${maxAttempts} lines`);
   }
 
   async ping(): Promise<boolean> {
@@ -256,9 +368,10 @@ export class PoBLuaTcpClient {
     return !!res.ok;
   }
 
-  async loadBuildXml(xml: string, name = "API Build"): Promise<void> {
+  async loadBuildXml(xml: string, name = "API Build"): Promise<any> {
     const res = await this.send({ action: "load_build_xml", params: { xml, name } });
     if (!res.ok) throw new Error(res.error || "load_build_xml failed");
+    return res;
   }
 
   async getStats(fields?: string[]): Promise<Record<string, any>> {
@@ -325,6 +438,44 @@ export class PoBLuaTcpClient {
     const res = await this.send({ action: "set_config", params });
     if (!res.ok) throw new Error(res.error || "set_config failed");
     return res.config;
+  }
+
+  async getItems(): Promise<any[]> {
+    const res = await this.send({ action: "get_items" });
+    if (!res.ok) throw new Error(res.error || "get_items failed");
+    return res.items;
+  }
+
+  async addItem(itemText: string, slotName?: string, noAutoEquip?: boolean): Promise<any> {
+    const res = await this.send({
+      action: "add_item_text",
+      params: { text: itemText, slotName, noAutoEquip },
+    });
+    if (!res.ok) throw new Error(res.error || "add_item_text failed");
+    return res.result;
+  }
+
+  async setFlaskActive(flaskIndex: number, active: boolean): Promise<void> {
+    const res = await this.send({
+      action: "set_flask_active",
+      params: { index: flaskIndex, active },
+    });
+    if (!res.ok) throw new Error(res.error || "set_flask_active failed");
+  }
+
+  async getSkills(): Promise<any> {
+    const res = await this.send({ action: "get_skills" });
+    if (!res.ok) throw new Error(res.error || "get_skills failed");
+    return res.result;
+  }
+
+  async setMainSelection(params: {
+    mainSocketGroup?: number;
+    mainActiveSkill?: number;
+    skillPart?: number;
+  }): Promise<void> {
+    const res = await this.send({ action: "set_main_selection", params });
+    if (!res.ok) throw new Error(res.error || "set_main_selection failed");
   }
 
   async stop(): Promise<void> {

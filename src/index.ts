@@ -15,6 +15,18 @@ import os from "os";
 import chokidar from "chokidar";
 import https from "https";
 import { PoBLuaApiClient, PoBLuaTcpClient } from "./pobLuaBridge.js";
+import { analyzeDefenses, formatDefensiveAnalysis } from "./defensiveAnalyzer.js";
+import {
+  type NodeScore,
+  type OptimalNodesResult,
+  type BuildGoal,
+  parseGoal,
+  getStatExtractor,
+  getGoalDescription,
+  formatOptimalNodesResult,
+  getNodeType,
+  extractSecondaryBenefits,
+} from "./nodeOptimizer.js";
 
 // Passive Tree Data Interfaces
 interface PassiveTreeNode {
@@ -27,6 +39,7 @@ interface PassiveTreeNode {
   isMastery?: boolean;
   isJewelSocket?: boolean;
   isAscendancyStart?: boolean;
+  ascendancyName?: string;
   group?: number;
   orbit?: number;
   orbitIndex?: number;
@@ -264,6 +277,27 @@ class PoBMCPServer {
       }
 
       console.error('[Lua Bridge] Client initialized successfully');
+
+      // Wait for HeadlessWrapper to be fully ready (loadBuildFromXML available)
+      console.error('[Lua Bridge] Waiting for HeadlessWrapper to finish loading...');
+      const testXml = '<?xml version="1.0" encoding="UTF-8"?><PathOfBuilding><Build level="1" className="Witch"/></PathOfBuilding>';
+      let attempts = 0;
+      const maxAttempts = 5;
+
+      while (attempts < maxAttempts) {
+        try {
+          await this.luaClient.loadBuildXml(testXml, 'Init Test');
+          console.error('[Lua Bridge] HeadlessWrapper fully initialized');
+          break;
+        } catch (loadError) {
+          attempts++;
+          if (attempts >= maxAttempts) {
+            throw new Error(`HeadlessWrapper did not initialize after ${maxAttempts} attempts. Error: ${loadError instanceof Error ? loadError.message : String(loadError)}`);
+          }
+          console.error(`[Lua Bridge] HeadlessWrapper not ready (attempt ${attempts}/${maxAttempts}), waiting 2s...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error('[Lua Bridge] Failed to initialize:', errorMsg);
@@ -329,23 +363,39 @@ class PoBMCPServer {
   private parseTreeLua(luaContent: string, version: string): PassiveTreeData {
     const nodes = new Map<string, PassiveTreeNode>();
 
-    // Extract nodes section using regex
-    // Nodes are defined like: [12345]= { ... }
-    const nodePattern = /\[(\d+)\]=\s*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}/g;
+    // Extract nodes with brace counting for proper nesting
+    const nodeStartPattern = /\[(\d+)\]=\s*\{/g;
 
     let match;
-    while ((match = nodePattern.exec(luaContent)) !== null) {
+    while ((match = nodeStartPattern.exec(luaContent)) !== null) {
       const nodeId = match[1];
-      const nodeContent = match[2];
+      const startPos = match.index + match[0].length;
 
-      try {
-        const node = this.parseNodeContent(nodeId, nodeContent);
-        if (node) {
-          nodes.set(nodeId, node);
+      // Count braces to find the matching closing brace
+      let braceCount = 1;
+      let endPos = startPos;
+
+      while (braceCount > 0 && endPos < luaContent.length) {
+        if (luaContent[endPos] === '{') {
+          braceCount++;
+        } else if (luaContent[endPos] === '}') {
+          braceCount--;
         }
-      } catch (error) {
-        // Skip malformed nodes
-        continue;
+        endPos++;
+      }
+
+      if (braceCount === 0) {
+        const nodeContent = luaContent.substring(startPos, endPos - 1);
+
+        try {
+          const node = this.parseNodeContent(nodeId, nodeContent);
+          if (node) {
+            nodes.set(nodeId, node);
+          }
+        } catch (error) {
+          // Skip malformed nodes
+          continue;
+        }
       }
     }
 
@@ -388,17 +438,38 @@ class PoBMCPServer {
     if (content.includes('["isJewelSocket"]= true')) node.isJewelSocket = true;
     if (content.includes('["isAscendancyStart"]= true')) node.isAscendancyStart = true;
 
-    // Extract connections
-    const outMatch = content.match(/\["out"\]=\s*\{([^}]+)\}/);
-    if (outMatch) {
-      const outContent = outMatch[1];
-      node.out = outContent.match(/"(\d+)"/g)?.map(s => s.replace(/"/g, '')) || [];
+    // Extract ascendancy name if present
+    const ascendancyNameMatch = content.match(/\["ascendancyName"\]=\s*"([^"]+)"/);
+    if (ascendancyNameMatch) {
+      node.ascendancyName = ascendancyNameMatch[1];
     }
 
-    const inMatch = content.match(/\["in"\]=\s*\{([^}]+)\}/);
+    // Extract connections (allowing for multiline and nested content)
+    const outMatch = content.match(/\["out"\]=\s*\{([^}]*)\}/);
+    if (outMatch) {
+      const outContent = outMatch[1];
+      // Match quoted numbers: "12345"
+      const matches = outContent.match(/"(\d+)"/g);
+      if (matches) {
+        node.out = matches.map(s => s.replace(/"/g, ''));
+      }
+    }
+
+    const inMatch = content.match(/\["in"\]=\s*\{([^}]*)\}/);
     if (inMatch) {
       const inContent = inMatch[1];
-      node.in = inContent.match(/"(\d+)"/g)?.map(s => s.replace(/"/g, '')) || [];
+      // Match quoted numbers: "12345"
+      const matches = inContent.match(/"(\d+)"/g);
+      if (matches) {
+        node.in = matches.map(s => s.replace(/"/g, ''));
+      }
+    }
+
+    // Debug: Log first few nodes with connections
+    if (node.out && node.out.length > 0) {
+      if (parseInt(nodeId) < 100) {
+        console.error(`[Parse Node] Node ${nodeId} has ${node.out.length} out connections: ${node.out.slice(0, 3).join(', ')}`);
+      }
     }
 
     return node;
@@ -523,6 +594,291 @@ class PoBMCPServer {
       total: allocatedCount,
       available,
     };
+  }
+
+  private findNearbyNodes(
+    allocatedNodes: Set<string>,
+    treeData: PassiveTreeData,
+    maxDistance: number,
+    filter?: string
+  ): Array<{ node: PassiveTreeNode; nodeId: string; distance: number; pathCost: number }> {
+    const results: Array<{ node: PassiveTreeNode; nodeId: string; distance: number; pathCost: number }> = [];
+
+    // Debug info
+    console.error(`[findNearbyNodes] Starting search with ${allocatedNodes.size} allocated nodes, maxDistance=${maxDistance}`);
+    console.error(`[findNearbyNodes] Total nodes in tree: ${treeData.nodes.size}`);
+
+    // Use Dijkstra to find reachable nodes with proper distance calculation
+    const distances = new Map<string, number>();
+    const unvisited = new Set<string>();
+
+    // Initialize: allocated nodes have distance 0, all others have infinity
+    let allocatedCount = 0;
+    const sampleAllocatedNodes = Array.from(allocatedNodes).slice(0, 5);
+    const sampleTreeNodes = Array.from(treeData.nodes.keys()).slice(0, 5);
+
+    console.error(`[findNearbyNodes] Sample allocated nodes: ${sampleAllocatedNodes.join(', ')}`);
+    console.error(`[findNearbyNodes] Sample tree nodes: ${sampleTreeNodes.join(', ')}`);
+
+    // Check if allocated nodes exist in tree
+    for (const nodeId of sampleAllocatedNodes) {
+      const exists = treeData.nodes.has(nodeId);
+      console.error(`[findNearbyNodes] Tree has node ${nodeId} (type: ${typeof nodeId}): ${exists}`);
+    }
+
+    // Check sample tree node types
+    for (const nodeId of sampleTreeNodes) {
+      console.error(`[findNearbyNodes] Tree node ${nodeId} has type: ${typeof nodeId}`);
+    }
+
+    for (const [nodeId] of treeData.nodes) {
+      if (allocatedNodes.has(nodeId)) {
+        distances.set(nodeId, 0);
+        allocatedCount++;
+      } else {
+        distances.set(nodeId, Infinity);
+      }
+      unvisited.add(nodeId);
+    }
+
+    console.error(`[findNearbyNodes] Initialized ${allocatedCount} allocated nodes at distance 0 (expected ${allocatedNodes.size})`);
+
+    // Check if any of the allocated nodes are in unvisited
+    let allocatedInUnvisited = 0;
+    for (const nodeId of allocatedNodes) {
+      if (unvisited.has(nodeId)) {
+        allocatedInUnvisited++;
+        if (allocatedInUnvisited <= 3) {
+          console.error(`[findNearbyNodes] Allocated node ${nodeId} IS in unvisited, distance: ${distances.get(nodeId)}`);
+        }
+      } else {
+        if (allocatedInUnvisited <= 3) {
+          console.error(`[findNearbyNodes] Allocated node ${nodeId} NOT in unvisited`);
+        }
+      }
+    }
+    console.error(`[findNearbyNodes] ${allocatedInUnvisited}/${allocatedNodes.size} allocated nodes are in unvisited set`);
+
+    let nodesExplored = 0;
+    let notablesFound = 0;
+    let nodesWithFiniteDistance = 0;
+
+    // Dijkstra's main loop
+    while (unvisited.size > 0) {
+      // Find node with minimum distance
+      let currentNodeId: string | null = null;
+      let minDistance = Infinity;
+
+      let loopCount = 0;
+      let foundZeroDistance = false;
+      for (const nodeId of unvisited) {
+        const dist = distances.get(nodeId) ?? Infinity;
+
+        // Debug first few iterations
+        if (nodesExplored === 0 && loopCount < 10) {
+          console.error(`[findNearbyNodes] Checking unvisited node ${nodeId}, distance: ${dist}`);
+        }
+
+        // Special check for node 40483
+        if (nodesExplored === 0 && nodeId === "40483") {
+          console.error(`[findNearbyNodes] !!! Found node 40483 in iteration! Distance: ${dist}, distances.get: ${distances.get(nodeId)}, distances.has: ${distances.has(nodeId)}`);
+        }
+
+        if (dist === 0) {
+          foundZeroDistance = true;
+        }
+
+        if (dist < minDistance) {
+          minDistance = dist;
+          currentNodeId = nodeId;
+        }
+        loopCount++;
+      }
+
+      // Debug first iteration
+      if (nodesExplored === 0) {
+        console.error(`[findNearbyNodes] Checked ${loopCount} unvisited nodes, found zero distance: ${foundZeroDistance}`);
+        console.error(`[findNearbyNodes] First node to process: ${currentNodeId}, distance: ${minDistance}, unvisited: ${unvisited.size}`);
+      }
+
+      // If we can't find a reachable node, stop
+      if (!currentNodeId || minDistance === Infinity) {
+        console.error(`[findNearbyNodes] Stopping: currentNodeId=${currentNodeId}, minDistance=${minDistance}`);
+        break;
+      }
+
+      // If we've exceeded max distance, we can stop (all remaining nodes are farther)
+      if (minDistance > maxDistance) {
+        console.error(`[findNearbyNodes] Stopping: exceeded maxDistance (${minDistance} > ${maxDistance})`);
+        break;
+      }
+
+      unvisited.delete(currentNodeId);
+      nodesExplored++;
+
+      const currentNode = treeData.nodes.get(currentNodeId);
+      if (!currentNode) continue;
+
+      // Track nodes with finite distance (reachable)
+      if (minDistance < Infinity) {
+        nodesWithFiniteDistance++;
+      }
+
+      // Debug: Log first few explored nodes
+      if (nodesExplored <= 5) {
+        console.error(`[findNearbyNodes] Exploring node ${currentNodeId} at distance ${minDistance}, neighbors: ${(currentNode.out || []).length}`);
+      }
+
+      // If this is an unallocated notable/keystone within range, add to results
+      if ((currentNode.isNotable || currentNode.isKeystone) &&
+          !allocatedNodes.has(currentNodeId) &&
+          minDistance > 0 &&
+          minDistance <= maxDistance) {
+
+        notablesFound++;
+
+        // Apply filter if specified
+        if (filter) {
+          const statsText = (currentNode.stats || []).join(" ").toLowerCase();
+          const nameText = (currentNode.name || "").toLowerCase();
+          const filterLower = filter.toLowerCase();
+
+          if (!statsText.includes(filterLower) && !nameText.includes(filterLower)) {
+            // Continue exploring from this node even if filtered out
+            for (const neighborId of currentNode.out || []) {
+              if (!unvisited.has(neighborId)) continue;
+              const newDistance = minDistance + 1;
+              const oldDistance = distances.get(neighborId) ?? Infinity;
+              if (newDistance < oldDistance) {
+                distances.set(neighborId, newDistance);
+              }
+            }
+            continue;
+          }
+        }
+
+        if (results.length < 5) {
+          console.error(`[findNearbyNodes] Found notable: ${currentNode.name} at distance ${minDistance}`);
+        }
+
+        results.push({
+          node: currentNode,
+          nodeId: currentNodeId,
+          distance: minDistance,
+          pathCost: minDistance, // In Dijkstra, distance = path cost
+        });
+      }
+
+      // Check all neighbors and update distances
+      for (const neighborId of currentNode.out || []) {
+        if (!unvisited.has(neighborId)) continue;
+
+        const newDistance = minDistance + 1;
+        const oldDistance = distances.get(neighborId) ?? Infinity;
+
+        if (newDistance < oldDistance) {
+          distances.set(neighborId, newDistance);
+        }
+      }
+    }
+
+    console.error(`[findNearbyNodes] Explored ${nodesExplored} nodes (${nodesWithFiniteDistance} reachable), found ${notablesFound} notables (${results.length} after filter)`);
+
+    // Sort by distance, then by path cost
+    results.sort((a, b) => {
+      if (a.distance !== b.distance) return a.distance - b.distance;
+      return a.pathCost - b.pathCost;
+    });
+
+    return results;
+  }
+
+  private findShortestPaths(
+    allocatedNodes: Set<string>,
+    targetNodeId: string,
+    treeData: PassiveTreeData,
+    maxPaths: number = 1
+  ): Array<{ nodes: string[]; cost: number }> {
+    // Dijkstra's algorithm to find shortest path(s)
+    interface PathNode {
+      nodeId: string;
+      distance: number;
+      previous: string | null;
+    }
+
+    const distances = new Map<string, number>();
+    const previous = new Map<string, string | null>();
+    const unvisited = new Set<string>();
+
+    // Initialize: allocated nodes have distance 0, all others have infinity
+    for (const [nodeId] of treeData.nodes) {
+      if (allocatedNodes.has(nodeId)) {
+        distances.set(nodeId, 0);
+        previous.set(nodeId, null);
+      } else {
+        distances.set(nodeId, Infinity);
+        previous.set(nodeId, null);
+      }
+      unvisited.add(nodeId);
+    }
+
+    // Dijkstra's main loop
+    while (unvisited.size > 0) {
+      // Find node with minimum distance
+      let currentNodeId: string | null = null;
+      let minDistance = Infinity;
+
+      for (const nodeId of unvisited) {
+        const dist = distances.get(nodeId) ?? Infinity;
+        if (dist < minDistance) {
+          minDistance = dist;
+          currentNodeId = nodeId;
+        }
+      }
+
+      // If we can't find a reachable node, or we've reached the target, stop
+      if (!currentNodeId || minDistance === Infinity) break;
+      if (currentNodeId === targetNodeId) break;
+
+      unvisited.delete(currentNodeId);
+
+      const currentNode = treeData.nodes.get(currentNodeId);
+      if (!currentNode) continue;
+
+      // Check all neighbors
+      for (const neighborId of currentNode.out || []) {
+        if (!unvisited.has(neighborId)) continue;
+
+        const newDistance = minDistance + 1;
+        const oldDistance = distances.get(neighborId) ?? Infinity;
+
+        if (newDistance < oldDistance) {
+          distances.set(neighborId, newDistance);
+          previous.set(neighborId, currentNodeId);
+        }
+      }
+    }
+
+    // Check if target is reachable
+    const targetDistance = distances.get(targetNodeId);
+    if (!targetDistance || targetDistance === Infinity) {
+      return [];
+    }
+
+    // Reconstruct the path
+    const path: string[] = [];
+    let current: string | null = targetNodeId;
+
+    while (current && !allocatedNodes.has(current)) {
+      path.unshift(current);
+      current = previous.get(current) || null;
+    }
+
+    const result = [{ nodes: path, cost: path.length }];
+
+    // TODO: For multiple paths, we'd need to implement k-shortest paths algorithm
+    // For now, just return the single shortest path
+    return result;
   }
 
   private detectArchetype(keystones: PassiveTreeNode[], notables: PassiveTreeNode[]): {
@@ -1789,6 +2145,73 @@ class PoBMCPServer {
             required: ["goals"],
           },
         },
+        {
+          name: "get_nearby_nodes",
+          description: "Get unallocated notable and keystone nodes near the current passive tree allocation. Shows nodes within a specified distance (travel nodes away), including their stats, position, and the path cost to reach them. Essential for making informed pathing decisions.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              build_name: {
+                type: "string",
+                description: "Build file to analyze",
+              },
+              max_distance: {
+                type: "number",
+                description: "Maximum distance in travel nodes (default: 5). Higher values show more distant options.",
+              },
+              filter: {
+                type: "string",
+                description: "Optional: Filter by stat keywords (e.g., 'life', 'evasion', 'critical'). Shows nodes whose stats contain these keywords.",
+              },
+            },
+            required: ["build_name"],
+          },
+        },
+        {
+          name: "find_path_to_node",
+          description: "Find the shortest path from the current passive tree to a target node. Shows all intermediate nodes that need to be allocated, the total point cost, and stats for each node along the way. Essential for planning tree expansions.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              build_name: {
+                type: "string",
+                description: "Build file to analyze",
+              },
+              target_node_id: {
+                type: "string",
+                description: "Node ID to path to (e.g., '12345')",
+              },
+              show_alternatives: {
+                type: "boolean",
+                description: "If true, show up to 3 alternative paths if they exist (default: false)",
+              },
+            },
+            required: ["build_name", "target_node_id"],
+          },
+        },
+        {
+          name: "allocate_nodes",
+          description: "Allocate specific passive nodes by their IDs and calculate the exact stat changes using the PoB Lua engine. Shows before/after comparison with accurate DPS, life, defense calculations. Use this after finding a path with find_path_to_node to see the real impact.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              build_name: {
+                type: "string",
+                description: "Build file to load and modify",
+              },
+              node_ids: {
+                type: "array",
+                items: { type: "string" },
+                description: "Array of node IDs to allocate (e.g., ['12345', '23456', '34567']). Get these from get_nearby_nodes or find_path_to_node.",
+              },
+              show_full_stats: {
+                type: "boolean",
+                description: "If true, show all stats. If false, only show changed stats (default: false)",
+              },
+            },
+            required: ["build_name", "node_ids"],
+          },
+        },
       ];
 
       // Add get_build_xml helper tool
@@ -1902,6 +2325,140 @@ class PoBMCPServer {
             },
           }
         );
+
+        // Phase 4: Item & Skill Tools
+        tools.push(
+          {
+            name: "add_item",
+            description: "Add an item to the build from PoE item text format (copied from game or trade site). The item will be added to the build and stats will be recalculated. Optionally specify a slot to equip it to.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                item_text: {
+                  type: "string",
+                  description: "Item text in Path of Exile format (Rarity, name, mods, etc.)",
+                },
+                slot_name: {
+                  type: "string",
+                  description: "Optional slot to equip to (e.g., 'Weapon 1', 'Body Armour', 'Ring 1')",
+                },
+                no_auto_equip: {
+                  type: "boolean",
+                  description: "If true, add to inventory without auto-equipping (default: false)",
+                },
+              },
+              required: ["item_text"],
+            },
+          },
+          {
+            name: "get_equipped_items",
+            description: "Get all currently equipped items from the loaded build, including item details, mods, and flask activation status.",
+            inputSchema: {
+              type: "object",
+              properties: {},
+            },
+          },
+          {
+            name: "toggle_flask",
+            description: "Activate or deactivate a flask and recalculate stats. Flask number is 1-5 corresponding to flask slots.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                flask_number: {
+                  type: "number",
+                  description: "Flask slot number (1-5)",
+                },
+                active: {
+                  type: "boolean",
+                  description: "true to activate, false to deactivate",
+                },
+              },
+              required: ["flask_number", "active"],
+            },
+          },
+          {
+            name: "get_skill_setup",
+            description: "Get all skill socket groups and current skill selection from the loaded build. Shows which skills are linked, which is the main skill, and which skills contribute to DPS calculations.",
+            inputSchema: {
+              type: "object",
+              properties: {},
+            },
+          },
+          {
+            name: "set_main_skill",
+            description: "Set which skill group and skill to use for stat calculations. This affects DPS calculations and shown stats. Useful for comparing different skills or skill parts.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                socket_group: {
+                  type: "number",
+                  description: "Socket group index (1-based) to set as main",
+                },
+                active_skill_index: {
+                  type: "number",
+                  description: "Optional: which skill within the group to set as main (1-based)",
+                },
+                skill_part: {
+                  type: "number",
+                  description: "Optional: which part of a multi-part skill to use",
+                },
+              },
+              required: ["socket_group"],
+            },
+          }
+        );
+
+        // Phase 6: Build Optimization Tools
+        tools.push(
+          {
+            name: "analyze_defenses",
+            description: "Analyze defensive stats and identify weaknesses. Checks resistances, life pool, physical mitigation, and sustain. Provides prioritized recommendations for improvements. Automatically loads the specified build into the Lua bridge.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                build_name: {
+                  type: "string",
+                  description: "Name of the build file to analyze (e.g., 'MyBuild.xml' or '3.27/MyBuild.xml'). Required.",
+                },
+              },
+              required: ["build_name"],
+            },
+          },
+          {
+            name: "suggest_optimal_nodes",
+            description: "Intelligently suggest the best passive tree nodes to allocate based on a specific goal. Analyzes reachable nodes, calculates actual stat impact using PoB's engine, and ranks by efficiency (stat gain per point). Goals: 'maximize_dps', 'maximize_life', 'maximize_es', 'resistances', 'armour', 'evasion', 'block', 'crit_chance', 'balanced', etc. Returns top recommendations with paths and stat projections.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                build_name: {
+                  type: "string",
+                  description: "Name of the build file to optimize (e.g., 'MyBuild.xml')",
+                },
+                goal: {
+                  type: "string",
+                  description: "Optimization goal: 'maximize_dps', 'maximize_life', 'maximize_es', 'maximize_ehp', 'resistances', 'armour', 'evasion', 'block', 'spell_block', 'crit_chance', 'crit_multi', 'attack_speed', 'movement_speed', 'balanced', 'league_start', etc. Can also use natural language like 'increase life' or 'more damage'.",
+                },
+                max_points: {
+                  type: "number",
+                  description: "Maximum passive points willing to spend on a single allocation (default: 10). Paths longer than this are excluded.",
+                },
+                max_distance: {
+                  type: "number",
+                  description: "Maximum travel distance from current tree to search for nodes (default: 5). Increase to find more distant options.",
+                },
+                min_efficiency: {
+                  type: "number",
+                  description: "Minimum efficiency score to include in results (default: 0). Higher values filter out low-value nodes.",
+                },
+                include_keystones: {
+                  type: "boolean",
+                  description: "Include keystones in recommendations (default: true). Set false to only see notables.",
+                },
+              },
+              required: ["build_name", "goal"],
+            },
+          }
+        );
       }
 
       return { tools };
@@ -1961,6 +2518,30 @@ class PoBMCPServer {
               args.changes as string
             );
 
+          case "get_nearby_nodes":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handleGetNearbyNodes(
+              args.build_name as string,
+              args.max_distance as number | undefined,
+              args.filter as string | undefined
+            );
+
+          case "find_path_to_node":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handleFindPath(
+              args.build_name as string,
+              args.target_node_id as string,
+              args.show_alternatives as boolean | undefined
+            );
+
+          case "allocate_nodes":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handleAllocateNodes(
+              args.build_name as string,
+              args.node_ids as string[],
+              args.show_full_stats as boolean | undefined
+            );
+
           case "plan_tree":
             if (!args) throw new Error("Missing arguments");
             return await this.handlePlanTree(
@@ -1995,6 +2576,40 @@ class PoBMCPServer {
           case "lua_set_tree":
             if (!args) throw new Error("Missing arguments");
             return await this.handleLuaSetTree(args);
+
+          // Phase 4: Item & Skill tools
+          case "add_item":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handleAddItem(args.item_text as string, args.slot_name as string | undefined, args.no_auto_equip as boolean | undefined);
+
+          case "get_equipped_items":
+            return await this.handleGetEquippedItems();
+
+          case "toggle_flask":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handleToggleFlask(args.flask_number as number, args.active as boolean);
+
+          case "get_skill_setup":
+            return await this.handleGetSkillSetup();
+
+          case "set_main_skill":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handleSetMainSkill(args.socket_group as number, args.active_skill_index as number | undefined, args.skill_part as number | undefined);
+
+          // Phase 6: Build Optimization tools
+          case "analyze_defenses":
+            return await this.handleAnalyzeDefenses(args?.build_name as string | undefined);
+
+          case "suggest_optimal_nodes":
+            if (!args) throw new Error("Missing arguments");
+            return await this.handleSuggestOptimalNodes(
+              args.build_name as string,
+              args.goal as string,
+              args.max_points as number | undefined,
+              args.max_distance as number | undefined,
+              args.min_efficiency as number | undefined,
+              args.include_keystones as boolean | undefined
+            );
 
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -2420,6 +3035,340 @@ class PoBMCPServer {
     }
   }
 
+  private async handleFindPath(
+    buildName: string,
+    targetNodeId: string,
+    showAlternatives?: boolean
+  ) {
+    try {
+      const build = await this.readBuild(buildName);
+
+      if (!build.Tree?.Spec) {
+        throw new Error("Build has no passive tree data");
+      }
+
+      const allocatedNodeIds = this.parseAllocatedNodes(build);
+      const allocatedNodes = new Set<string>(allocatedNodeIds);
+      const treeVersion = this.extractBuildVersion(build);
+      const treeData = await this.getTreeData(treeVersion);
+
+      // Check if target node exists
+      const targetNode = treeData.nodes.get(targetNodeId);
+      if (!targetNode) {
+        throw new Error(`Node ${targetNodeId} not found in tree data`);
+      }
+
+      // Check if target is already allocated
+      if (allocatedNodes.has(targetNodeId)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Node ${targetNodeId} (${targetNode.name || "Unknown"}) is already allocated in this build.`,
+            },
+          ],
+        };
+      }
+
+      // Find shortest path(s)
+      const paths = this.findShortestPaths(
+        allocatedNodes,
+        targetNodeId,
+        treeData,
+        showAlternatives ? 3 : 1
+      );
+
+      if (paths.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `No path found to node ${targetNodeId} (${targetNode.name || "Unknown"}).\nThis node may be unreachable from your current tree (e.g., different class starting area or ascendancy nodes).`,
+            },
+          ],
+        };
+      }
+
+      // Format output
+      let text = `=== Path to ${targetNode.name || "Node " + targetNodeId} ===\n\n`;
+      text += `Build: ${buildName}\n`;
+      text += `Target: ${targetNode.name || "Unknown"} [${targetNodeId}]\n`;
+      if (targetNode.isKeystone) text += `Type: KEYSTONE\n`;
+      else if (targetNode.isNotable) text += `Type: Notable\n`;
+      text += `\n`;
+
+      for (let i = 0; i < paths.length; i++) {
+        const path = paths[i];
+        const pathLabel = paths.length > 1 ? `Path ${i + 1} (Alternative ${i === 0 ? "- Shortest" : i})` : "Shortest Path";
+
+        text += `**${pathLabel}**\n`;
+        text += `Total Cost: ${path.cost} passive points\n`;
+        text += `Nodes to Allocate: ${path.nodes.length}\n\n`;
+
+        text += `Allocation Order:\n`;
+        for (let j = 0; j < path.nodes.length; j++) {
+          const nodeId = path.nodes[j];
+          const node = treeData.nodes.get(nodeId);
+          if (!node) continue;
+
+          const isTarget = nodeId === targetNodeId;
+          const prefix = isTarget ? "→ TARGET: " : `  ${j + 1}. `;
+
+          text += `${prefix}${node.name || "Travel Node"} [${nodeId}]\n`;
+
+          if (node.stats && node.stats.length > 0) {
+            for (const stat of node.stats) {
+              text += `      ${stat}\n`;
+            }
+          } else if (!isTarget) {
+            text += `      (Travel node - no stats)\n`;
+          }
+
+          if (j < path.nodes.length - 1) text += `\n`;
+        }
+
+        if (i < paths.length - 1) text += `\n${"=".repeat(50)}\n\n`;
+      }
+
+      text += `\n**Next Steps:**\n`;
+      text += `Use test_allocation to preview stat changes:\n`;
+      text += `  test_allocation with changes="allocate nodes ${paths[0].nodes.join(", ")}"\n`;
+
+      return {
+        content: [
+          {
+            type: "text",
+            text,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to find path: ${errorMsg}`);
+    }
+  }
+
+  private async handleAllocateNodes(
+    buildName: string,
+    nodeIds: string[],
+    showFullStats?: boolean
+  ) {
+    try {
+      await this.ensureLuaClient();
+
+      if (!this.luaClient) {
+        throw new Error('Lua client not initialized. Enable POB_LUA_ENABLED to use this feature.');
+      }
+
+      if (!nodeIds || nodeIds.length === 0) {
+        throw new Error('No node IDs provided');
+      }
+
+      // Load the build
+      const buildPath = path.join(this.pobDirectory, buildName);
+      const buildXml = await fs.readFile(buildPath, 'utf-8');
+      await this.luaClient.loadBuildXml(buildXml, 'Node Allocation Test');
+
+      // Get current stats
+      const statsBefore = await this.luaClient.getStats();
+
+      // Get current tree
+      const treeBefore = await this.luaClient.getTree();
+      const currentNodes = new Set(treeBefore.nodes || []);
+
+      // Add new nodes to the set
+      const newNodes = [...currentNodes, ...nodeIds].map(n => parseInt(String(n)));
+
+      // Update tree with new nodes
+      await this.luaClient.setTree({
+        classId: treeBefore.classId,
+        ascendClassId: treeBefore.ascendClassId,
+        secondaryAscendClassId: treeBefore.secondaryAscendClassId,
+        nodes: newNodes,
+        masteryEffects: treeBefore.masteryEffects,
+        treeVersion: treeBefore.treeVersion,
+      });
+
+      // Get new stats
+      const statsAfter = await this.luaClient.getStats();
+
+      // Calculate changes
+      const changes: Array<{ stat: string; before: any; after: any; change: string }> = [];
+
+      const importantStats = [
+        'Life', 'EnergyShield', 'Mana', 'Evasion', 'Armour',
+        'FireResist', 'ColdResist', 'LightningResist', 'ChaosResist',
+        'BlockChance', 'SpellBlockChance', 'AttackDodgeChance', 'SpellDodgeChance',
+        'Str', 'Dex', 'Int',
+        'TotalDPS', 'TotalDot', 'CombinedDPS',
+        'Speed', 'HitChance', 'CritChance', 'CritMultiplier'
+      ];
+
+      for (const stat of importantStats) {
+        const before = statsBefore[stat];
+        const after = statsAfter[stat];
+
+        if (before !== after) {
+          let change = '';
+          if (typeof before === 'number' && typeof after === 'number') {
+            const diff = after - before;
+            const sign = diff > 0 ? '+' : '';
+            change = `${sign}${diff.toFixed(2)}`;
+
+            if (before > 0) {
+              const pct = ((diff / before) * 100).toFixed(1);
+              change += ` (${sign}${pct}%)`;
+            }
+          } else {
+            change = `${before} → ${after}`;
+          }
+
+          changes.push({ stat, before, after, change });
+        }
+      }
+
+      // Format output
+      let text = `=== Node Allocation Results ===\n\n`;
+      text += `Build: ${buildName}\n`;
+      text += `Allocated Nodes: ${nodeIds.join(', ')}\n`;
+      text += `Points Spent: ${nodeIds.length}\n`;
+      text += `Total Tree Points: ${newNodes.length} (was ${currentNodes.size})\n\n`;
+
+      if (changes.length === 0) {
+        text += `**No Stat Changes Detected**\n`;
+        text += `This might indicate:\n`;
+        text += `- The nodes are travel nodes with no stats\n`;
+        text += `- The nodes were already allocated\n`;
+        text += `- The stats are conditional and not active\n`;
+      } else {
+        text += `**Stat Changes (${changes.length})**:\n\n`;
+
+        for (const { stat, before, after, change } of changes) {
+          text += `${stat}: ${typeof before === 'number' ? before.toFixed(2) : before} → ${typeof after === 'number' ? after.toFixed(2) : after}\n`;
+          text += `  Change: ${change}\n\n`;
+        }
+      }
+
+      if (showFullStats) {
+        text += `\n**All Stats After Allocation**:\n`;
+        for (const [key, value] of Object.entries(statsAfter)) {
+          if (key !== '_meta') {
+            text += `${key}: ${value}\n`;
+          }
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to allocate nodes: ${errorMsg}`);
+    }
+  }
+
+  private async handleGetNearbyNodes(
+    buildName: string,
+    maxDistance?: number,
+    filter?: string
+  ) {
+    try {
+      const distance = maxDistance || 5;
+      const build = await this.readBuild(buildName);
+
+      if (!build.Tree?.Spec) {
+        throw new Error("Build has no passive tree data");
+      }
+
+      const spec = build.Tree.Spec;
+      const allocatedNodeIds = this.parseAllocatedNodes(build);
+      const allocatedNodes = new Set<string>(allocatedNodeIds);
+      const treeVersion = this.extractBuildVersion(build);
+      const treeData = await this.getTreeData(treeVersion);
+
+      // Find all unallocated notables and keystones within distance
+      const nearbyNodes = this.findNearbyNodes(
+        allocatedNodes,
+        treeData,
+        distance,
+        filter
+      );
+
+      // Format output
+      let text = `=== Nearby Unallocated Nodes ===\n\n`;
+      text += `Build: ${buildName}\n`;
+      text += `Current Allocation: ${allocatedNodes.size} nodes\n`;
+      text += `Search Distance: ${distance} travel nodes\n`;
+      if (filter) {
+        text += `Filter: ${filter}\n`;
+      }
+      text += `\n`;
+
+      if (nearbyNodes.length === 0) {
+        text += `No notable/keystone nodes found within ${distance} nodes.\n`;
+        text += `Try increasing max_distance or removing filters.\n`;
+      } else {
+        text += `Found ${nearbyNodes.length} nodes:\n\n`;
+
+        // Group by type
+        const keystones = nearbyNodes.filter((n) => n.node.isKeystone);
+        const notables = nearbyNodes.filter(
+          (n) => n.node.isNotable && !n.node.isKeystone
+        );
+
+        if (keystones.length > 0) {
+          text += `**KEYSTONES** (${keystones.length}):\n`;
+          for (const item of keystones.slice(0, 10)) {
+            text += `\n${item.node.name} [Node: ${item.nodeId}]\n`;
+            text += `  Distance: ${item.distance} nodes (${item.pathCost} points)\n`;
+            if (item.node.stats && item.node.stats.length > 0) {
+              text += `  Stats:\n`;
+              for (const stat of item.node.stats) {
+                text += `    - ${stat}\n`;
+              }
+            }
+          }
+          text += `\n`;
+        }
+
+        if (notables.length > 0) {
+          text += `**NOTABLES** (${notables.length}):\n`;
+          for (const item of notables.slice(0, 20)) {
+            text += `\n${item.node.name} [Node: ${item.nodeId}]\n`;
+            text += `  Distance: ${item.distance} nodes (${item.pathCost} points)\n`;
+            if (item.node.stats && item.node.stats.length > 0) {
+              text += `  Stats:\n`;
+              for (const stat of item.node.stats) {
+                text += `    - ${stat}\n`;
+              }
+            }
+          }
+        }
+
+        text += `\n\n**Usage:**\n`;
+        text += `Use test_allocation with the node ID to see stat impacts:\n`;
+        text += `  Example: test_allocation with changes="allocate node 12345"\n`;
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to get nearby nodes: ${errorMsg}`);
+    }
+  }
+
   private async handlePlanTree(buildName: string | undefined, goals: string) {
     try {
       const output = await this.planTree(buildName, goals);
@@ -2645,6 +3594,537 @@ class PoBMCPServer {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to set tree: ${errorMsg}`);
+    }
+  }
+
+  // Phase 4: Item & Skill Handlers
+
+  private async handleAddItem(itemText: string, slotName?: string, noAutoEquip?: boolean) {
+    try {
+      await this.ensureLuaClient();
+
+      if (!this.luaClient) {
+        throw new Error('Lua client not initialized. Use lua_start first.');
+      }
+
+      if (!itemText || itemText.trim().length === 0) {
+        throw new Error('item_text cannot be empty');
+      }
+
+      const result = await this.luaClient.addItem(itemText, slotName, noAutoEquip);
+
+      let text = "=== Item Added ===\n\n";
+      text += `Successfully added item to build.\n\n`;
+      text += `Item: ${result.name || 'Unknown'}\n`;
+      text += `Item ID: ${result.id}\n`;
+      text += `Slot: ${result.slot || 'Not equipped'}\n\n`;
+      text += `Stats have been recalculated. Use lua_get_stats to see updated values.`;
+
+      return {
+        content: [
+          {
+            type: "text",
+            text,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to add item: ${errorMsg}`);
+    }
+  }
+
+  private async handleGetEquippedItems() {
+    try {
+      await this.ensureLuaClient();
+
+      if (!this.luaClient) {
+        throw new Error('Lua client not initialized. Use lua_start first.');
+      }
+
+      const items = await this.luaClient.getItems();
+
+      let text = "=== Equipped Items ===\n\n";
+
+      if (!items || items.length === 0) {
+        text += "No items equipped.\n";
+      } else {
+        for (const item of items) {
+          text += `**${item.slot}**\n`;
+          if (item.id === 0 || !item.name) {
+            text += "  (empty)\n";
+          } else {
+            text += `  ${item.name}`;
+            if (item.baseName && item.baseName !== item.name) {
+              text += ` (${item.baseName})`;
+            }
+            text += `\n`;
+            if (item.rarity) {
+              text += `  Rarity: ${item.rarity}\n`;
+            }
+            if (item.active !== undefined) {
+              text += `  Active: ${item.active ? 'Yes' : 'No'}\n`;
+            }
+          }
+          text += "\n";
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to get equipped items: ${errorMsg}`);
+    }
+  }
+
+  private async handleToggleFlask(flaskNumber: number, active: boolean) {
+    try {
+      await this.ensureLuaClient();
+
+      if (!this.luaClient) {
+        throw new Error('Lua client not initialized. Use lua_start first.');
+      }
+
+      if (flaskNumber < 1 || flaskNumber > 5) {
+        throw new Error('flask_number must be between 1 and 5');
+      }
+
+      await this.luaClient.setFlaskActive(flaskNumber, active);
+
+      let text = "=== Flask Status Updated ===\n\n";
+      text += `Flask ${flaskNumber} is now ${active ? 'activated' : 'deactivated'}.\n\n`;
+      text += `Stats have been recalculated. Use lua_get_stats to see updated values.`;
+
+      return {
+        content: [
+          {
+            type: "text",
+            text,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to toggle flask: ${errorMsg}`);
+    }
+  }
+
+  private async handleGetSkillSetup() {
+    try {
+      await this.ensureLuaClient();
+
+      if (!this.luaClient) {
+        throw new Error('Lua client not initialized. Use lua_start first.');
+      }
+
+      const skillData = await this.luaClient.getSkills();
+
+      let text = "=== Skill Setup ===\n\n";
+      text += `Main Socket Group: ${skillData.mainSocketGroup || 'None'}\n\n`;
+
+      if (!skillData.groups || skillData.groups.length === 0) {
+        text += "No skill groups found.\n";
+      } else {
+        for (const group of skillData.groups) {
+          const isMain = group.index === skillData.mainSocketGroup;
+          text += `**Group ${group.index}${isMain ? ' (MAIN)' : ''}**\n`;
+          if (group.label) {
+            text += `  Label: ${group.label}\n`;
+          }
+          if (group.slot) {
+            text += `  Slot: ${group.slot}\n`;
+          }
+          text += `  Enabled: ${group.enabled ? 'Yes' : 'No'}\n`;
+          text += `  Contributes to Full DPS: ${group.includeInFullDPS ? 'Yes' : 'No'}\n`;
+          if (group.mainActiveSkill) {
+            text += `  Main Active Skill Index: ${group.mainActiveSkill}\n`;
+          }
+          if (group.skills && group.skills.length > 0) {
+            text += `  Skills: ${group.skills.join(', ')}\n`;
+          }
+          text += "\n";
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to get skill setup: ${errorMsg}`);
+    }
+  }
+
+  private async handleSetMainSkill(socketGroup: number, activeSkillIndex?: number, skillPart?: number) {
+    try {
+      await this.ensureLuaClient();
+
+      if (!this.luaClient) {
+        throw new Error('Lua client not initialized. Use lua_start first.');
+      }
+
+      if (socketGroup < 1) {
+        throw new Error('socket_group must be >= 1');
+      }
+
+      await this.luaClient.setMainSelection({
+        mainSocketGroup: socketGroup,
+        mainActiveSkill: activeSkillIndex,
+        skillPart,
+      });
+
+      let text = "=== Main Skill Updated ===\n\n";
+      text += `Successfully set main socket group to ${socketGroup}.\n`;
+      if (activeSkillIndex !== undefined) {
+        text += `Active skill index set to ${activeSkillIndex}.\n`;
+      }
+      if (skillPart !== undefined) {
+        text += `Skill part set to ${skillPart}.\n`;
+      }
+      text += `\nStats have been recalculated. Use lua_get_stats to see updated values.`;
+
+      return {
+        content: [
+          {
+            type: "text",
+            text,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to set main skill: ${errorMsg}`);
+    }
+  }
+
+  // Phase 6: Build Optimization Handlers
+
+  private async handleAnalyzeDefenses(buildName?: string) {
+    try {
+      if (!buildName) {
+        throw new Error('build_name is required. Please specify which build to analyze.');
+      }
+
+      await this.ensureLuaClient();
+
+      if (!this.luaClient) {
+        throw new Error('Lua client not initialized.');
+      }
+
+      const targetBuild = buildName;
+
+      // Load the build into the Lua bridge
+      const buildPath = path.join(this.pobDirectory, targetBuild);
+      const buildXml = await fs.readFile(buildPath, 'utf-8');
+      const loadResult = await this.luaClient.loadBuildXml(buildXml, 'Defense Analysis');
+
+      // Capture debug info if available
+      let debugInfo = '';
+      if (loadResult && typeof loadResult === 'object') {
+        const debug = (loadResult as any).debug;
+        if (debug) {
+          debugInfo = `\n[DEBUG] Load diagnostics:\n`;
+          debugInfo += `  - Build exists: ${debug.buildExists}\n`;
+          debugInfo += `  - Spec exists: ${debug.specExists}\n`;
+          debugInfo += `  - Allocated nodes: ${debug.allocatedNodes || 0}\n`;
+          debugInfo += `  - Class ID: ${debug.classId || 'unknown'}\n`;
+          debugInfo += `  - Ascendancy ID: ${debug.ascendClassId || 'unknown'}\n`;
+
+          // Display debug messages if available
+          if (debug.messages && Array.isArray(debug.messages) && debug.messages.length > 0) {
+            debugInfo += `\n[DEBUG] Load messages:\n`;
+            for (const msg of debug.messages) {
+              debugInfo += `  ${msg}\n`;
+            }
+          }
+          debugInfo += '\n';
+        }
+      }
+
+      // Get stats from PoB
+      const stats = await this.luaClient.getStats();
+
+      // Validate that we have meaningful stats (not empty/default state)
+      const life = stats.Life || 0;
+      if (life <= 60) {
+        throw new Error(
+          `Build "${targetBuild}" appears to be in default/empty state. The build may not have loaded correctly.${debugInfo}`
+        );
+      }
+
+      // Analyze defenses
+      const analysis = analyzeDefenses(stats);
+
+      // Format for output
+      let text = `Analyzing: ${targetBuild}\n\n`;
+      if (debugInfo) {
+        text += debugInfo;
+      }
+      text += formatDefensiveAnalysis(analysis);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to analyze defenses: ${errorMsg}`);
+    }
+  }
+
+  private async handleSuggestOptimalNodes(
+    buildName: string,
+    goalString: string,
+    maxPoints?: number,
+    maxDistance?: number,
+    minEfficiency?: number,
+    includeKeystones?: boolean
+  ) {
+    try {
+      // Parse parameters
+      const goal = parseGoal(goalString);
+      const pointsLimit = maxPoints || 10;
+      const searchDistance = maxDistance || 5;
+      const efficiencyThreshold = minEfficiency || 0;
+      const allowKeystones = includeKeystones !== false;  // Default true
+
+      console.error(`[SuggestOptimalNodes] Build: ${buildName}, Goal: ${goal}, MaxPoints: ${pointsLimit}, MaxDist: ${searchDistance}`);
+
+      // Step 1: Load build and get tree data
+      const build = await this.readBuild(buildName);
+      if (!build.Tree?.Spec) {
+        throw new Error("Build has no passive tree data");
+      }
+
+      const allocatedNodeIds = this.parseAllocatedNodes(build);
+      const allocatedNodes = new Set<string>(allocatedNodeIds);
+      const treeVersion = this.extractBuildVersion(build);
+      const treeData = await this.getTreeData(treeVersion);
+
+      // Get build's ascendancy for filtering
+      const buildAscendancy = build.Build?.ascendClassName;
+      console.error(`[SuggestOptimalNodes] Build ascendancy: ${buildAscendancy}`);
+
+      console.error(`[SuggestOptimalNodes] Allocated nodes: ${allocatedNodes.size}, Tree version: ${treeVersion}`);
+
+      // Step 2: Discover candidate nodes within distance
+      const candidates = this.findNearbyNodes(
+        allocatedNodes,
+        treeData,
+        searchDistance
+      );
+
+      console.error(`[SuggestOptimalNodes] Found ${candidates.length} candidates within ${searchDistance} nodes`);
+
+      // Filter by type and ascendancy
+      let filteredCandidates = candidates;
+
+      // First filter: Remove ascendancy nodes that don't match build's ascendancy
+      if (buildAscendancy) {
+        const beforeAscFilter = filteredCandidates.length;
+        filteredCandidates = filteredCandidates.filter(c => {
+          // If node has an ascendancy, it must match the build's ascendancy
+          if (c.node.ascendancyName) {
+            return c.node.ascendancyName === buildAscendancy;
+          }
+          // Non-ascendancy nodes are always allowed
+          return true;
+        });
+        const removedCount = beforeAscFilter - filteredCandidates.length;
+        if (removedCount > 0) {
+          console.error(`[SuggestOptimalNodes] Removed ${removedCount} wrong-ascendancy nodes`);
+        }
+      }
+
+      // Second filter: Keystones (optional)
+      if (!allowKeystones) {
+        filteredCandidates = filteredCandidates.filter(c => !c.node.isKeystone);
+        console.error(`[SuggestOptimalNodes] After keystone filter: ${filteredCandidates.length} candidates`);
+      } else {
+        console.error(`[SuggestOptimalNodes] After ascendancy filter: ${filteredCandidates.length} candidates`);
+      }
+
+      if (filteredCandidates.length === 0) {
+        return {
+          content: [{
+            type: "text",
+            text: `No candidate nodes found within ${searchDistance} nodes.\nTry increasing max_distance or enabling keystones.`
+          }]
+        };
+      }
+
+      // Step 3: Initialize Lua bridge and get baseline stats
+      await this.ensureLuaClient();
+      if (!this.luaClient) {
+        throw new Error('Lua bridge required for optimal node suggestions. Enable POB_LUA_ENABLED.');
+      }
+
+      console.error('[SuggestOptimalNodes] Lua bridge ready');
+
+      const buildPath = path.join(this.pobDirectory, buildName);
+      const buildXml = await fs.readFile(buildPath, 'utf-8');
+      await this.luaClient.loadBuildXml(buildXml, 'Optimization Analysis');
+
+      const baselineStats = await this.luaClient.getStats();
+      const baselineTree = await this.luaClient.getTree();
+
+      const statExtractor = getStatExtractor(goal);
+      const baselineValue = statExtractor(baselineStats);
+
+      console.error(`[SuggestOptimalNodes] Baseline ${goal}: ${baselineValue}`);
+
+      // Step 4: Score each candidate
+      const scores: NodeScore[] = [];
+      let scoredCount = 0;
+
+      for (let i = 0; i < filteredCandidates.length; i++) {
+        const candidate = filteredCandidates[i];
+
+        // Find shortest path to this node
+        const paths = this.findShortestPaths(
+          allocatedNodes,
+          candidate.nodeId,
+          treeData,
+          1
+        );
+
+        if (paths.length === 0) {
+          console.error(`[SuggestOptimalNodes] No path to node ${candidate.nodeId}`);
+          continue;
+        }
+
+        const path = paths[0];
+
+        // Skip if exceeds point budget
+        if (path.cost > pointsLimit) {
+          continue;
+        }
+
+        // Allocate path and measure stat gain
+        const newNodes = [...baselineTree.nodes, ...path.nodes.map(n => parseInt(n))];
+
+        try {
+          await this.luaClient.setTree({
+            ...baselineTree,
+            nodes: newNodes
+          });
+
+          const newStats = await this.luaClient.getStats();
+          const newValue = statExtractor(newStats);
+          const gain = newValue - baselineValue;
+
+          // Calculate efficiency
+          const efficiency = gain / path.cost;
+
+          // Only include if meets minimum efficiency
+          if (efficiency >= efficiencyThreshold) {
+            const percentIncrease = baselineValue > 0 ? (gain / baselineValue) * 100 : 0;
+
+            scores.push({
+              nodeId: candidate.nodeId,
+              nodeName: candidate.node.name || 'Unknown',
+              nodeType: getNodeType(candidate.node),
+              pathNodes: path.nodes,
+              pathCost: path.cost,
+              statGain: gain,
+              efficiency: efficiency,
+              currentValue: baselineValue,
+              newValue: newValue,
+              percentIncrease: percentIncrease,
+              secondaryBenefits: extractSecondaryBenefits(baselineStats, newStats, goal),
+              notes: candidate.node.isKeystone ? 'Keystone - may have major effects' : undefined
+            });
+
+            scoredCount++;
+          }
+
+          // Reset tree for next test
+          await this.luaClient.setTree(baselineTree);
+
+        } catch (error) {
+          console.error(`[SuggestOptimalNodes] Error testing node ${candidate.nodeId}:`, error);
+          // Reset and continue
+          await this.luaClient.setTree(baselineTree);
+          continue;
+        }
+
+        // Progress logging every 5 nodes
+        if ((i + 1) % 5 === 0) {
+          console.error(`[SuggestOptimalNodes] Progress: ${i + 1}/${filteredCandidates.length} candidates evaluated`);
+        }
+      }
+
+      console.error(`[SuggestOptimalNodes] Scored ${scoredCount} nodes out of ${filteredCandidates.length} candidates`);
+
+      // Step 5: Sort by efficiency and prepare result
+      scores.sort((a, b) => b.efficiency - a.efficiency);
+
+      const topScores = scores.slice(0, 10);
+
+      // Calculate summary
+      const top3 = topScores.slice(0, 3);
+      const totalGain = top3.reduce((sum, s) => sum + s.statGain, 0);
+      const totalCost = top3.reduce((sum, s) => sum + s.pathCost, 0);
+      const avgEfficiency = totalCost > 0 ? totalGain / totalCost : 0;
+
+      const warnings: string[] = [];
+      if (scoredCount === 0 && filteredCandidates.length > 0) {
+        warnings.push(`No nodes met minimum efficiency threshold (${efficiencyThreshold})`);
+      }
+      if (filteredCandidates.length < 5) {
+        warnings.push(`Limited candidates found. Consider increasing max_distance.`);
+      }
+
+      const result: OptimalNodesResult = {
+        goal: goal,
+        goalDescription: getGoalDescription(goal),
+        buildName: buildName,
+        currentValue: baselineValue,
+        pointsAvailable: pointsLimit,
+        maxDistance: searchDistance,
+        candidatesEvaluated: filteredCandidates.length,
+        candidatesScored: scoredCount,
+        recommendations: topScores,
+        summary: {
+          topPick: topScores[0],
+          totalStatGain: totalGain,
+          totalPointCost: totalCost,
+          averageEfficiency: avgEfficiency,
+          projectedValue: baselineValue + totalGain,
+          projectedIncrease: baselineValue > 0 ? (totalGain / baselineValue) * 100 : 0
+        },
+        warnings: warnings
+      };
+
+      // Format and return
+      const formattedText = formatOptimalNodesResult(result);
+
+      return {
+        content: [{
+          type: "text",
+          text: formattedText
+        }]
+      };
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to suggest optimal nodes: ${errorMsg}`);
     }
   }
 

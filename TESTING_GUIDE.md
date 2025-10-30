@@ -460,6 +460,258 @@ Expected:
 - Operations work identically to stdio mode
 - Can interact with build currently open in GUI
 
+## Phase 4: Item & Skill Management Tests
+
+### Test 4.1: Add Item
+**Objective**: Verify item addition from PoE text format
+
+**Steps**:
+1. Start bridge and load a build
+2. Get current DPS: "Get stats"
+3. Ask: "Add this weapon: [paste item text]"
+4. Get new DPS
+
+**Item Text Example**:
+```
+Rarity: Rare
+Death Spiral
+Thicket Bow
+--------
+Quality: +20%
+Physical Damage: 78-145
+Critical Strike Chance: 6.5%
+Attacks per Second: 1.98
+--------
++98 to Dexterity
+Adds 15 to 28 Physical Damage
++35% to Global Critical Strike Multiplier
++18% to Attack Speed
+```
+
+**Expected Results**:
+- Item added successfully
+- Item ID and name returned
+- Slot identified (e.g., "Weapon 1")
+- Stats recalculated
+- DPS changes reflected
+
+**Test Variations**:
+- Add item without specifying slot (auto-equip)
+- Add item with specific slot: "Add to Weapon 2"
+- Add item with `no_auto_equip`: "Add to inventory without equipping"
+- Try adding invalid item text (should error gracefully)
+
+### Test 4.2: Get Equipped Items
+**Objective**: View all equipped items
+
+**Steps**:
+1. Load a build with items
+2. Ask: "What items do I have equipped?"
+
+**Expected Results**:
+- All equipment slots listed
+- Empty slots shown as "(empty)"
+- Item names displayed
+- Base types shown
+- Rarity indicated
+- Flask activation status shown
+
+**Test Variations**:
+- Build with full equipment
+- Build with no equipment
+- Build with only partial equipment
+- Build with flasks (check activation status)
+
+### Test 4.3: Toggle Flask
+**Objective**: Activate/deactivate flasks and verify stat changes
+
+**Steps**:
+1. Load a build with flasks
+2. Get current crit chance
+3. Ask: "Activate flask 1" (Diamond Flask)
+4. Get new crit chance
+5. Ask: "Deactivate flask 1"
+6. Verify crit chance returns to original
+
+**Expected Results**:
+- Flask toggles successfully
+- Confirmation message clear
+- Stats recalculate
+- Stat changes match flask effects
+- Can activate multiple flasks
+- Can deactivate flasks
+
+**Test Variations**:
+- Activate all 5 flasks
+- Deactivate all flasks
+- Toggle same flask multiple times
+- Try invalid flask number (0, 6, -1) - should error
+- Test with different flask types (life, mana, utility)
+
+### Test 4.4: Get Skill Setup
+**Objective**: View skill configuration
+
+**Steps**:
+1. Load a build with multiple socket groups
+2. Ask: "Show me my skill setup"
+
+**Expected Results**:
+- All socket groups listed
+- Main socket group indicated
+- Skills within each group shown
+- Group labels displayed (if present)
+- Slot locations shown (e.g., "Body Armour")
+- Enabled status shown
+- "Contributes to Full DPS" flag shown
+- Skills listed with proper names
+
+**Test Variations**:
+- Build with 1 socket group
+- Build with multiple socket groups
+- Build with labeled groups
+- Build with disabled groups
+
+### Test 4.5: Set Main Skill
+**Objective**: Change main skill and verify DPS recalculation
+
+**Steps**:
+1. Load a build with multiple skills
+2. Get skill setup to see available groups
+3. Get current DPS (main skill)
+4. Ask: "Set main skill to socket group 2"
+5. Get new DPS (should be different skill's DPS)
+6. Switch back: "Set main skill to socket group 1"
+
+**Expected Results**:
+- Main skill switches successfully
+- Confirmation message shows new selection
+- Stats recalculate for new skill
+- DPS reflects active skill
+- Can switch between groups freely
+
+**Test Variations**:
+- Switch between 3+ different skills
+- Set specific active skill index within group
+- Try invalid socket group number - should error
+- Test with multi-part skills (set skill_part parameter)
+
+### Test 4.6: Item + Flask Workflow
+**Objective**: Test combined item and flask operations
+
+**Complete Workflow**:
+1. "Start bridge and load build"
+2. "What items do I have equipped?"
+3. "Get current stats"
+4. "Add this weapon: [item text]"
+5. "Activate diamond flask"
+6. "Activate quicksilver flask"
+7. "Get stats"
+8. "What's the DPS increase?"
+
+**Expected Results**:
+- All operations succeed in sequence
+- Stats update after each change
+- Final stats reflect all modifications
+- Can calculate DPS delta
+
+### Test 4.7: Complete Build Modification
+**Objective**: End-to-end build modification test
+
+**Complete Workflow**:
+1. "Start bridge"
+2. "Load template build"
+3. "Set tree to [node list]"
+4. "Add weapon: [item]"
+5. "Add body armour: [item]"
+6. "Add helmet: [item]"
+7. "Get skill setup"
+8. "Set main skill to group 1"
+9. "Activate flasks 1, 2, 3"
+10. "Get final stats"
+
+**Expected Results**:
+- All modifications succeed
+- Stats update progressively
+- Final build reflects all changes
+- No state corruption
+- Can get comprehensive stats at end
+
+### Test 4.8: Error Handling - Items
+**Objective**: Verify graceful error handling for item operations
+
+**Test Cases**:
+
+#### Test 4.8a: Invalid Item Text
+```
+Prompt: "Add this item: not valid item text"
+Expected: Clear error message about invalid format
+```
+
+#### Test 4.8b: Bridge Not Started
+```
+1. Don't start bridge
+2. Ask: "Add this item: [text]"
+Expected: Error prompting to start bridge first
+```
+
+#### Test 4.8c: No Build Loaded
+```
+1. Start bridge
+2. Don't load build
+3. Ask: "Get equipped items"
+Expected: Error indicating no build loaded
+```
+
+#### Test 4.8d: Invalid Slot Name
+```
+Prompt: "Add item to InvalidSlot: [text]"
+Expected: Error or warning about invalid slot
+```
+
+### Test 4.9: Error Handling - Skills & Flasks
+**Objective**: Verify error handling for skill/flask operations
+
+**Test Cases**:
+
+#### Test 4.9a: Invalid Flask Number
+```
+Prompt: "Activate flask 6"
+Expected: Error that flask_number must be 1-5
+```
+
+#### Test 4.9b: Invalid Socket Group
+```
+Prompt: "Set main skill to socket group 99"
+Expected: Error about invalid socket group
+```
+
+#### Test 4.9c: Bridge Not Started
+```
+1. Don't start bridge
+2. Ask: "Get skill setup"
+Expected: Error prompting to start bridge
+```
+
+### Test 4.10: Integration with Phase 3
+**Objective**: Verify Phase 4 tools work with Phase 3 features
+
+**Complete Workflow**:
+1. Start bridge, load build
+2. Get baseline stats
+3. Modify passive tree (Phase 3)
+4. Add items (Phase 4)
+5. Toggle flasks (Phase 4)
+6. Preview additional tree changes (Phase 3)
+7. Compare with/without flask activation
+8. Set different main skill (Phase 4)
+9. Compare DPS across all variations
+
+**Expected Results**:
+- Phase 3 and Phase 4 tools work together seamlessly
+- Stats remain consistent
+- No conflicts between tree and item modifications
+- Can combine all features in single session
+
 ## Performance Testing
 
 ### Test P.1: Build Load Time
@@ -559,6 +811,13 @@ After any code changes, verify:
 - [ ] preview_allocation
 - [ ] plan_build
 
+### Phase 4 Features Still Work
+- [ ] add_item
+- [ ] get_equipped_items
+- [ ] toggle_flask
+- [ ] get_skill_setup
+- [ ] set_main_skill
+
 ### Build Process
 - [ ] `npm run build` completes without errors
 - [ ] No TypeScript errors
@@ -636,6 +895,18 @@ Use this template to document test results:
 - 3.7 Build Planning: [result]
 - 3.8 Integration: [result]
 - 3.9 Error Handling: [result]
+
+**Phase 4 Tests**: [Pass/Fail]
+- 4.1 Add Item: [result]
+- 4.2 Get Equipped Items: [result]
+- 4.3 Toggle Flask: [result]
+- 4.4 Get Skill Setup: [result]
+- 4.5 Set Main Skill: [result]
+- 4.6 Item + Flask Workflow: [result]
+- 4.7 Complete Build Modification: [result]
+- 4.8 Error Handling (Items): [result]
+- 4.9 Error Handling (Skills/Flasks): [result]
+- 4.10 Integration with Phase 3: [result]
 
 **Issues Found**:
 - [List any issues]

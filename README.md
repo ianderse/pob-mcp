@@ -2,6 +2,12 @@
 
 An MCP (Model Context Protocol) server that enables Claude to analyze and work with Path of Building builds.
 
+---
+
+**☕ If you find this project helpful, consider [buying me a coffee](https://buymeacoffee.com/ianderse)!**
+
+---
+
 ## Features
 
 ### XML-Based Analysis (Always Available)
@@ -207,7 +213,18 @@ When `POB_LUA_ENABLED=true`, you gain access to high-fidelity calculations:
    - "What nodes should I take for a max block Gladiator?"
    - Get intelligent node recommendations based on build archetype
 
-9. **Stop the bridge**:
+9. **Manage items and gear**:
+   - "What items do I have equipped?"
+   - "Add this weapon: [paste item text from trade site]"
+   - "Activate my Diamond Flask"
+   - Test gear upgrades and flask combinations
+
+10. **Configure skills**:
+   - "Show me my skill setup"
+   - "Set main skill to socket group 2"
+   - Compare DPS between different skills
+
+11. **Stop the bridge**:
    - "Stop the PoB Lua bridge"
    - Clean shutdown of calculation engine
 
@@ -411,6 +428,97 @@ Get intelligent passive node recommendations for a build archetype.
 
 **Example**: "Help me plan a Cold DoT Occultist build"
 
+### Phase 4 Tools (Require Lua Bridge)
+
+#### `add_item`
+Add an item to the build from PoE item text format.
+
+**Parameters**:
+- `item_text` (required): Item text in Path of Exile format (copied from game/trade site)
+- `slot_name` (optional): Specific slot to equip to (e.g., "Weapon 1", "Body Armour")
+- `no_auto_equip` (optional): If true, add to inventory without equipping
+
+**Returns**:
+- Item ID and name
+- Slot equipped to
+- Confirmation that stats were recalculated
+
+**Example**: "Add this weapon: [paste item text]"
+
+**Item Text Format**:
+```
+Rarity: Rare
+Dragon Claw
+Corsair Sword
+--------
+Quality: +20%
+Physical Damage: 45-85
+...
+```
+
+#### `get_equipped_items`
+Get all currently equipped items with details.
+
+**Parameters**: None
+
+**Returns**:
+- All equipment slots
+- Item names and base types
+- Item rarity
+- Flask activation status
+
+**Example**: "What items do I have equipped?"
+
+#### `toggle_flask`
+Activate or deactivate a flask and recalculate stats.
+
+**Parameters**:
+- `flask_number` (required): Flask slot (1-5)
+- `active` (required): true to activate, false to deactivate
+
+**Returns**:
+- Confirmation of flask status
+- Stats recalculated
+
+**Example**: "Activate my Diamond Flask"
+
+**Use Cases**:
+- Test DPS with flasks active
+- Compare buffed vs unbuffed stats
+- Optimize flask selection
+
+#### `get_skill_setup`
+Get all skill socket groups and current selection.
+
+**Parameters**: None
+
+**Returns**:
+- All socket groups with linked skills
+- Main socket group selection
+- Which skills are enabled
+- Which skills contribute to DPS calculations
+
+**Example**: "Show me my skill setup"
+
+#### `set_main_skill`
+Set which skill group to use for stat calculations.
+
+**Parameters**:
+- `socket_group` (required): Socket group index (1-based)
+- `active_skill_index` (optional): Which skill in the group
+- `skill_part` (optional): Which part of a multi-part skill
+
+**Returns**:
+- Confirmation of selection
+- Stats recalculated
+
+**Example**: "Set main skill to socket group 2"
+
+**Use Cases**:
+- Compare DPS between different skills
+- Test different 6-links
+- Switch between hit and DoT portions
+
 ## Development
 
 ### Watch mode for development:
@@ -566,6 +674,84 @@ User: "Compare this tree with the tree from 'Endgame Upgrade'"
 Claude: [Extracts tree from second build, shows stat differences]
 ```
 
+### Example 5: Testing Gear Upgrades (Phase 4)
+
+```
+User: "Start the bridge and load my 'Trade League Deadeye.xml'"
+Claude: [Loads build]
+
+User: "What items do I have equipped?"
+Claude: [Shows all equipped items]
+
+User: "What's my current DPS?"
+Claude: "Current DPS: 450,000"
+
+User: "I found this bow on trade. Add it:
+Rarity: Rare
+Death Spiral
+Thicket Bow
+--------
+Quality: +20%
+Physical Damage: 78-145
+Critical Strike Chance: 6.5%
+Attacks per Second: 1.98
+--------
++98 to Dexterity
+Adds 15 to 28 Physical Damage
++35% to Global Critical Strike Multiplier
++18% to Attack Speed"
+
+Claude: [Adds bow, recalculates]
+
+User: "What's the new DPS?"
+Claude: "New DPS: 625,000 (+175k, +39%)"
+
+User: "Great! Now activate my Diamond Flask and Quicksilver"
+Claude: [Activates flasks 1 and 5]
+
+User: "Final DPS with flasks?"
+Claude: "Buffed DPS: 810,000"
+
+User: "Perfect! Export this as 'Deadeye_Upgraded_Bow.xml'"
+```
+
+### Example 6: Complete Build Modification Workflow
+
+```
+User: "Start bridge, load my template build"
+Claude: [Initializes]
+
+User: "Get current stats"
+Claude: "Base stats: 3.2k life, 0 DPS (no gear)"
+
+User: "Set the tree to allocate these nodes: [optimized 90-point tree]"
+Claude: [Updates passive tree]
+
+User: "Add these items:" [pastes 10 items from trade site]
+Claude: [Adds all items one by one]
+
+User: "Get skill setup"
+Claude: [Shows socket groups]
+
+User: "Set main skill to group 1"
+Claude: [Configures main skill]
+
+User: "Activate damage flasks 1, 2, and 3"
+Claude: [Activates flasks]
+
+User: "Show me the final stats"
+Claude:
+"=== Final Build Stats ===
+Life: 4,850
+DPS (unbuffed): 420,000
+DPS (with flasks): 685,000
+Crit Chance: 82%
+All Resistances: 75% (capped)
+..."
+
+User: "Excellent! Save this as 'League_Start_Final.xml'"
+```
+
 ## Testing
 
 For comprehensive testing instructions, see [TESTING_GUIDE.md](TESTING_GUIDE.md).
@@ -598,18 +784,138 @@ Quick test checklist:
 - Tree comparison (`compare_trees`)
 - Build planning assistance (`plan_build`)
 
+### Phase 4: Item & Skill Management ✅
+- Item addition from PoE text format (`add_item`)
+- Equipment viewing (`get_equipped_items`)
+- Flask activation control (`toggle_flask`)
+- Skill setup inspection (`get_skill_setup`)
+- Main skill selection (`set_main_skill`)
+- Complete build modification workflow support
+
+### Phase 5: Automated Testing ⏸️
+- Unit test suite with mocked PoB process
+- Integration tests for all tools
+- Snapshot testing for outputs
+- CI/CD pipeline integration
+- *Status: Deferred for future development*
+
+### Phase 6: Build Optimization ✅
+- ✅ Defensive layer analysis (`analyze_defenses`)
+- ✅ Nearby node discovery with reachability checking (`get_nearby_nodes`)
+- ✅ Pathfinding to target nodes (`find_path_to_node`)
+- ✅ Direct node allocation with stat calculations (`allocate_nodes`)
+- ✅ **Intelligent node recommendations** (`suggest_optimal_nodes`) 🎯
+- ✅ Fixed Lua bridge timeless jewel data loading (Glorious Vanity, etc.)
+- ✅ Fixed passive tree connection parsing for proper graph traversal
+- ⏸️ Item upgrade recommendations
+- ⏸️ Skill link optimization suggestions
+- ⏸️ Budget build creation from requirements
+- ⏸️ Trade site integration for finding upgrades
+
+**Total Tools**: 27 (8 XML + 6 Lua Bridge + 3 Phase 3 + 5 Phase 4 + 5 Phase 6)
+
+### Complete Passive Tree Optimization Workflow 🎯
+
+The MCP server now provides end-to-end tree optimization:
+
+1. **Intelligent Recommendations**: `suggest_optimal_nodes` ⭐ **NEW**
+   - AI-powered analysis finds the best nodes for your goal
+   - Scores nodes by efficiency (stat gain per point spent)
+   - Tests actual stat impact using PoB's calculation engine
+   - Supports multiple goals: DPS, life, defense, crit, balanced, etc.
+   - Returns top 10 recommendations with paths and projections
+
+2. **Discovery**: `get_nearby_nodes` shows reachable notables/keystones within N nodes
+   - Uses Dijkstra's algorithm to ensure nodes are actually reachable
+   - Filters by stat keywords (e.g., "evasion", "life", "damage")
+   - Only shows nodes accessible from your current tree (no other ascendancies)
+
+3. **Pathfinding**: `find_path_to_node` finds shortest path to any target
+   - Shows every intermediate node needed
+   - Displays stats for each node along the path
+   - Calculates total point cost
+   - Provides ready-to-use command for testing
+
+4. **Validation**: `allocate_nodes` calculates real stat impact
+   - Uses PoB Lua engine for accurate calculations
+   - Shows before/after for all important stats
+   - Calculates percentage changes
+   - Identifies travel nodes with no stats
+
+5. **Analysis**: `analyze_defenses` identifies weaknesses
+   - Checks resistances, life pool, physical mitigation, sustain
+   - Provides prioritized recommendations
+   - Works with actual calculated stats from Lua bridge
+
+**Example Workflow (Simple - AI Recommendations)**:
+```
+User: "Suggest nodes to maximize my life"
+
+suggest_optimal_nodes(build_name="Deadeye.xml", goal="maximize_life")
+   → Top 3 recommendations:
+   1. Constitution [26725] - +180 life/point (4 nodes, +720 life)
+   2. Sentinel [2491] - +150 life/point (3 nodes, +450 life)
+   3. Thick Skin [24970] - +110 life/point (5 nodes, +550 life)
+   → Projected total: 4,200 → 5,920 life (+41%)
+```
+
+**Example Workflow (Manual - Discovery)**:
+```
+User: "I need more evasion"
+
+1. get_nearby_nodes(filter="evasion")
+   → Shows "Revenge of the Hunted" [36542] at 5 nodes away
+
+2. find_path_to_node(target="36542")
+   → Path: 5 nodes, costs 5 points
+   → Shows: node1 (travel), node2 (+Dex), node3 (+Eva), node4 (travel), target
+
+3. allocate_nodes(node_ids=["node1", "node2", "node3", "node4", "36542"])
+   → Evasion: 1754 → 2204 (+450, +25.7%)
+   → Dexterity: 104 → 134 (+30, +28.8%)
+   → Damage: slight increase from Dex scaling
+```
+
+### Technical Achievements
+
+**Lua Bridge Enhancements**:
+- Implemented `NewFileSearch`, `Inflate`, `Deflate`, `GetScriptPath` in headless mode
+- Enables loading of split timeless jewel data files (`.part0` through `.part4`)
+- Fixed JSON response parsing to skip non-JSON console output
+- Added comprehensive debug logging for troubleshooting
+
+**Passive Tree Parsing**:
+- Fixed brace-counting algorithm for nested Lua table structures
+- Proper extraction of node connections (`out` and `in` arrays)
+- Handles complex tree data with 3,800+ nodes
+
+**Pathfinding & Graph Algorithms**:
+- Dijkstra's algorithm for shortest path finding
+- BFS with reachability checking for nearby node discovery
+- Fixed JavaScript falsy value bug (`0 || Infinity` → `0 ?? Infinity`)
+- Efficient distance calculations across entire passive tree
+
 ### Future Enhancements
 
-Potential features to add:
-- Item modification and crafting simulation
-- Gem link optimization suggestions
-- Skill selection and configuration
-- Configuration profiles (bandit, pantheon, etc.)
-- Budget vs premium build comparisons
-- Integration with PoE Wiki for item/skill info
-- Advanced tree pathing algorithms
-- Export builds to different formats
+#### Phase 7: Advanced Optimization
+- Multi-path comparison (show top 3 alternative paths)
+- Automated "best N nodes for X stat" finder
+- Point efficiency analysis (stat gain per point spent)
+- Jewel socket optimization
+
+#### Phase 8: Build Export & Persistence
+- Export modified builds to XML files
+- Save optimized trees back to PoB directory
+- Build version management
+- Snapshot and rollback support
+
+#### Later Phases
+- Item crafting simulation (fossil/essence/etc.)
+- Gem level/quality modification
+- Configuration templates (bandit, pantheon presets)
 - Build template library
+- Integration with PoE Wiki for tooltips
+- Trade site integration for upgrade recommendations
 
 ## Contributing
 
