@@ -131,9 +131,10 @@ The Lua bridge enables high-fidelity stat calculations using PoB's actual calcul
 
 2. **Clone PoB API Fork**:
    ```bash
-   git clone https://github.com/Dulluhan/pob-api.git
-   cd pob-api
+   git clone [git@github.com:ianderse/PathOfBuilding.git]
+   checkout branch api-stdio
    # Note the path to the 'src' directory for POB_FORK_PATH
+   # Note that if this is eventually merged into Path Of Building official repo, you will not need this step
    ```
 
 3. **Verify Installation**:
