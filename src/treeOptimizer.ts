@@ -104,13 +104,37 @@ export function calculateScore(
 }
 
 /**
+ * Detect if this is a low-life build (life reserved below 50%)
+ */
+export function isLowLifeBuild(stats: any): boolean {
+  const life = parseFloat(stats.Life || 0);
+  const totalLife = parseFloat(stats.TotalLife || stats.Life || 0);
+
+  // If life is less than 50% of total, likely low-life
+  if (life < totalLife * 0.5) {
+    return true;
+  }
+
+  // Alternative check: large ES pool with small life pool
+  const es = parseFloat(stats.EnergyShield || 0);
+  if (life < 2000 && es > 4000) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Check if stats meet all constraints
  */
 export function meetsConstraints(
   stats: any,
   constraints: OptimizationConstraints
 ): boolean {
-  if (constraints.minLife && parseFloat(stats.Life || 0) < constraints.minLife) {
+  // For low-life builds, skip minLife constraint (they run at ~35% life by design)
+  const isLowLife = isLowLifeBuild(stats);
+
+  if (constraints.minLife && !isLowLife && parseFloat(stats.Life || 0) < constraints.minLife) {
     return false;
   }
 

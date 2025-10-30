@@ -33,6 +33,7 @@ import {
   type OptimizationGoal,
   calculateScore,
   meetsConstraints,
+  isLowLifeBuild,
   getGoalDescription as getOptGoalDescription,
   findRemovableNodes,
   formatOptimizationResult,
@@ -4239,6 +4240,12 @@ class PoBMCPServer {
       const baselineTree = await this.luaClient.getTree();
       const baselineScore = calculateScore(baselineStats, goal);
 
+      // Check if low-life build and warn about constraints
+      const isLowLife = isLowLifeBuild(baselineStats);
+      if (isLowLife && constraintsObj.minLife) {
+        console.error(`[OptimizeTree] ⚠️ Low-life build detected! minLife constraint will be ignored (use minEHP instead)`);
+      }
+
       // Determine point budget
       const pointBudget = maxPoints || (baselineTree.nodes.length + 5);
       console.error(`[OptimizeTree] Point budget: ${pointBudget}, Baseline score: ${baselineScore.toFixed(0)}`);
@@ -4438,6 +4445,9 @@ class PoBMCPServer {
       }
       if (!result.constraintsMet) {
         result.warnings.push(`Final tree does not meet all constraints! Review carefully.`);
+      }
+      if (isLowLife && constraintsObj.minLife) {
+        result.warnings.push(`Low-life build detected: minLife constraint was ignored. Use minEHP for low-life builds.`);
       }
 
       // Format and return
