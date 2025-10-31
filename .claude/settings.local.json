@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Read(//c/Users/iande/Documents/Projects/PathOfBuilding/src/**)",
+      "Read(//c/Users/iande/Documents/Projects/PathOfBuilding/**)",
+      "Bash(set:*)",
+      "Bash(set POB_API_STDIO=1)",
+      "Bash(\"C:\\Users\\iande\\AppData\\Local\\LuaJit\\luajit.exe\" HeadlessWrapper.lua)",
+      "Read(//c/Users/iande/OneDrive/Documents/Path of Building/Builds/3.27/**)",
+      "Bash(if not exist \"src\\services\" mkdir \"src\\services\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -273,26 +273,36 @@ export function formatOptimizationResult(result: OptimizationResult): string {
   text += `- DPS: ${improvements.dpsChange >= 0 ? '+' : ''}${improvements.dpsChange.toFixed(0)}\n`;
   text += `- Points: ${improvements.pointsChange >= 0 ? '+' : ''}${improvements.pointsChange}\n\n`;
 
-  // Changes
-  text += `**Tree Changes:**\n`;
+  // Changes - MOST IMPORTANT SECTION
+  text += `**📋 TREE CHANGES (ACTION REQUIRED):**\n\n`;
+
   if (result.nodesRemoved.length > 0) {
-    text += `Removed ${result.nodesRemoved.length} nodes: ${result.nodesRemoved.slice(0, 10).join(', ')}`;
-    if (result.nodesRemoved.length > 10) {
-      text += ` ... and ${result.nodesRemoved.length - 10} more`;
-    }
-    text += `\n`;
+    text += `❌ **REMOVE ${result.nodesRemoved.length} NODE${result.nodesRemoved.length > 1 ? 'S' : ''}:**\n`;
+    text += `${result.nodesRemoved.join(', ')}\n`;
+    text += `→ Removing these frees up ${result.nodesRemoved.length} passive point${result.nodesRemoved.length > 1 ? 's' : ''}.\n\n`;
   }
+
   if (result.nodesAdded.length > 0) {
-    text += `Added ${result.nodesAdded.length} nodes: ${result.nodesAdded.slice(0, 10).join(', ')}`;
-    if (result.nodesAdded.length > 10) {
-      text += ` ... and ${result.nodesAdded.length - 10} more`;
+    text += `✅ **ADD ${result.nodesAdded.length} NODE${result.nodesAdded.length > 1 ? 'S' : ''}:**\n`;
+    text += `${result.nodesAdded.join(', ')}\n`;
+    text += `→ These nodes provide optimal stat gains for your goal.\n\n`;
+  }
+
+  if (result.nodesRemoved.length === 0 && result.nodesAdded.length === 0) {
+    text += `No changes needed - tree is already optimal!\n\n`;
+  } else {
+    // Net point change
+    const netChange = result.nodesAdded.length - result.nodesRemoved.length;
+    text += `**Net Point Change:** ${netChange >= 0 ? '+' : ''}${netChange}\n`;
+    if (netChange > 0) {
+      text += `⚠️ You need ${netChange} additional passive point${netChange > 1 ? 's' : ''} to apply all changes.\n`;
+    } else if (netChange < 0) {
+      text += `✓ You'll have ${Math.abs(netChange)} passive point${Math.abs(netChange) > 1 ? 's' : ''} left over.\n`;
+    } else {
+      text += `✓ Equal nodes added/removed - no extra points needed.\n`;
     }
     text += `\n`;
   }
-  if (result.nodesRemoved.length === 0 && result.nodesAdded.length === 0) {
-    text += `No changes made (tree is already optimal)\n`;
-  }
-  text += `\n`;
 
   // Warnings
   if (result.warnings.length > 0) {
@@ -307,18 +317,33 @@ export function formatOptimizationResult(result: OptimizationResult): string {
   text += `**Constraints Met:** ${result.constraintsMet ? '✓ Yes' : '✗ No'}\n\n`;
 
   // How to apply
-  text += `**To Apply:**\n`;
-  text += `Use lua_set_tree with the following parameters:\n`;
-  text += `- classId: ${result.formattedTree.classId}\n`;
-  text += `- ascendClassId: ${result.formattedTree.ascendClassId}\n`;
-  text += `- nodes: [${result.formattedTree.nodes.length} nodes]\n\n`;
+  text += `**🔧 TO APPLY CHANGES:**\n\n`;
+
+  if (result.nodesRemoved.length > 0 || result.nodesAdded.length > 0) {
+    text += `**Option 1 - Manual (Recommended for reviewing changes):**\n`;
+    if (result.nodesRemoved.length > 0) {
+      text += `1. In Path of Building, unallocate these node IDs: ${result.nodesRemoved.join(', ')}\n`;
+    }
+    if (result.nodesAdded.length > 0) {
+      text += `${result.nodesRemoved.length > 0 ? '2' : '1'}. Use allocate_nodes tool with these IDs: ${result.nodesAdded.join(', ')}\n`;
+    }
+    text += `\n`;
+
+    text += `**Option 2 - Automatic (applies entire optimized tree):**\n`;
+    text += `Use lua_set_tree with these parameters:\n`;
+    text += `- classId: ${result.formattedTree.classId}\n`;
+    text += `- ascendClassId: ${result.formattedTree.ascendClassId}\n`;
+    text += `- nodes: [${result.formattedTree.nodes.join(', ')}]\n`;
+    text += `⚠️ This replaces your entire passive tree!\n\n`;
+  }
 
   // Tips
-  text += `**Tips:**\n`;
-  text += `- Save your build before applying changes\n`;
-  text += `- Review removed nodes to ensure none are critical\n`;
-  text += `- You can protect specific nodes with the 'protected_nodes' parameter\n`;
-  text += `- Run optimize_tree again after applying to find further improvements\n`;
+  text += `**💡 IMPORTANT TIPS:**\n`;
+  text += `- 🔴 BACKUP your build file before making changes!\n`;
+  text += `- Review nodes marked for removal - they may have situational value\n`;
+  text += `- Use constraints.protectedNodes to prevent removal of critical nodes\n`;
+  text += `- You can run optimize_tree multiple times for incremental improvements\n`;
+  text += `- Check if you have enough passive points before applying changes\n`;
 
   return text;
 }

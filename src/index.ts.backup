@@ -8,13 +8,13 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { XMLParser } from "fast-xml-parser";
+import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import fs from "fs/promises";
-import https from "https";
 import chokidar from "chokidar";
+import https from "https";
 import { PoBLuaApiClient, PoBLuaTcpClient } from "./pobLuaBridge.js";
-import { XMLParser } from "fast-xml-parser";
 import { analyzeDefenses, formatDefensiveAnalysis } from "./defensiveAnalyzer.js";
 import {
   type NodeScore,
@@ -40,45 +40,160 @@ import {
   parseOptimizationGoal,
 } from "./treeOptimizer.js";
 
-// Import services
-import { BuildService } from "./services/buildService.js";
-import { TreeService } from "./services/treeService.js";
-import { WatchService } from "./services/watchService.js";
+// Passive Tree Data Interfaces
+interface PassiveTreeNode {
+  skill: number;
+  name?: string;
+  icon?: string;
+  stats?: string[];
+  isKeystone?: boolean;
+  isNotable?: boolean;
+  isMastery?: boolean;
+  isJewelSocket?: boolean;
+  isAscendancyStart?: boolean;
+  ascendancyName?: string;
+  group?: number;
+  orbit?: number;
+  orbitIndex?: number;
+  out?: string[];
+  in?: string[];
+  reminderText?: string[];
+  flavourText?: string[];
+}
 
-// Import types
-import type {
-  PassiveTreeNode,
-  PassiveTreeData,
-  PoBBuild,
-  TreeAnalysisResult,
-  TreeComparison,
-  AllocationChange,
-  PathOptimization,
-  EfficiencyScore,
-  OptimizationSuggestion,
-  TreeDataCache,
-  CachedBuild,
-} from "./types.js";
+interface PassiveTreeData {
+  nodes: Map<string, PassiveTreeNode>;
+  version: string;
+  classes?: any[];
+  groups?: any[];
+}
 
-// Import handlers
-import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats } from "./handlers/buildHandlers.js";
-import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handleWatchStatus, handleRefreshTreeData } from "./handlers/watchHandlers.js";
-import { handleCompareTrees, handleTestAllocation, handleGetNearbyNodes, handleFindPath, handleAllocateNodes, handlePlanTree } from "./handlers/treeHandlers.js";
-import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaLoadBuild, handleLuaGetStats, handleLuaGetTree, handleLuaSetTree } from "./handlers/luaHandlers.js";
-import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill } from "./handlers/itemSkillHandlers.js";
-import { handleAnalyzeDefenses, handleSuggestOptimalNodes, handleOptimizeTree } from "./handlers/optimizationHandlers.js";
+interface TreeDataCache {
+  data: PassiveTreeData;
+  timestamp: number;
+}
+
+// Path of Building build interface
+interface PoBBuild {
+  Build?: {
+    level?: string;
+    className?: string;
+    ascendClassName?: string;
+    PlayerStat?: Array<{stat: string; value: string}> | {stat: string; value: string};
+  };
+  Tree?: {
+    activeSpec?: string;
+    Spec?: {
+      title?: string;
+      URL?: string;
+      nodes?: string;
+      treeVersion?: string;
+    } | Array<{
+      title?: string;
+      URL?: string;
+      nodes?: string;
+      treeVersion?: string;
+    }>;
+  };
+  Skills?: {
+    SkillSet?: {
+      Skill?: Array<{
+        enabled?: string;
+        Gem?: Array<{name?: string; level?: string; quality?: string}>;
+      }>;
+    };
+  };
+  Items?: {
+    ItemSet?: {
+      Slot?: Array<{
+        name?: string;
+        Item?: string;
+      }>;
+    };
+  };
+  Notes?: string;
+}
+
+// Build cache entry interface
+interface CachedBuild {
+  data: PoBBuild;
+  timestamp: number;
+}
+
+// Phase 2: Optimization Suggestion Interfaces
+interface PathOptimization {
+  destination: string;
+  currentLength: number;
+  optimalLength: number;
+  pointsSaved: number;
+  suggestion: string;
+}
+
+interface EfficiencyScore {
+  nodeId: string;
+  nodeName: string;
+  statsPerPoint: number;
+  isLowValue: boolean;
+}
+
+interface OptimizationSuggestion {
+  type: 'path' | 'efficiency' | 'reachable' | 'ai-context';
+  priority: 'high' | 'medium' | 'low';
+  title: string;
+  description: string;
+  pointsSaved?: number;
+  potentialGain?: string;
+}
+
+// Tree Analysis Results
+interface TreeAnalysisResult {
+  totalPoints: number;
+  availablePoints: number;
+  allocatedNodes: PassiveTreeNode[];
+  keystones: PassiveTreeNode[];
+  notables: PassiveTreeNode[];
+  jewels: PassiveTreeNode[];
+  normalNodes: PassiveTreeNode[];
+  archetype: string;
+  archetypeConfidence: string;
+  pathingEfficiency: string;
+  buildVersion?: string;
+  treeVersion: string;
+  versionMismatch: boolean;
+  invalidNodeIds: string[];
+  optimizationSuggestions?: OptimizationSuggestion[];
+}
+
+// Phase 3: Tree Comparison Interface
+interface TreeComparison {
+  build1: {
+    name: string;
+    analysis: TreeAnalysisResult;
+  };
+  build2: {
+    name: string;
+    analysis: TreeAnalysisResult;
+  };
+  differences: {
+    uniqueToBuild1: PassiveTreeNode[];
+    uniqueToBuild2: PassiveTreeNode[];
+    sharedNodes: PassiveTreeNode[];
+    pointDifference: number;
+    archetypeDifference: string;
+  };
+}
+
+// Phase 3: Allocation Change Interface
+interface AllocationChange {
+  type: 'allocate' | 'remove';
+  nodeIdentifier: string;
+  node?: PassiveTreeNode;
+}
 
 class PoBMCPServer {
   private server: Server;
-  private pobDirectory: string;
   private parser: XMLParser;
-
-  // Services
-  private buildService: BuildService;
-  private treeService: TreeService;
-  private watchService: WatchService;
-
-  // Legacy properties (still used by methods not yet refactored)
+  private pobDirectory: string;
   private watcher: ReturnType<typeof chokidar.watch> | null = null;
   private buildCache: Map<string, CachedBuild> = new Map();
   private treeDataCache: Map<string, TreeDataCache> = new Map();
@@ -119,11 +234,6 @@ class PoBMCPServer {
 
     this.pobDirectory = process.env.POB_DIRECTORY || defaultPoBPath;
 
-    // Initialize services
-    this.buildService = new BuildService(this.pobDirectory);
-    this.treeService = new TreeService(this.buildService);
-    this.watchService = new WatchService(this.pobDirectory, this.buildService);
-
     // Check if Lua bridge is enabled
     this.luaEnabled = process.env.POB_LUA_ENABLED === 'true';
     this.useTcpMode = process.env.POB_API_TCP === 'true';
@@ -145,7 +255,7 @@ class PoBMCPServer {
     };
 
     process.on("SIGINT", async () => {
-      await this.watchService.stopWatching();
+      await this.stopWatching();
       await this.stopLuaClient();
       await this.server.close();
       process.exit(0);
@@ -1885,7 +1995,7 @@ class PoBMCPServer {
     // List available resources (build files)
     this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
       try {
-        const builds = await this.buildService.listBuilds();
+        const builds = await this.listBuilds();
         return {
           resources: builds.map((build) => ({
             uri: `pob://build/${encodeURIComponent(build)}`,
@@ -1910,10 +2020,12 @@ class PoBMCPServer {
       }
 
       const buildName = decodeURIComponent(match[1]);
+      const buildPath = path.join(this.pobDirectory, buildName);
 
       try {
-        const build = await this.buildService.readBuild(buildName);
-        const summary = this.buildService.generateBuildSummary(build);
+        const content = await fs.readFile(buildPath, "utf-8");
+        const parsed = this.parser.parse(content);
+        const summary = this.generateBuildSummary(parsed.PathOfBuilding);
 
         return {
           contents: [
@@ -2455,107 +2567,58 @@ class PoBMCPServer {
       const { name, arguments: args } = request.params;
 
       try {
-        // Create handler contexts
-        const handlerContext = {
-          buildService: this.buildService,
-          treeService: this.treeService,
-        };
-
-        const watchContext = {
-          buildService: this.buildService,
-          treeService: this.treeService,
-          watchService: this.watchService,
-        };
-
-        const treeContext = {
-          buildService: this.buildService,
-          treeService: this.treeService,
-        };
-
-        const luaContext = {
-          pobDirectory: this.pobDirectory,
-          luaEnabled: this.luaEnabled,
-          useTcpMode: this.useTcpMode,
-          getLuaClient: () => this.luaClient,
-          ensureLuaClient: () => this.ensureLuaClient(),
-          stopLuaClient: () => this.stopLuaClient(),
-        };
-
-        const itemSkillContext = {
-          getLuaClient: () => this.luaClient,
-          ensureLuaClient: () => this.ensureLuaClient(),
-        };
-
-        const optimizationContext = {
-          buildService: this.buildService,
-          treeService: this.treeService,
-          pobDirectory: this.pobDirectory,
-          getLuaClient: () => this.luaClient,
-          ensureLuaClient: () => this.ensureLuaClient(),
-          findNearbyNodes: this.findNearbyNodes.bind(this),
-          getTreeData: this.getTreeData.bind(this),
-          readBuild: this.readBuild.bind(this),
-          getActiveSpec: this.getActiveSpec.bind(this),
-          parseAllocatedNodes: this.parseAllocatedNodes.bind(this),
-          extractBuildVersion: this.extractBuildVersion.bind(this),
-        };
-
         switch (name) {
           case "list_builds":
-            return await handleListBuilds(handlerContext);
+            return await this.handleListBuilds();
 
           case "analyze_build":
             if (!args) throw new Error("Missing arguments");
-            return await handleAnalyzeBuild(handlerContext, args.build_name as string);
+            return await this.handleAnalyzeBuild(args.build_name as string);
 
           case "compare_builds":
             if (!args) throw new Error("Missing arguments");
-            return await handleCompareBuilds(
-              handlerContext,
+            return await this.handleCompareBuilds(
               args.build1 as string,
               args.build2 as string
             );
 
           case "get_build_stats":
             if (!args) throw new Error("Missing arguments");
-            return await handleGetBuildStats(handlerContext, args.build_name as string);
+            return await this.handleGetBuildStats(args.build_name as string);
 
           case "start_watching":
-            return handleStartWatching(watchContext);
+            return this.handleStartWatching();
 
           case "stop_watching":
-            return await handleStopWatching(watchContext);
+            return await this.handleStopWatching();
 
           case "get_recent_changes":
-            return handleGetRecentChanges(watchContext, args?.limit as number | undefined);
+            return this.handleGetRecentChanges(args?.limit as number | undefined);
 
           case "watch_status":
-            return handleWatchStatus(watchContext);
+            return this.handleWatchStatus();
 
           case "refresh_tree_data":
-            return await handleRefreshTreeData(watchContext, args?.version as string | undefined);
+            return await this.handleRefreshTreeData(args?.version as string | undefined);
 
           // Phase 3 tools
           case "compare_trees":
             if (!args) throw new Error("Missing arguments");
-            return await handleCompareTrees(
-              treeContext,
+            return await this.handleCompareTrees(
               args.build1 as string,
               args.build2 as string
             );
 
           case "test_allocation":
             if (!args) throw new Error("Missing arguments");
-            return await handleTestAllocation(
-              treeContext,
+            return await this.handleTestAllocation(
               args.build_name as string,
               args.changes as string
             );
 
           case "get_nearby_nodes":
             if (!args) throw new Error("Missing arguments");
-            return await handleGetNearbyNodes(
-              treeContext,
+            return await this.handleGetNearbyNodes(
               args.build_name as string,
               args.max_distance as number | undefined,
               args.filter as string | undefined
@@ -2563,8 +2626,7 @@ class PoBMCPServer {
 
           case "find_path_to_node":
             if (!args) throw new Error("Missing arguments");
-            return await handleFindPath(
-              treeContext,
+            return await this.handleFindPath(
               args.build_name as string,
               args.target_node_id as string,
               args.show_alternatives as boolean | undefined
@@ -2572,8 +2634,7 @@ class PoBMCPServer {
 
           case "allocate_nodes":
             if (!args) throw new Error("Missing arguments");
-            return await handleAllocateNodes(
-              treeContext,
+            return await this.handleAllocateNodes(
               args.build_name as string,
               args.node_ids as string[],
               args.show_full_stats as boolean | undefined
@@ -2581,68 +2642,65 @@ class PoBMCPServer {
 
           case "plan_tree":
             if (!args) throw new Error("Missing arguments");
-            return await handlePlanTree(
-              treeContext,
+            return await this.handlePlanTree(
               args.build_name as string | undefined,
               args.goals as string
             );
 
           // Lua bridge tools
           case "lua_start":
-            return await handleLuaStart(luaContext);
+            return await this.handleLuaStart();
 
           case "lua_stop":
-            return await handleLuaStop(luaContext);
+            return await this.handleLuaStop();
 
           case "lua_new_build":
-            return await handleLuaNewBuild(luaContext);
+            return await this.handleLuaNewBuild();
 
           case "lua_load_build":
             if (!args) throw new Error("Missing arguments");
-            return await handleLuaLoadBuild(
-              luaContext,
+            return await this.handleLuaLoadBuild(
               args.build_name as string | undefined,
               args.build_xml as string | undefined,
               args.name as string | undefined
             );
 
           case "lua_get_stats":
-            return await handleLuaGetStats(luaContext, args?.fields as string[] | undefined);
+            return await this.handleLuaGetStats(args?.fields as string[] | undefined);
 
           case "lua_get_tree":
-            return await handleLuaGetTree(luaContext);
+            return await this.handleLuaGetTree();
 
           case "lua_set_tree":
             if (!args) throw new Error("Missing arguments");
-            return await handleLuaSetTree(luaContext, args);
+            return await this.handleLuaSetTree(args);
 
           // Phase 4: Item & Skill tools
           case "add_item":
             if (!args) throw new Error("Missing arguments");
-            return await handleAddItem(itemSkillContext, args.item_text as string, args.slot_name as string | undefined, args.no_auto_equip as boolean | undefined);
+            return await this.handleAddItem(args.item_text as string, args.slot_name as string | undefined, args.no_auto_equip as boolean | undefined);
 
           case "get_equipped_items":
-            return await handleGetEquippedItems(itemSkillContext);
+            return await this.handleGetEquippedItems();
 
           case "toggle_flask":
             if (!args) throw new Error("Missing arguments");
-            return await handleToggleFlask(itemSkillContext, args.flask_number as number, args.active as boolean);
+            return await this.handleToggleFlask(args.flask_number as number, args.active as boolean);
 
           case "get_skill_setup":
-            return await handleGetSkillSetup(itemSkillContext);
+            return await this.handleGetSkillSetup();
 
           case "set_main_skill":
             if (!args) throw new Error("Missing arguments");
-            return await handleSetMainSkill(itemSkillContext, args.socket_group as number, args.active_skill_index as number | undefined, args.skill_part as number | undefined);
+            return await this.handleSetMainSkill(args.socket_group as number, args.active_skill_index as number | undefined, args.skill_part as number | undefined);
 
           // Phase 6: Build Optimization tools
           case "analyze_defenses":
-            return await handleAnalyzeDefenses(optimizationContext, args?.build_name as string | undefined);
+            return await this.handleAnalyzeDefenses(args?.build_name as string | undefined);
 
           case "suggest_optimal_nodes":
             if (!args) throw new Error("Missing arguments");
-            return await handleSuggestOptimalNodes(
-              optimizationContext,
+            return await this.handleSuggestOptimalNodes(
               args.build_name as string,
               args.goal as string,
               args.max_points as number | undefined,
@@ -2653,8 +2711,7 @@ class PoBMCPServer {
 
           case "optimize_tree":
             if (!args) throw new Error("Missing arguments");
-            return await handleOptimizeTree(
-              optimizationContext,
+            return await this.handleOptimizeTree(
               args.build_name as string,
               args.goal as string,
               args.max_points as number | undefined,

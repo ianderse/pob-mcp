@@ -37,21 +37,39 @@ export class PoBLuaApiClient {
 
     // Set up Lua paths for runtime modules
     const pobForkPath = this.options.cwd || process.env.POB_FORK_PATH || '';
-    const runtimeLuaPath = pobForkPath.replace(/\/src$/, '/runtime/lua');
-    const luaRocksPath = process.env.HOME + '/.luarocks/lib/lua/5.1';
+
+    // Cross-platform path handling: remove 'src' from the end if present
+    const baseDir = pobForkPath.endsWith(path.sep + 'src') || pobForkPath.endsWith('/src')
+      ? pobForkPath.slice(0, -4)
+      : pobForkPath;
+    const runtimeDir = path.join(baseDir, 'runtime');
+    const runtimeLuaPath = path.join(runtimeDir, 'lua');
+    const luaRocksPath = path.join(os.homedir(), '.luarocks', 'lib', 'lua', '5.1');
+
+    // Platform-specific Lua paths
+    const isWindows = process.platform === 'win32';
+    const luaExt = isWindows ? 'dll' : 'so';
+
+    // On Windows, use semicolons and backslashes; on Unix, use colons and forward slashes
+    const pathSep = isWindows ? ';' : ':';
 
     const env = {
       ...process.env,
       ...this.options.env,
       POB_API_STDIO: "1",
-      LUA_PATH: `${runtimeLuaPath}/?.lua;${runtimeLuaPath}/?/init.lua;;`,
-      LUA_CPATH: `${luaRocksPath}/?.so;;`,
+      LUA_PATH: `${runtimeLuaPath}${path.sep}?.lua${pathSep}${runtimeLuaPath}${path.sep}?${path.sep}init.lua${pathSep}${pathSep}`,
+      LUA_CPATH: `${runtimeDir}${path.sep}?.${luaExt}${pathSep}${luaRocksPath}${path.sep}?.${luaExt}${pathSep}${pathSep}`,
     } as NodeJS.ProcessEnv;
-    this.proc = spawn(this.options.cmd!, this.options.args!, {
-      cwd: this.options.cwd,
-      env,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+
+    try {
+      this.proc = spawn(this.options.cmd!, this.options.args!, {
+        cwd: this.options.cwd,
+        env,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (error: any) {
+      throw new Error(`Failed to spawn LuaJIT process: ${error.message}`);
+    }
 
     this.proc.stdout.setEncoding("utf8");
     this.proc.stderr.setEncoding("utf8");
@@ -60,6 +78,17 @@ export class PoBLuaApiClient {
     if (process.env.JEST_WORKER_ID && (this.options.timeoutMs ?? 0) <= 150) {
       throw new Error("Failed to find valid ready banner");
     }
+
+    // Track spawn errors
+    let spawnError: Error | null = null;
+    this.proc.on("error", (err: Error) => {
+      spawnError = err;
+      this.killed = true;
+      if (this.pending) {
+        this.pending.reject(err);
+        this.pending = null;
+      }
+    });
 
     this.proc.stdout.on("data", (chunk: string) => this.onStdout(chunk));
     this.proc.stderr.on("data", (chunk: string) => {
@@ -81,6 +110,30 @@ export class PoBLuaApiClient {
     const maxAttempts = 50; // 50 lines max to find JSON banner
 
     while (attempts < maxAttempts) {
+      // Check if process errored during spawn
+      if (spawnError !== null) {
+        const cmd = this.options.cmd;
+        const err: Error = spawnError;
+        const errMsg = err.message || String(err);
+        if (errMsg.includes('ENOENT')) {
+          throw new Error(
+            `Failed to start PoB Lua Bridge: LuaJIT executable not found.\n\n` +
+            `The command "${cmd}" does not exist or is not in PATH.\n\n` +
+            `Please:\n` +
+            `1. Install LuaJIT (https://luajit.org/download.html)\n` +
+            `2. Update your Claude Desktop config with the correct POB_CMD path\n` +
+            `3. Or add LuaJIT to your system PATH and set POB_CMD=luajit\n\n` +
+            `Current POB_CMD: ${cmd}`
+          );
+        }
+        throw new Error(`Failed to spawn LuaJIT process: ${errMsg}`);
+      }
+
+      // Check if process exited
+      if (this.killed) {
+        throw new Error('PoB API process exited before becoming ready');
+      }
+
       ready = await this.readLineWithTimeout(this.options.timeoutMs);
       attempts++;
 
@@ -141,16 +194,18 @@ export class PoBLuaApiClient {
       const line = await this.readLineWithTimeout(this.options.timeoutMs);
       attempts++;
 
-      // For request/response, treat non-JSON or malformed JSON as an error
+      // Skip empty lines or lines that don't look like JSON (debug messages, etc.)
       if (!line.trim() || !line.trim().startsWith('{')) {
-        throw new Error("Invalid JSON response");
+        continue;
       }
 
+      // Try to parse as JSON
       try {
         const res = JSON.parse(line);
         return res;
       } catch (e) {
-        throw new Error("Invalid JSON response");
+        // Not valid JSON, keep looking
+        continue;
       }
     }
 
@@ -160,6 +215,12 @@ export class PoBLuaApiClient {
   async ping(): Promise<boolean> {
     const res = await this.send({ action: "ping" });
     return !!res.ok;
+  }
+
+  async newBuild(): Promise<any> {
+    const res = await this.send({ action: "new_build" });
+    if (!res.ok) throw new Error(res.error || "new_build failed");
+    return res;
   }
 
   async loadBuildXml(xml: string, name = "API Build"): Promise<any> {
@@ -370,6 +431,12 @@ export class PoBLuaTcpClient {
   async ping(): Promise<boolean> {
     const res = await this.send({ action: "ping" });
     return !!res.ok;
+  }
+
+  async newBuild(): Promise<any> {
+    const res = await this.send({ action: "new_build" });
+    if (!res.ok) throw new Error(res.error || "new_build failed");
+    return res;
   }
 
   async loadBuildXml(xml: string, name = "API Build"): Promise<any> {
