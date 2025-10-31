@@ -126,8 +126,16 @@ export async function handleLuaGetStats(context: LuaHandlerContext, fields?: str
     let text = "=== PoB Calculated Stats ===\n\n";
 
     if (stats && typeof stats === 'object') {
-      for (const [key, value] of Object.entries(stats)) {
+      const entries = Object.entries(stats);
+      const maxStats = 50; // Limit to 50 stats to prevent huge responses
+
+      for (let i = 0; i < Math.min(entries.length, maxStats); i++) {
+        const [key, value] = entries[i];
         text += `${key}: ${value}\n`;
+      }
+
+      if (entries.length > maxStats) {
+        text += `\n... and ${entries.length - maxStats} more stats (use 'fields' parameter to get specific stats)\n`;
       }
     } else {
       text += "No stats available.\n";
@@ -267,10 +275,13 @@ export async function handleSearchTreeNodes(
       throw new Error('keyword cannot be empty');
     }
 
+    // Limit results to prevent large responses
+    const effectiveMaxResults = Math.min(maxResults || 20, 30); // Default 20, max 30
+
     const results = await luaClient.searchNodes({
       keyword: keyword.trim(),
       nodeType,
-      maxResults,
+      maxResults: effectiveMaxResults,
       includeAllocated,
     });
 
@@ -289,8 +300,8 @@ export async function handleSearchTreeNodes(
       text += "- Remove the node type filter to see more results\n";
     } else {
       text += `Found ${results.count} matching node${results.count === 1 ? '' : 's'}`;
-      if (results.count >= (maxResults || 50)) {
-        text += ` (limited to ${maxResults || 50} results)`;
+      if (results.count >= effectiveMaxResults) {
+        text += ` (showing top ${effectiveMaxResults})`;
       }
       text += `:\n\n`;
 
@@ -306,9 +317,14 @@ export async function handleSearchTreeNodes(
         }
 
         if (node.stats && node.stats.length > 0) {
+          // Limit to first 3 stats to reduce response size
+          const statsToShow = node.stats.slice(0, 3);
           text += `  Stats:\n`;
-          for (const stat of node.stats) {
+          for (const stat of statsToShow) {
             text += `    - ${stat}\n`;
+          }
+          if (node.stats.length > 3) {
+            text += `    - ... and ${node.stats.length - 3} more\n`;
           }
         }
 

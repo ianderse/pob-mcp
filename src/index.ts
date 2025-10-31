@@ -631,7 +631,7 @@ class PoBMCPServer {
           },
           {
             name: "lua_new_build",
-            description: "Create a new empty build in the PoB headless session. This creates a blank build that you can then populate with items, skills, and passive tree selections.",
+            description: "Create a new empty build in the PoB headless session. This creates a blank build that you can then populate with items, skills, and passive tree selections.\n\nIMPORTANT: After calling this tool, STOP and ask the user what they want to do next. Suggest logical next steps like:\n- Use lua_set_tree to set class/ascendancy and allocate passive nodes\n- Use create_socket_group to add skill socket groups\n- Use search_tree_nodes to find relevant passive nodes\nDO NOT chain multiple tools together. Wait for user confirmation between each major step.",
             inputSchema: {
               type: "object",
               properties: {},
@@ -684,7 +684,7 @@ class PoBMCPServer {
           },
           {
             name: "lua_set_tree",
-            description: "Set the passive tree in PoB (class, ascendancy, allocated nodes, mastery effects). This will recalculate all stats based on the new tree.",
+            description: "Set the passive tree in PoB (class, ascendancy, allocated nodes, mastery effects). This will recalculate all stats based on the new tree.\n\nIMPORTANT: After setting the tree, STOP and ask the user what they want to do next. Suggest:\n- Use lua_get_stats to see the updated build stats\n- Use search_tree_nodes to find more nodes to allocate\n- Use suggest_optimal_nodes to get AI-powered node recommendations\n- Move on to configuring skills or items\nDO NOT automatically chain multiple operations.",
             inputSchema: {
               type: "object",
               properties: {
@@ -719,7 +719,7 @@ class PoBMCPServer {
           },
           {
             name: "search_tree_nodes",
-            description: "Search the passive tree for nodes by keyword. Returns node IDs, names, stats, types, and allocation status. Very useful for finding specific nodes like 'wand', 'herald', 'life', etc. You can filter by node type (notable, keystone, normal) and control whether to show already-allocated nodes. Use the returned node IDs with lua_set_tree or suggest_optimal_nodes.",
+            description: "Search the passive tree for nodes by keyword. Returns node IDs, names, stats, types, and allocation status. Very useful for finding specific nodes like 'wand', 'herald', 'life', etc. You can filter by node type (notable, keystone, normal) and control whether to show already-allocated nodes. Use the returned node IDs with lua_set_tree or suggest_optimal_nodes.\n\nIMPORTANT: After showing search results, STOP and ask the user which nodes they want to allocate. Suggest:\n- Using lua_set_tree to allocate specific nodes by ID\n- Searching with different keywords if results aren't helpful\n- Using suggest_optimal_nodes for AI-powered recommendations\nDO NOT automatically allocate nodes without user confirmation.",
             inputSchema: {
               type: "object",
               properties: {
@@ -750,7 +750,7 @@ class PoBMCPServer {
         tools.push(
           {
             name: "add_item",
-            description: "Add an item to the build from PoE item text format (copied from game or trade site). The item will be added to the build and stats will be recalculated. Optionally specify a slot to equip it to.",
+            description: "Add an item to the build from PoE item text format (copied from game or trade site). The item will be added to the build and stats will be recalculated. Optionally specify a slot to equip it to.\n\nIMPORTANT: After adding an item, STOP and ask the user what they want to do next. Suggest:\n- Add another item to a different slot\n- Use get_equipped_items to see current gear\n- Use lua_get_stats to see how the item affected stats\n- Configure flasks with toggle_flask\nDO NOT add multiple items in sequence without user confirmation.",
             inputSchema: {
               type: "object",
               properties: {
@@ -828,7 +828,7 @@ class PoBMCPServer {
           },
           {
             name: "create_socket_group",
-            description: "Create a new empty socket group in the build. After creation, use add_gem to add gems to this group. This enables building skill setups from scratch.",
+            description: "Create a new empty socket group in the build. After creation, use add_gem to add gems to this group. This enables building skill setups from scratch.\n\nIMPORTANT: After creating the socket group, STOP and ask the user which gems they want to add. Suggest using:\n- add_gem to add the active skill gem\n- add_gem again for each support gem\n- get_skill_setup to verify the setup\nDO NOT automatically add gems without user input.",
             inputSchema: {
               type: "object",
               properties: {
@@ -853,7 +853,7 @@ class PoBMCPServer {
           },
           {
             name: "add_gem",
-            description: "Add a gem to an existing socket group. This allows you to build complete skill setups by adding active gems and support gems one by one. Gem names must match Path of Exile gem names exactly.",
+            description: "Add a gem to an existing socket group. This allows you to build complete skill setups by adding active gems and support gems one by one. Gem names must match Path of Exile gem names exactly.\n\nIMPORTANT: After adding a gem, STOP and ask the user if they want to:\n- Add another gem to this socket group\n- Modify gem level/quality with set_gem_level or set_gem_quality\n- View current setup with get_skill_setup\n- Move on to other tasks\nDO NOT add multiple gems in sequence without user confirmation.",
             inputSchema: {
               type: "object",
               properties: {
@@ -985,7 +985,7 @@ class PoBMCPServer {
           },
           {
             name: "suggest_optimal_nodes",
-            description: "Intelligently suggest the best passive tree nodes to allocate based on a specific goal. Analyzes reachable nodes, calculates actual stat impact using PoB's engine, and ranks by efficiency (stat gain per point). Goals: 'maximize_dps', 'maximize_life', 'maximize_es', 'resistances', 'armour', 'evasion', 'block', 'crit_chance', 'balanced', etc. Returns top recommendations with paths and stat projections.",
+            description: "Intelligently suggest the best passive tree nodes to allocate based on a specific goal. Analyzes reachable nodes, calculates actual stat impact using PoB's engine, and ranks by efficiency (stat gain per point). Goals: 'maximize_dps', 'maximize_life', 'maximize_es', 'resistances', 'armour', 'evasion', 'block', 'crit_chance', 'balanced', etc. Returns top recommendations with paths and stat projections.\n\nIMPORTANT: After showing suggestions, STOP and ask the user which recommendation they want to apply. Suggest:\n- Review the top recommendations and their stat impacts\n- Try different optimization goals to compare options\n- Use allocate_nodes to apply a specific recommendation\nDO NOT automatically allocate suggested nodes without user approval.",
             inputSchema: {
               type: "object",
               properties: {

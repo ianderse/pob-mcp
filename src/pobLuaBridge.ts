@@ -28,7 +28,7 @@ export class PoBLuaApiClient {
       cmd: options.cmd || "luajit",
       args: options.args || ["HeadlessWrapper.lua"],
       env: options.env || {},
-      timeoutMs: options.timeoutMs ?? 10000,
+      timeoutMs: options.timeoutMs ?? 30000, // Increased from 10s to 30s
     };
   }
 
@@ -388,7 +388,7 @@ export class PoBLuaTcpClient {
   constructor(opts: PoBLuaTcpOptions = {}) {
     this.host = opts.host || "127.0.0.1";
     this.port = opts.port ?? 31337;
-    this.timeoutMs = opts.timeoutMs ?? 10000;
+    this.timeoutMs = opts.timeoutMs ?? 30000; // Increased from 10s to 30s
   }
 
   async start(): Promise<void> {
