@@ -237,3 +237,289 @@ export async function handleSetMainSkill(
     throw new Error(`Failed to set main skill: ${errorMsg}`);
   }
 }
+
+export async function handleCreateSocketGroup(
+  context: ItemSkillHandlerContext,
+  label?: string,
+  slot?: string,
+  enabled?: boolean,
+  includeInFullDPS?: boolean
+) {
+  try {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized. Use lua_start first.');
+    }
+
+    const result = await luaClient.createSocketGroup({
+      label,
+      slot,
+      enabled,
+      includeInFullDPS,
+    });
+
+    let text = "=== Socket Group Created ===\n\n";
+    text += `Successfully created socket group at index ${result.index}.\n`;
+    if (label) {
+      text += `Label: ${label}\n`;
+    }
+    if (slot) {
+      text += `Slot: ${slot}\n`;
+    }
+    text += `Enabled: ${enabled !== false ? 'Yes' : 'No'}\n`;
+    text += `Contributes to Full DPS: ${includeInFullDPS === true ? 'Yes' : 'No'}\n\n`;
+    text += `Use lua_add_gem to add gems to this socket group.`;
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text,
+        },
+      ],
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to create socket group: ${errorMsg}`);
+  }
+}
+
+export async function handleAddGem(
+  context: ItemSkillHandlerContext,
+  groupIndex: number,
+  gemName: string,
+  level?: number,
+  quality?: number,
+  qualityId?: string,
+  enabled?: boolean
+) {
+  try {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized. Use lua_start first.');
+    }
+
+    if (groupIndex < 1) {
+      throw new Error('group_index must be >= 1');
+    }
+
+    if (!gemName || gemName.trim().length === 0) {
+      throw new Error('gem_name cannot be empty');
+    }
+
+    const result = await luaClient.addGem({
+      groupIndex,
+      gemName,
+      level,
+      quality,
+      qualityId,
+      enabled,
+    });
+
+    let text = "=== Gem Added ===\n\n";
+    text += `Successfully added gem to socket group ${groupIndex}.\n\n`;
+    text += `Gem: ${result.name}\n`;
+    text += `Gem Index: ${result.gemIndex}\n`;
+    text += `Level: ${level || 20}\n`;
+    text += `Quality: ${quality || 0}\n`;
+    if (qualityId && qualityId !== 'Default') {
+      text += `Quality Type: ${qualityId}\n`;
+    }
+    text += `Enabled: ${enabled !== false ? 'Yes' : 'No'}\n\n`;
+    text += `Stats have been recalculated. Use lua_get_stats to see updated values.`;
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text,
+        },
+      ],
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to add gem: ${errorMsg}`);
+  }
+}
+
+export async function handleSetGemLevel(
+  context: ItemSkillHandlerContext,
+  groupIndex: number,
+  gemIndex: number,
+  level: number
+) {
+  try {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized. Use lua_start first.');
+    }
+
+    if (groupIndex < 1) {
+      throw new Error('group_index must be >= 1');
+    }
+
+    if (gemIndex < 1) {
+      throw new Error('gem_index must be >= 1');
+    }
+
+    if (level < 1 || level > 40) {
+      throw new Error('level must be between 1 and 40');
+    }
+
+    await luaClient.setGemLevel({ groupIndex, gemIndex, level });
+
+    let text = "=== Gem Level Updated ===\n\n";
+    text += `Successfully set gem level to ${level}.\n`;
+    text += `Socket Group: ${groupIndex}\n`;
+    text += `Gem Index: ${gemIndex}\n\n`;
+    text += `Stats have been recalculated. Use lua_get_stats to see updated values.`;
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text,
+        },
+      ],
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to set gem level: ${errorMsg}`);
+  }
+}
+
+export async function handleSetGemQuality(
+  context: ItemSkillHandlerContext,
+  groupIndex: number,
+  gemIndex: number,
+  quality: number,
+  qualityId?: string
+) {
+  try {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized. Use lua_start first.');
+    }
+
+    if (groupIndex < 1) {
+      throw new Error('group_index must be >= 1');
+    }
+
+    if (gemIndex < 1) {
+      throw new Error('gem_index must be >= 1');
+    }
+
+    if (quality < 0 || quality > 23) {
+      throw new Error('quality must be between 0 and 23');
+    }
+
+    await luaClient.setGemQuality({ groupIndex, gemIndex, quality, qualityId });
+
+    let text = "=== Gem Quality Updated ===\n\n";
+    text += `Successfully set gem quality to ${quality}.\n`;
+    text += `Socket Group: ${groupIndex}\n`;
+    text += `Gem Index: ${gemIndex}\n`;
+    if (qualityId && qualityId !== 'Default') {
+      text += `Quality Type: ${qualityId}\n`;
+    }
+    text += `\nStats have been recalculated. Use lua_get_stats to see updated values.`;
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text,
+        },
+      ],
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to set gem quality: ${errorMsg}`);
+  }
+}
+
+export async function handleRemoveSkill(
+  context: ItemSkillHandlerContext,
+  groupIndex: number
+) {
+  try {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized. Use lua_start first.');
+    }
+
+    if (groupIndex < 1) {
+      throw new Error('group_index must be >= 1');
+    }
+
+    await luaClient.removeSkill({ groupIndex });
+
+    let text = "=== Socket Group Removed ===\n\n";
+    text += `Successfully removed socket group ${groupIndex}.\n\n`;
+    text += `Stats have been recalculated. Use lua_get_stats to see updated values.`;
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text,
+        },
+      ],
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to remove socket group: ${errorMsg}`);
+  }
+}
+
+export async function handleRemoveGem(
+  context: ItemSkillHandlerContext,
+  groupIndex: number,
+  gemIndex: number
+) {
+  try {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized. Use lua_start first.');
+    }
+
+    if (groupIndex < 1) {
+      throw new Error('group_index must be >= 1');
+    }
+
+    if (gemIndex < 1) {
+      throw new Error('gem_index must be >= 1');
+    }
+
+    await luaClient.removeGem({ groupIndex, gemIndex });
+
+    let text = "=== Gem Removed ===\n\n";
+    text += `Successfully removed gem from socket group ${groupIndex}.\n`;
+    text += `Gem Index: ${gemIndex}\n\n`;
+    text += `Stats have been recalculated. Use lua_get_stats to see updated values.`;
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text,
+        },
+      ],
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to remove gem: ${errorMsg}`);
+  }
+}

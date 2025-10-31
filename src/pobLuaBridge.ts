@@ -323,6 +323,44 @@ async setTree(params: {
     return res.config;
   }
 
+  async createSocketGroup(params?: { label?: string; slot?: string; enabled?: boolean; includeInFullDPS?: boolean }): Promise<any> {
+    const res = await this.send({ action: "create_socket_group", params: params || {} });
+    if (!res.ok) throw new Error(res.error || "create_socket_group failed");
+    return res.socketGroup;
+  }
+
+  async addGem(params: { groupIndex: number; gemName: string; level?: number; quality?: number; qualityId?: string; enabled?: boolean; count?: number }): Promise<any> {
+    const res = await this.send({ action: "add_gem", params });
+    if (!res.ok) throw new Error(res.error || "add_gem failed");
+    return res.gem;
+  }
+
+  async setGemLevel(params: { groupIndex: number; gemIndex: number; level: number }): Promise<void> {
+    const res = await this.send({ action: "set_gem_level", params });
+    if (!res.ok) throw new Error(res.error || "set_gem_level failed");
+  }
+
+  async setGemQuality(params: { groupIndex: number; gemIndex: number; quality: number; qualityId?: string }): Promise<void> {
+    const res = await this.send({ action: "set_gem_quality", params });
+    if (!res.ok) throw new Error(res.error || "set_gem_quality failed");
+  }
+
+  async removeSkill(params: { groupIndex: number }): Promise<void> {
+    const res = await this.send({ action: "remove_skill", params });
+    if (!res.ok) throw new Error(res.error || "remove_skill failed");
+  }
+
+  async removeGem(params: { groupIndex: number; gemIndex: number }): Promise<void> {
+    const res = await this.send({ action: "remove_gem", params });
+    if (!res.ok) throw new Error(res.error || "remove_gem failed");
+  }
+
+  async searchNodes(params: { keyword: string; nodeType?: string; maxResults?: number; includeAllocated?: boolean }): Promise<any> {
+    const res = await this.send({ action: "search_nodes", params });
+    if (!res.ok) throw new Error(res.error || "search_nodes failed");
+    return res.results;
+  }
+
   async stop(): Promise<void> {
     if (!this.proc) return;
     try {
@@ -547,6 +585,44 @@ export class PoBLuaTcpClient {
   }): Promise<void> {
     const res = await this.send({ action: "set_main_selection", params });
     if (!res.ok) throw new Error(res.error || "set_main_selection failed");
+  }
+
+  async createSocketGroup(params?: { label?: string; slot?: string; enabled?: boolean; includeInFullDPS?: boolean }): Promise<any> {
+    const res = await this.send({ action: "create_socket_group", params: params || {} });
+    if (!res.ok) throw new Error(res.error || "create_socket_group failed");
+    return res.socketGroup;
+  }
+
+  async addGem(params: { groupIndex: number; gemName: string; level?: number; quality?: number; qualityId?: string; enabled?: boolean; count?: number }): Promise<any> {
+    const res = await this.send({ action: "add_gem", params });
+    if (!res.ok) throw new Error(res.error || "add_gem failed");
+    return res.gem;
+  }
+
+  async setGemLevel(params: { groupIndex: number; gemIndex: number; level: number }): Promise<void> {
+    const res = await this.send({ action: "set_gem_level", params });
+    if (!res.ok) throw new Error(res.error || "set_gem_level failed");
+  }
+
+  async setGemQuality(params: { groupIndex: number; gemIndex: number; quality: number; qualityId?: string }): Promise<void> {
+    const res = await this.send({ action: "set_gem_quality", params });
+    if (!res.ok) throw new Error(res.error || "set_gem_quality failed");
+  }
+
+  async removeSkill(params: { groupIndex: number }): Promise<void> {
+    const res = await this.send({ action: "remove_skill", params });
+    if (!res.ok) throw new Error(res.error || "remove_skill failed");
+  }
+
+  async removeGem(params: { groupIndex: number; gemIndex: number }): Promise<void> {
+    const res = await this.send({ action: "remove_gem", params });
+    if (!res.ok) throw new Error(res.error || "remove_gem failed");
+  }
+
+  async searchNodes(params: { keyword: string; nodeType?: string; maxResults?: number; includeAllocated?: boolean }): Promise<any> {
+    const res = await this.send({ action: "search_nodes", params });
+    if (!res.ok) throw new Error(res.error || "search_nodes failed");
+    return res.results;
   }
 
   async stop(): Promise<void> {

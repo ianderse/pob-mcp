@@ -247,3 +247,87 @@ export async function handleLuaSetTree(context: LuaHandlerContext, args: any) {
     throw new Error(`Failed to set tree: ${errorMsg}`);
   }
 }
+
+export async function handleSearchTreeNodes(
+  context: LuaHandlerContext,
+  keyword: string,
+  nodeType?: string,
+  maxResults?: number,
+  includeAllocated?: boolean
+) {
+  try {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized. Use lua_start first.');
+    }
+
+    if (!keyword || keyword.trim().length === 0) {
+      throw new Error('keyword cannot be empty');
+    }
+
+    const results = await luaClient.searchNodes({
+      keyword: keyword.trim(),
+      nodeType,
+      maxResults,
+      includeAllocated,
+    });
+
+    let text = "=== Passive Tree Node Search ===\n\n";
+    text += `Searching for: "${keyword}"\n`;
+    if (nodeType) {
+      text += `Node type filter: ${nodeType}\n`;
+    }
+    text += `\n`;
+
+    if (!results.nodes || results.nodes.length === 0) {
+      text += "No matching nodes found.\n\n";
+      text += "Tips:\n";
+      text += "- Try a shorter or more general keyword\n";
+      text += "- Check spelling\n";
+      text += "- Remove the node type filter to see more results\n";
+    } else {
+      text += `Found ${results.count} matching node${results.count === 1 ? '' : 's'}`;
+      if (results.count >= (maxResults || 50)) {
+        text += ` (limited to ${maxResults || 50} results)`;
+      }
+      text += `:\n\n`;
+
+      for (const node of results.nodes) {
+        const allocatedTag = node.allocated ? " [ALLOCATED]" : "";
+        const typeTag = node.type !== 'normal' ? ` [${node.type.toUpperCase()}]` : "";
+
+        text += `**${node.name}**${typeTag}${allocatedTag}\n`;
+        text += `  Node ID: ${node.id}\n`;
+
+        if (node.ascendancyName) {
+          text += `  Ascendancy: ${node.ascendancyName}\n`;
+        }
+
+        if (node.stats && node.stats.length > 0) {
+          text += `  Stats:\n`;
+          for (const stat of node.stats) {
+            text += `    - ${stat}\n`;
+          }
+        }
+
+        text += `\n`;
+      }
+
+      text += "\nUse these node IDs with lua_set_tree or suggest_optimal_nodes to allocate them.";
+    }
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text,
+        },
+      ],
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to search nodes: ${errorMsg}`);
+  }
+}

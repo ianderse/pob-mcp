@@ -22,13 +22,6 @@ export interface OptimizationHandlerContext {
   pobDirectory: string;
   getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
   ensureLuaClient: () => Promise<void>;
-  // These methods are still in the main server class
-  findNearbyNodes?: any;
-  getTreeData?: any;
-  readBuild?: any;
-  getActiveSpec?: any;
-  parseAllocatedNodes?: any;
-  extractBuildVersion?: any;
 }
 
 export async function handleAnalyzeDefenses(

@@ -105,9 +105,61 @@ export async function handleGetNearbyNodes(
 
     const distance = maxDistance || 3;
 
-    // Find nearby nodes (this would need to be implemented in TreeService)
-    // For now, throw an error
-    throw new Error('get_nearby_nodes needs to be fully implemented in TreeService');
+    // Find nearby nodes using TreeService
+    const nearbyNodes = context.treeService.findNearbyNodes(
+      allocatedNodes,
+      treeData,
+      distance,
+      filter
+    );
+
+    if (nearbyNodes.length === 0) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `No notable or keystone nodes found within ${distance} nodes of your current tree.\n\nTry increasing max_distance or removing the filter.`,
+          },
+        ],
+      };
+    }
+
+    let text = `=== Nearby Nodes (within ${distance} nodes) ===\n\n`;
+    text += `Build: ${buildName}\n`;
+    text += `Found ${nearbyNodes.length} nodes\n\n`;
+
+    // Group by distance
+    const byDistance = new Map<number, typeof nearbyNodes>();
+    for (const node of nearbyNodes) {
+      const existing = byDistance.get(node.distance) || [];
+      existing.push(node);
+      byDistance.set(node.distance, existing);
+    }
+
+    for (const [distance, nodes] of Array.from(byDistance.entries()).sort((a, b) => a[0] - b[0])) {
+      text += `**Distance ${distance}** (${nodes.length} nodes):\n`;
+      for (const { node, nodeId } of nodes.slice(0, 10)) {
+        text += `- ${node.name || 'Unnamed'} [${nodeId}]`;
+        if (node.isKeystone) text += ' (KEYSTONE)';
+        text += '\n';
+        if (node.stats && node.stats.length > 0) {
+          text += `  ${node.stats.slice(0, 2).join('; ')}\n`;
+        }
+      }
+      if (nodes.length > 10) {
+        text += `  ... and ${nodes.length - 10} more\n`;
+      }
+      text += '\n';
+    }
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text,
+        },
+      ],
+    };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     return {
@@ -158,8 +210,77 @@ export async function handleFindPath(
       };
     }
 
-    // This requires findShortestPaths to be implemented in TreeService
-    throw new Error('find_path_to_node needs findShortestPaths to be implemented in TreeService');
+    // Find shortest path(s) using TreeService
+    const paths = context.treeService.findShortestPaths(
+      allocatedNodes,
+      targetNodeId,
+      treeData,
+      showAlternatives ? 3 : 1
+    );
+
+    if (paths.length === 0) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `No path found to node ${targetNodeId} (${targetNode.name || "Unknown"}).\n\nThis node may be unreachable from your current tree (e.g., different class starting area or ascendancy nodes).`,
+          },
+        ],
+      };
+    }
+
+    // Format output
+    let text = `=== Path to ${targetNode.name || "Node " + targetNodeId} ===\n\n`;
+    text += `Build: ${buildName}\n`;
+    text += `Target: ${targetNode.name || "Unknown"} [${targetNodeId}]\n`;
+    if (targetNode.isKeystone) text += `Type: KEYSTONE\n`;
+    else if (targetNode.isNotable) text += `Type: Notable\n`;
+    text += `\n`;
+
+    for (let i = 0; i < paths.length; i++) {
+      const path = paths[i];
+      const pathLabel = paths.length > 1 ? `Path ${i + 1} (Alternative ${i === 0 ? "- Shortest" : i})` : "Shortest Path";
+
+      text += `**${pathLabel}**\n`;
+      text += `Total Cost: ${path.cost} passive points\n`;
+      text += `Nodes to Allocate: ${path.nodes.length}\n\n`;
+
+      text += `Allocation Order:\n`;
+      for (let j = 0; j < path.nodes.length; j++) {
+        const nodeId = path.nodes[j];
+        const node = treeData.nodes.get(nodeId);
+        if (!node) continue;
+
+        const isTarget = nodeId === targetNodeId;
+        const prefix = isTarget ? "→ TARGET: " : `  ${j + 1}. `;
+
+        text += `${prefix}${node.name || "Travel Node"} [${nodeId}]\n`;
+
+        if (node.stats && node.stats.length > 0) {
+          for (const stat of node.stats) {
+            text += `      ${stat}\n`;
+          }
+        } else if (!isTarget) {
+          text += `      (Travel node - no stats)\n`;
+        }
+
+        if (j < path.nodes.length - 1) text += `\n`;
+      }
+
+      if (i < paths.length - 1) text += `\n${"=".repeat(50)}\n\n`;
+    }
+
+    text += `\n**Next Steps:**\n`;
+    text += `Use lua_set_tree to allocate these nodes and recalculate stats.\n`;
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text,
+        },
+      ],
+    };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     return {
