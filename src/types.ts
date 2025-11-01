@@ -322,3 +322,16 @@ export interface FlaskAnalysis {
   warnings: string[];
   recommendations: string[];
 }
+
+// Snapshot Metadata
+export interface SnapshotMetadata {
+  timestamp: string;
+  originalBuild: string;
+  description: string;
+  tag: string;
+  statsSnapshot: {
+    life?: number;
+    dps?: number;
+    allocatedNodes?: number;
+  };
+}
