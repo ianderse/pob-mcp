@@ -49,6 +49,18 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
     summary += `Flask parsing error: ${errorMsg}\n`;
   }
 
+  // Add jewel analysis
+  try {
+    const jewelAnalysis = context.buildService.parseJewels(build);
+    if (jewelAnalysis) {
+      summary += "\n" + context.buildService.formatJewelAnalysis(jewelAnalysis);
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    summary += "\n=== Jewel Setup ===\n\n";
+    summary += `Jewel parsing error: ${errorMsg}\n`;
+  }
+
   // Add tree analysis
   try {
     const treeAnalysis = await context.treeService.analyzePassiveTree(build);

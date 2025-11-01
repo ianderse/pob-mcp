@@ -70,6 +70,17 @@ export interface PoBBuild {
         active?: string | boolean;
         itemId?: string;
       }>;
+      SocketIdURL?: Array<{
+        nodeId?: string;
+        name?: string;
+        itemId?: string;
+        itemPbURL?: string;
+      }> | {
+        nodeId?: string;
+        name?: string;
+        itemId?: string;
+        itemPbURL?: string;
+      };
     };
   };
   Notes?: string;
@@ -198,6 +209,59 @@ export interface AllocationChange {
   type: 'allocate' | 'remove';
   nodeIdentifier: string;
   node?: PassiveTreeNode;
+}
+
+// Jewel System Interfaces
+export interface Jewel {
+  id: string;
+  socketNodeId?: string; // Passive tree node ID where socketed
+  socketName?: string; // e.g., "Jewel 61834"
+  rarity: 'NORMAL' | 'MAGIC' | 'RARE' | 'UNIQUE';
+  name: string;
+  baseType: string;
+  levelRequirement: number;
+  isAbyssJewel: boolean;
+  isClusterJewel: boolean;
+  isTimelessJewel: boolean;
+  mods: string[];
+  // Cluster jewel specific
+  clusterJewelSkill?: string; // e.g., "affliction_lightning_damage"
+  clusterNodeCount?: number; // 8 for large, 4-6 for medium, 2-3 for small
+  clusterNotables?: string[]; // Notable passives granted
+  clusterSmallPassiveBonus?: string; // e.g., "12% increased Lightning Damage"
+  clusterJewelSockets?: number; // Number of jewel sockets it adds
+  // Timeless jewel specific
+  timelessType?: string; // Glorious Vanity, Lethal Pride, etc.
+  timelessConqueror?: string; // Doryani, Xibaqua, etc.
+  timelessSeed?: number; // The number (100-8000)
+  radius?: string; // Small, Medium, Large
+  variant?: string;
+  // Regular jewel
+  prefix?: string;
+  suffix?: string;
+}
+
+export interface JewelAnalysis {
+  totalJewels: number;
+  socketedJewels: number;
+  unsocketedJewels: number;
+  jewelsByType: {
+    regular: number;
+    abyss: number;
+    cluster: number;
+    timeless: number;
+    unique: number;
+  };
+  clusterJewels: {
+    large: number;
+    medium: number;
+    small: number;
+    notables: string[]; // All cluster notables
+  };
+  jewels: Jewel[];
+  socketPlacements: Map<string, string>; // nodeId -> jewel name
+  warnings: string[];
+  recommendations: string[];
 }
 
 // Flask System Interfaces

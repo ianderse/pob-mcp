@@ -1,7 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import fs from "fs/promises";
 import path from "path";
-import type { PoBBuild, CachedBuild, ParsedConfiguration, ConfigInput, ConfigSet, Flask, FlaskAnalysis } from "../types.js";
+import type { PoBBuild, CachedBuild, ParsedConfiguration, ConfigInput, ConfigSet, Flask, FlaskAnalysis, Jewel, JewelAnalysis } from "../types.js";
 
 export class BuildService {
   private parser: XMLParser;
@@ -712,6 +712,371 @@ export class BuildService {
       if (flask.mods.length > 0) {
         output += '  Mods:\n';
         for (const mod of flask.mods) {
+          output += `    - ${mod}\n`;
+        }
+      }
+    }
+
+    // Warnings
+    if (analysis.warnings.length > 0) {
+      output += '\n=== Warnings ===\n';
+      for (const warning of analysis.warnings) {
+        output += `⚠️  ${warning}\n`;
+      }
+    }
+
+    // Recommendations
+    if (analysis.recommendations.length > 0) {
+      output += '\n=== Recommendations ===\n';
+      for (const rec of analysis.recommendations) {
+        output += `💡 ${rec}\n`;
+      }
+    }
+
+    return output;
+  }
+
+  /**
+   * Parse jewels from a PoB build
+   * Extracts all jewels (regular, cluster, timeless, abyss) and their socket placements
+   */
+  parseJewels(build: PoBBuild): JewelAnalysis | null {
+    if (!build.Items?.ItemSet) {
+      return null;
+    }
+
+    const itemSet = build.Items.ItemSet;
+    const slots = itemSet.Slot ? (Array.isArray(itemSet.Slot) ? itemSet.Slot : [itemSet.Slot]) : [];
+    const socketMappings = itemSet.SocketIdURL ? (Array.isArray(itemSet.SocketIdURL) ? itemSet.SocketIdURL : [itemSet.SocketIdURL]) : [];
+
+    // Build a map of itemId -> socket info
+    const socketMap = new Map<string, { nodeId: string; name: string }>();
+    for (const socket of socketMappings) {
+      if (socket.itemId && socket.nodeId) {
+        socketMap.set(socket.itemId, {
+          nodeId: socket.nodeId,
+          name: socket.name || `Jewel ${socket.nodeId}`,
+        });
+      }
+    }
+
+    const jewels: Jewel[] = [];
+    const jewelsByType = {
+      regular: 0,
+      abyss: 0,
+      cluster: 0,
+      timeless: 0,
+      unique: 0,
+    };
+    const clusterJewels = {
+      large: 0,
+      medium: 0,
+      small: 0,
+      notables: [] as string[],
+    };
+
+    // Parse jewels from slots
+    for (const slot of slots) {
+      if (!slot.Item || !slot.name) continue;
+
+      // Check if this is a jewel slot (by item text containing "Jewel")
+      const itemText = slot.Item;
+      if (!itemText.includes('Jewel')) continue;
+
+      const jewel = this.parseJewelItem(itemText, slot.itemId);
+      if (jewel) {
+        // Check if jewel is socketed
+        if (slot.itemId && socketMap.has(slot.itemId)) {
+          const socketInfo = socketMap.get(slot.itemId)!;
+          jewel.socketNodeId = socketInfo.nodeId;
+          jewel.socketName = socketInfo.name;
+        }
+
+        jewels.push(jewel);
+
+        // Categorize
+        if (jewel.isAbyssJewel) jewelsByType.abyss++;
+        else if (jewel.isClusterJewel) jewelsByType.cluster++;
+        else if (jewel.isTimelessJewel) jewelsByType.timeless++;
+        else if (jewel.rarity === 'UNIQUE') jewelsByType.unique++;
+        else jewelsByType.regular++;
+
+        // Track cluster jewel info
+        if (jewel.isClusterJewel) {
+          if (jewel.clusterNodeCount === 8) clusterJewels.large++;
+          else if (jewel.clusterNodeCount && jewel.clusterNodeCount >= 4 && jewel.clusterNodeCount <= 6) clusterJewels.medium++;
+          else if (jewel.clusterNodeCount && jewel.clusterNodeCount >= 2 && jewel.clusterNodeCount <= 3) clusterJewels.small++;
+
+          if (jewel.clusterNotables) {
+            clusterJewels.notables.push(...jewel.clusterNotables);
+          }
+        }
+      }
+    }
+
+    const socketedJewels = jewels.filter(j => j.socketNodeId).length;
+    const unsocketedJewels = jewels.length - socketedJewels;
+
+    // Build socket placement map
+    const socketPlacements = new Map<string, string>();
+    for (const jewel of jewels) {
+      if (jewel.socketNodeId) {
+        socketPlacements.set(jewel.socketNodeId, jewel.name);
+      }
+    }
+
+    // Generate warnings and recommendations
+    const warnings: string[] = [];
+    const recommendations: string[] = [];
+
+    if (unsocketedJewels > 0) {
+      warnings.push(`${unsocketedJewels} jewel(s) not socketed in the tree`);
+    }
+
+    return {
+      totalJewels: jewels.length,
+      socketedJewels,
+      unsocketedJewels,
+      jewelsByType,
+      clusterJewels,
+      jewels,
+      socketPlacements,
+      warnings,
+      recommendations,
+    };
+  }
+
+  private parseJewelItem(itemText: string, itemId?: string): Jewel | null {
+    const lines = itemText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length < 2) return null;
+
+    const rarity = lines[0].replace('Rarity: ', '') as Jewel['rarity'];
+    const name = lines[1];
+    const baseType = lines[2] || name;
+
+    // Detect jewel types
+    const isAbyssJewel = baseType.includes('Abyss Jewel') || name.includes('Abyss');
+    const isClusterJewel = baseType.includes('Cluster Jewel');
+    const isTimelessJewel = baseType.includes('Timeless Jewel');
+
+    // Parse level requirement
+    let levelRequirement = 0;
+    for (const line of lines) {
+      if (line.startsWith('LevelReq:')) {
+        levelRequirement = parseInt(line.replace('LevelReq: ', ''), 10) || 0;
+      }
+    }
+
+    // Parse prefix and suffix
+    let prefix: string | undefined;
+    let suffix: string | undefined;
+
+    for (const line of lines) {
+      if (line.startsWith('Prefix:') && !line.includes('None')) {
+        prefix = line.replace(/Prefix:\s*{[^}]*}/, '').trim();
+      } else if (line.startsWith('Suffix:') && !line.includes('None')) {
+        suffix = line.replace(/Suffix:\s*{[^}]*}/, '').trim();
+      }
+    }
+
+    // Parse cluster jewel specifics
+    let clusterJewelSkill: string | undefined;
+    let clusterNodeCount: number | undefined;
+    let clusterNotables: string[] = [];
+    let clusterSmallPassiveBonus: string | undefined;
+    let clusterJewelSockets: number | undefined;
+
+    if (isClusterJewel) {
+      for (const line of lines) {
+        if (line.startsWith('Cluster Jewel Skill:')) {
+          clusterJewelSkill = line.replace('Cluster Jewel Skill: ', '');
+        } else if (line.startsWith('Cluster Jewel Node Count:')) {
+          clusterNodeCount = parseInt(line.replace('Cluster Jewel Node Count: ', ''), 10);
+        } else if (line.includes('Added Passive Skill is')) {
+          // Extract notable name
+          const match = line.match(/Added Passive Skill is (.+)/);
+          if (match) {
+            clusterNotables.push(match[1]);
+          }
+        } else if (line.includes('Added Small Passive Skills grant:')) {
+          const match = line.match(/Added Small Passive Skills grant: (.+)/);
+          if (match) {
+            clusterSmallPassiveBonus = match[1];
+          }
+        } else if (line.match(/\d+ Added Passive Skills? are Jewel Sockets?/)) {
+          const match = line.match(/(\d+) Added Passive Skills? are Jewel Sockets?/);
+          if (match) {
+            clusterJewelSockets = parseInt(match[1], 10);
+          }
+        }
+      }
+    }
+
+    // Parse timeless jewel specifics
+    let timelessType: string | undefined;
+    let timelessConqueror: string | undefined;
+    let timelessSeed: number | undefined;
+    let radius: string | undefined;
+    let variant: string | undefined;
+
+    if (isTimelessJewel) {
+      timelessType = name;
+
+      for (const line of lines) {
+        if (line.startsWith('Radius:')) {
+          radius = line.replace('Radius: ', '');
+        } else if (line.startsWith('Selected Variant:')) {
+          variant = line.replace('Selected Variant: ', '');
+        } else if (line.includes('Bathed in the blood of')) {
+          // Extract conqueror and seed
+          const match = line.match(/Bathed in the blood of \(?(\d+)-?(\d+)?\)? sacrificed in the name of (\w+)/);
+          if (match) {
+            timelessSeed = parseInt(match[1], 10);
+            timelessConqueror = match[3];
+          }
+        }
+      }
+    }
+
+    // Extract mods
+    const mods: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Skip metadata lines
+      if (
+        line.startsWith('Rarity:') ||
+        line.startsWith('LevelReq:') ||
+        line.startsWith('Implicits:') ||
+        line.startsWith('Crafted:') ||
+        line.startsWith('Prefix:') ||
+        line.startsWith('Suffix:') ||
+        line.startsWith('Cluster Jewel') ||
+        line.startsWith('Variant:') ||
+        line.startsWith('Selected Variant:') ||
+        line.startsWith('Radius:') ||
+        line.startsWith('Limited to:') ||
+        line.startsWith('League:') ||
+        line.startsWith('<ModRange') ||
+        line.includes('{crafted}') ||
+        line.includes('{variant:') ||
+        line.includes('{range:')
+      ) {
+        continue;
+      }
+
+      // Skip item name lines
+      if (i <= 2) continue;
+
+      // This is likely a mod
+      if (line.length > 0 && !line.startsWith('Adds ') && !line.includes('Added Passive')) {
+        mods.push(line);
+      }
+    }
+
+    return {
+      id: itemId || `jewel_${Date.now()}`,
+      rarity,
+      name,
+      baseType,
+      levelRequirement,
+      isAbyssJewel,
+      isClusterJewel,
+      isTimelessJewel,
+      mods,
+      prefix,
+      suffix,
+      clusterJewelSkill,
+      clusterNodeCount,
+      clusterNotables: clusterNotables.length > 0 ? clusterNotables : undefined,
+      clusterSmallPassiveBonus,
+      clusterJewelSockets,
+      timelessType,
+      timelessConqueror,
+      timelessSeed,
+      radius,
+      variant,
+    };
+  }
+
+  /**
+   * Format jewel analysis for display
+   */
+  formatJewelAnalysis(analysis: JewelAnalysis): string {
+    let output = '=== Jewel Setup ===\n\n';
+
+    output += `Total Jewels: ${analysis.totalJewels}\n`;
+    output += `Socketed: ${analysis.socketedJewels}\n`;
+    if (analysis.unsocketedJewels > 0) {
+      output += `Unsocketed: ${analysis.unsocketedJewels}\n`;
+    }
+    output += '\n';
+
+    // Jewel type breakdown
+    output += '=== Jewel Types ===\n';
+    if (analysis.jewelsByType.regular > 0) output += `Regular: ${analysis.jewelsByType.regular}\n`;
+    if (analysis.jewelsByType.abyss > 0) output += `Abyss: ${analysis.jewelsByType.abyss}\n`;
+    if (analysis.jewelsByType.cluster > 0) output += `Cluster: ${analysis.jewelsByType.cluster}\n`;
+    if (analysis.jewelsByType.timeless > 0) output += `Timeless: ${analysis.jewelsByType.timeless}\n`;
+    if (analysis.jewelsByType.unique > 0) output += `Unique: ${analysis.jewelsByType.unique}\n`;
+    output += '\n';
+
+    // Cluster jewel breakdown
+    if (analysis.jewelsByType.cluster > 0) {
+      output += '=== Cluster Jewels ===\n';
+      if (analysis.clusterJewels.large > 0) output += `Large: ${analysis.clusterJewels.large}\n`;
+      if (analysis.clusterJewels.medium > 0) output += `Medium: ${analysis.clusterJewels.medium}\n`;
+      if (analysis.clusterJewels.small > 0) output += `Small: ${analysis.clusterJewels.small}\n`;
+
+      if (analysis.clusterJewels.notables.length > 0) {
+        output += '\nCluster Notables:\n';
+        for (const notable of analysis.clusterJewels.notables) {
+          output += `  - ${notable}\n`;
+        }
+      }
+      output += '\n';
+    }
+
+    // Individual jewels
+    output += '=== Jewel Details ===\n';
+    for (const jewel of analysis.jewels) {
+      output += `\n${jewel.name}`;
+      if (jewel.socketNodeId) {
+        output += ` [Socketed: ${jewel.socketName}]`;
+      } else {
+        output += ' [Not Socketed]';
+      }
+      output += '\n';
+
+      output += `  Base: ${jewel.baseType}\n`;
+      output += `  Rarity: ${jewel.rarity}`;
+      if (jewel.levelRequirement > 0) output += ` | Level: ${jewel.levelRequirement}`;
+      output += '\n';
+
+      // Cluster jewel info
+      if (jewel.isClusterJewel) {
+        if (jewel.clusterNodeCount) output += `  Passives: ${jewel.clusterNodeCount}\n`;
+        if (jewel.clusterJewelSockets) output += `  Jewel Sockets: ${jewel.clusterJewelSockets}\n`;
+        if (jewel.clusterSmallPassiveBonus) output += `  Small Passive: ${jewel.clusterSmallPassiveBonus}\n`;
+        if (jewel.clusterNotables && jewel.clusterNotables.length > 0) {
+          output += `  Notables: ${jewel.clusterNotables.join(', ')}\n`;
+        }
+      }
+
+      // Timeless jewel info
+      if (jewel.isTimelessJewel) {
+        if (jewel.timelessConqueror) output += `  Conqueror: ${jewel.timelessConqueror}\n`;
+        if (jewel.timelessSeed) output += `  Seed: ${jewel.timelessSeed}\n`;
+        if (jewel.radius) output += `  Radius: ${jewel.radius}\n`;
+      }
+
+      // Regular jewel prefix/suffix
+      if (jewel.prefix) output += `  Prefix: ${jewel.prefix}\n`;
+      if (jewel.suffix) output += `  Suffix: ${jewel.suffix}\n`;
+
+      if (jewel.mods.length > 0) {
+        output += '  Mods:\n';
+        for (const mod of jewel.mods) {
           output += `    - ${mod}\n`;
         }
       }

@@ -1005,6 +1005,270 @@ Diamond Flask`,
     });
   });
 
+  describe('parseJewels', () => {
+    it('should return null if build has no items', () => {
+      const build = { Build: {} };
+      const jewels = buildService.parseJewels(build);
+      expect(jewels).toBeNull();
+    });
+
+    it('should parse regular jewel', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              {
+                name: 'Jewel 1',
+                itemId: '1',
+                Item: `Rarity: RARE
+New Item
+Cobalt Jewel
+Prefix: {range:1}PercentIncreasedLifeJewel
+Suffix: {range:1}AttackSpeedJewel
+LevelReq: 0
+7% increased maximum Life
+4% increased Attack Speed`,
+              },
+            ],
+          },
+        },
+      };
+
+      const jewels = buildService.parseJewels(build);
+      expect(jewels).not.toBeNull();
+      expect(jewels?.totalJewels).toBe(1);
+      expect(jewels?.jewelsByType.regular).toBe(1);
+      expect(jewels?.jewels[0].name).toBe('New Item');
+      expect(jewels?.jewels[0].baseType).toBe('Cobalt Jewel');
+      expect(jewels?.jewels[0].mods).toContain('7% increased maximum Life');
+    });
+
+    it('should parse large cluster jewel with notables', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              {
+                name: 'Jewel 1',
+                Item: `Rarity: RARE
+New Item
+Large Cluster Jewel
+Cluster Jewel Skill: affliction_lightning_damage
+Cluster Jewel Node Count: 8
+LevelReq: 60
+Implicits: 3
+{crafted}Adds 8 Passive Skills
+{crafted}2 Added Passive Skills are Jewel Sockets
+{crafted}Added Small Passive Skills grant: 12% increased Lightning Damage
+1 Added Passive Skill is Corrosive Elements
+1 Added Passive Skill is Storm Drinker`,
+              },
+            ],
+          },
+        },
+      };
+
+      const jewels = buildService.parseJewels(build);
+      expect(jewels?.jewelsByType.cluster).toBe(1);
+      expect(jewels?.clusterJewels.large).toBe(1);
+      expect(jewels?.jewels[0].isClusterJewel).toBe(true);
+      expect(jewels?.jewels[0].clusterNodeCount).toBe(8);
+      expect(jewels?.jewels[0].clusterJewelSockets).toBe(2);
+      expect(jewels?.jewels[0].clusterSmallPassiveBonus).toBe('12% increased Lightning Damage');
+      expect(jewels?.jewels[0].clusterNotables).toContain('Corrosive Elements');
+      expect(jewels?.jewels[0].clusterNotables).toContain('Storm Drinker');
+    });
+
+    it('should parse timeless jewel', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              {
+                name: 'Jewel 1',
+                Item: `Rarity: UNIQUE
+Glorious Vanity
+Timeless Jewel
+Selected Variant: 1
+LevelReq: 20
+Radius: Large
+Bathed in the blood of 4500 sacrificed in the name of Doryani
+Passives in radius are Conquered by the Vaal`,
+              },
+            ],
+          },
+        },
+      };
+
+      const jewels = buildService.parseJewels(build);
+      expect(jewels?.jewelsByType.timeless).toBe(1);
+      expect(jewels?.jewels[0].isTimelessJewel).toBe(true);
+      expect(jewels?.jewels[0].timelessType).toBe('Glorious Vanity');
+      expect(jewels?.jewels[0].timelessConqueror).toBe('Doryani');
+      expect(jewels?.jewels[0].timelessSeed).toBe(4500);
+      expect(jewels?.jewels[0].radius).toBe('Large');
+    });
+
+    it('should detect socketed vs unsocketed jewels', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              { name: 'Jewel 1', itemId: '1', Item: 'Rarity: RARE\nJewel 1\nCobalt Jewel' },
+              { name: 'Jewel 2', itemId: '2', Item: 'Rarity: RARE\nJewel 2\nCobalt Jewel' },
+            ],
+            SocketIdURL: [
+              { nodeId: '61834', name: 'Jewel 61834', itemId: '1' },
+            ],
+          },
+        },
+      };
+
+      const jewels = buildService.parseJewels(build);
+      expect(jewels?.totalJewels).toBe(2);
+      expect(jewels?.socketedJewels).toBe(1);
+      expect(jewels?.unsocketedJewels).toBe(1);
+      expect(jewels?.jewels[0].socketNodeId).toBe('61834');
+      expect(jewels?.jewels[1].socketNodeId).toBeUndefined();
+    });
+
+    it('should categorize medium cluster jewel', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              {
+                name: 'Jewel 1',
+                Item: `Rarity: RARE
+Medium Cluster Jewel
+Medium Cluster Jewel
+Cluster Jewel Node Count: 5
+1 Added Passive Skill is Seal Mender`,
+              },
+            ],
+          },
+        },
+      };
+
+      const jewels = buildService.parseJewels(build);
+      expect(jewels?.clusterJewels.medium).toBe(1);
+      expect(jewels?.jewels[0].clusterNodeCount).toBe(5);
+    });
+
+    it('should categorize small cluster jewel', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              {
+                name: 'Jewel 1',
+                Item: `Rarity: RARE
+Small Cluster Jewel
+Small Cluster Jewel
+Cluster Jewel Node Count: 2`,
+              },
+            ],
+          },
+        },
+      };
+
+      const jewels = buildService.parseJewels(build);
+      expect(jewels?.clusterJewels.small).toBe(1);
+    });
+
+    it('should warn about unsocketed jewels', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              { name: 'Jewel 1', Item: 'Rarity: RARE\nJewel\nCobalt Jewel' },
+            ],
+          },
+        },
+      };
+
+      const jewels = buildService.parseJewels(build);
+      expect(jewels?.warnings).toContain('1 jewel(s) not socketed in the tree');
+    });
+
+    it('should handle unique jewels', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              {
+                name: 'Jewel 1',
+                Item: `Rarity: UNIQUE
+Watcher's Eye
+Prismatic Jewel
+LevelReq: 68
+6% increased maximum Life`,
+              },
+            ],
+          },
+        },
+      };
+
+      const jewels = buildService.parseJewels(build);
+      expect(jewels?.jewelsByType.unique).toBe(1);
+      expect(jewels?.jewels[0].rarity).toBe('UNIQUE');
+    });
+  });
+
+  describe('formatJewelAnalysis', () => {
+    it('should format jewel analysis output', () => {
+      const analysis = {
+        totalJewels: 2,
+        socketedJewels: 1,
+        unsocketedJewels: 1,
+        jewelsByType: {
+          regular: 1,
+          abyss: 0,
+          cluster: 1,
+          timeless: 0,
+          unique: 0,
+        },
+        clusterJewels: {
+          large: 1,
+          medium: 0,
+          small: 0,
+          notables: ['Storm Drinker'],
+        },
+        jewels: [
+          {
+            id: '1',
+            socketNodeId: '61834',
+            socketName: 'Jewel 61834',
+            rarity: 'RARE' as const,
+            name: 'Lightning Cluster',
+            baseType: 'Large Cluster Jewel',
+            levelRequirement: 60,
+            isAbyssJewel: false,
+            isClusterJewel: true,
+            isTimelessJewel: false,
+            mods: [],
+            clusterNodeCount: 8,
+            clusterNotables: ['Storm Drinker'],
+          },
+        ],
+        socketPlacements: new Map([['61834', 'Lightning Cluster']]),
+        warnings: ['1 jewel(s) not socketed in the tree'],
+        recommendations: [],
+      };
+
+      const formatted = buildService.formatJewelAnalysis(analysis);
+      expect(formatted).toContain('Total Jewels: 2');
+      expect(formatted).toContain('Socketed: 1');
+      expect(formatted).toContain('Unsocketed: 1');
+      expect(formatted).toContain('Regular: 1');
+      expect(formatted).toContain('Cluster: 1');
+      expect(formatted).toContain('Large: 1');
+      expect(formatted).toContain('Storm Drinker');
+      expect(formatted).toContain('[Socketed: Jewel 61834]');
+      expect(formatted).toContain('⚠️  1 jewel(s) not socketed');
+    });
+  });
+
   describe('cache management', () => {
     const sampleBuild = `<?xml version="1.0" encoding="UTF-8"?>
 <PathOfBuilding>
