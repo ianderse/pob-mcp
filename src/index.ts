@@ -63,6 +63,10 @@ import type {
 // Import utilities
 import { ContextBuilder } from "./utils/contextBuilder.js";
 
+// Import server modules
+import { ToolGate } from "./server/toolGate.js";
+import { LuaClientManager } from "./server/luaClientManager.js";
+
 // Import handlers
 import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats } from "./handlers/buildHandlers.js";
 import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handleWatchStatus, handleRefreshTreeData } from "./handlers/watchHandlers.js";
@@ -85,6 +89,10 @@ class PoBMCPServer {
   // Context builder
   private contextBuilder: ContextBuilder;
 
+  // Server modules
+  private toolGate: ToolGate;
+  private luaClientManager: LuaClientManager;
+
   // Legacy properties (still used by methods not yet refactored)
   private watcher: ReturnType<typeof chokidar.watch> | null = null;
   private buildCache: Map<string, CachedBuild> = new Map();
@@ -92,39 +100,6 @@ class PoBMCPServer {
   private recentChanges: Array<{file: string; timestamp: number; type: string}> = [];
   private watchEnabled: boolean = false;
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
-
-  // PoB Lua Bridge
-  private luaClient: PoBLuaApiClient | PoBLuaTcpClient | null = null;
-  private luaEnabled: boolean = false;
-  private useTcpMode: boolean = false;
-
-  // Manual gate to prevent tool chaining - requires explicit "continue" command
-  private toolGateLocked: boolean = false;
-  private lastToolCalled: string = '';
-  private readonly HIGH_IMPACT_TOOLS = [
-    'optimize_tree',
-    'suggest_optimal_nodes',
-    'search_tree_nodes',
-    'analyze_build',
-    'compare_trees',
-    'add_gem',
-    'add_item',
-    'create_socket_group',
-    'lua_set_tree',
-    'lua_new_build',
-    'lua_load_build',
-    'allocate_nodes',
-    'analyze_defenses',
-    'analyze_items',
-    'optimize_skill_links',
-    'create_budget_build',
-    'get_nearby_nodes',
-    'find_path_to_node',
-    'plan_tree',
-    'test_allocation',
-    'setup_skill_with_gems',
-    'add_multiple_items'
-  ];
 
   constructor() {
     this.server = new Server(
@@ -159,9 +134,12 @@ class PoBMCPServer {
     this.treeService = new TreeService(this.buildService);
     this.watchService = new WatchService(this.pobDirectory, this.buildService);
 
-    // Check if Lua bridge is enabled
-    this.luaEnabled = process.env.POB_LUA_ENABLED === 'true';
-    this.useTcpMode = process.env.POB_API_TCP === 'true';
+    // Initialize server modules
+    this.toolGate = new ToolGate();
+
+    const luaEnabled = process.env.POB_LUA_ENABLED === 'true';
+    const useTcpMode = process.env.POB_API_TCP === 'true';
+    this.luaClientManager = new LuaClientManager(luaEnabled, useTcpMode);
 
     // Initialize context builder
     this.contextBuilder = new ContextBuilder({
@@ -169,16 +147,16 @@ class PoBMCPServer {
       treeService: this.treeService,
       watchService: this.watchService,
       pobDirectory: this.pobDirectory,
-      luaEnabled: this.luaEnabled,
-      useTcpMode: this.useTcpMode,
-      getLuaClient: () => this.luaClient,
-      ensureLuaClient: () => this.ensureLuaClient(),
-      stopLuaClient: () => this.stopLuaClient(),
+      luaEnabled: luaEnabled,
+      useTcpMode: useTcpMode,
+      getLuaClient: () => this.luaClientManager.getClient(),
+      ensureLuaClient: () => this.luaClientManager.ensureClient(),
+      stopLuaClient: () => this.luaClientManager.stopClient(),
     });
 
-    if (this.luaEnabled) {
+    if (luaEnabled) {
       console.error('[MCP Server] PoB Lua Bridge enabled');
-      if (this.useTcpMode) {
+      if (useTcpMode) {
         console.error('[MCP Server] Using TCP mode for GUI integration');
       } else {
         console.error('[MCP Server] Using stdio mode for headless integration');
@@ -211,116 +189,19 @@ class PoBMCPServer {
 
     process.on("SIGINT", async () => {
       await this.watchService.stopWatching();
-      await this.stopLuaClient();
+      await this.luaClientManager.stopClient();
       await this.server.close();
       process.exit(0);
     });
   }
 
-  // Manual gate check - blocks all tools after one is used until "continue" is called
+  // Delegate to tool gate module
   private checkToolGate(toolName: string): void {
-    // Skip gate for non-high-impact tools and the continue tool itself
-    if (!this.HIGH_IMPACT_TOOLS.includes(toolName)) {
-      return;
-    }
-
-    // If gate is locked, block the tool call
-    if (this.toolGateLocked) {
-      throw new Error(
-        `🚫 TOOL GATE LOCKED 🚫\n\n` +
-        `The tool gate is locked after the previous tool call: "${this.lastToolCalled}"\n\n` +
-        `You MUST stop making tool calls and ask the user what to do next.\n\n` +
-        `DO NOT call any more tools. Instead:\n` +
-        `1. Tell the user what you just did\n` +
-        `2. Show them the results\n` +
-        `3. Ask what they want to do next\n` +
-        `4. Wait for their response\n\n` +
-        `The user can unlock this by saying "continue" or making a new request.`
-      );
-    }
-
-    // Lock the gate after this tool executes
-    this.toolGateLocked = true;
-    this.lastToolCalled = toolName;
+    this.toolGate.checkGate(toolName);
   }
 
-  // Unlock the tool gate (called by continue tool or on new conversations)
   private unlockToolGate(): void {
-    this.toolGateLocked = false;
-    this.lastToolCalled = '';
-  }
-
-  // Lua Bridge Methods
-  private async ensureLuaClient(): Promise<void> {
-    if (!this.luaEnabled) {
-      throw new Error('PoB Lua Bridge is not enabled. Set POB_LUA_ENABLED=true to use lua_* tools.');
-    }
-
-    if (this.luaClient) {
-      return; // Already initialized
-    }
-
-    console.error('[Lua Bridge] Initializing client...');
-
-    try {
-      if (this.useTcpMode) {
-        const tcpClient = new PoBLuaTcpClient({
-          host: process.env.POB_API_TCP_HOST,
-          port: process.env.POB_API_TCP_PORT ? parseInt(process.env.POB_API_TCP_PORT) : undefined,
-          timeoutMs: process.env.POB_TIMEOUT_MS ? parseInt(process.env.POB_TIMEOUT_MS) : undefined,
-        });
-        await tcpClient.start();
-        this.luaClient = tcpClient;
-      } else {
-        const stdioClient = new PoBLuaApiClient({
-          cwd: process.env.POB_FORK_PATH,
-          cmd: process.env.POB_CMD,
-          args: process.env.POB_ARGS ? [process.env.POB_ARGS] : undefined,
-          timeoutMs: process.env.POB_TIMEOUT_MS ? parseInt(process.env.POB_TIMEOUT_MS) : undefined,
-        });
-        await stdioClient.start();
-        this.luaClient = stdioClient;
-      }
-
-      console.error('[Lua Bridge] Client initialized successfully');
-
-      // Wait for HeadlessWrapper to be fully ready (loadBuildFromXML available)
-      console.error('[Lua Bridge] Waiting for HeadlessWrapper to finish loading...');
-      const testXml = '<?xml version="1.0" encoding="UTF-8"?><PathOfBuilding><Build level="1" className="Witch"/></PathOfBuilding>';
-      let attempts = 0;
-      const maxAttempts = 5;
-
-      while (attempts < maxAttempts) {
-        try {
-          await this.luaClient.loadBuildXml(testXml, 'Init Test');
-          console.error('[Lua Bridge] HeadlessWrapper fully initialized');
-          break;
-        } catch (loadError) {
-          attempts++;
-          if (attempts >= maxAttempts) {
-            throw new Error(`HeadlessWrapper did not initialize after ${maxAttempts} attempts. Error: ${loadError instanceof Error ? loadError.message : String(loadError)}`);
-          }
-          console.error(`[Lua Bridge] HeadlessWrapper not ready (attempt ${attempts}/${maxAttempts}), waiting 2s...`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error('[Lua Bridge] Failed to initialize:', errorMsg);
-      throw new Error(`Failed to start PoB Lua Bridge: ${errorMsg}`);
-    }
-  }
-
-  private async stopLuaClient(): Promise<void> {
-    if (this.luaClient) {
-      console.error('[Lua Bridge] Stopping client...');
-      try {
-        await this.luaClient.stop();
-      } catch (error) {
-        console.error('[Lua Bridge] Error stopping client:', error);
-      }
-      this.luaClient = null;
-    }
+    this.toolGate.unlock();
   }
 
   // Tree Data Fetching
@@ -718,7 +599,7 @@ class PoBMCPServer {
       ];
 
       // Add lua_* tools if enabled
-      if (this.luaEnabled) {
+      if (this.luaClientManager.isEnabled()) {
         tools.push(
           {
             name: "lua_start",
@@ -1534,8 +1415,8 @@ class PoBMCPServer {
           case "analyze_items":
             const advancedOptContext = {
               buildService: this.buildService,
-              getLuaClient: () => this.luaClient,
-              ensureLuaClient: () => this.ensureLuaClient(),
+              getLuaClient: () => this.luaClientManager.getClient(),
+              ensureLuaClient: () => this.luaClientManager.ensureClient(),
             };
             return this.wrapWithTruncation(
               await handleAnalyzeItems(
@@ -1547,8 +1428,8 @@ class PoBMCPServer {
           case "optimize_skill_links":
             const skillLinkContext = {
               buildService: this.buildService,
-              getLuaClient: () => this.luaClient,
-              ensureLuaClient: () => this.ensureLuaClient(),
+              getLuaClient: () => this.luaClientManager.getClient(),
+              ensureLuaClient: () => this.luaClientManager.ensureClient(),
             };
             return this.wrapWithTruncation(
               await handleOptimizeSkillLinks(
@@ -1561,8 +1442,8 @@ class PoBMCPServer {
             if (!args) throw new Error("Missing arguments");
             const budgetBuildContext = {
               buildService: this.buildService,
-              getLuaClient: () => this.luaClient,
-              ensureLuaClient: () => this.ensureLuaClient(),
+              getLuaClient: () => this.luaClientManager.getClient(),
+              ensureLuaClient: () => this.luaClientManager.ensureClient(),
             };
             return this.wrapWithTruncation(
               await handleCreateBudgetBuild(
