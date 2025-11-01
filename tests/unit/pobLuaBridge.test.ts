@@ -379,14 +379,26 @@ describe('PoBLuaApiClient', () => {
       await expect(client.ping()).rejects.toThrow(/PoB API exited/);
     });
 
-    it('should handle invalid JSON response', async () => {
+    it('should skip non-JSON lines and wait for valid response', async () => {
       await client.start();
       mockProcess = mockSpawn.getLastProcess()!;
 
-      // Send invalid JSON
-      mockProcess.stdout.emit('data', 'not json\n');
+      // Override processRequest to send non-JSON first, then valid JSON
+      const originalProcessRequest = mockProcess['processRequest'].bind(mockProcess);
+      let firstCall = true;
+      mockProcess['processRequest'] = (request: any) => {
+        if (firstCall) {
+          firstCall = false;
+          // Send some non-JSON lines first
+          mockProcess.stdout.emit('data', 'Loading modules...\n');
+          mockProcess.stdout.emit('data', 'Initializing...\n');
+        }
+        // Then send actual response
+        originalProcessRequest(request);
+      };
 
-      await expect(client.ping()).rejects.toThrow(/Invalid JSON/);
+      const result = await client.ping();
+      expect(result).toBe(true);
     });
 
     it('should handle timeout', async () => {
