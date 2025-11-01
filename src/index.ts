@@ -43,6 +43,7 @@ import {
 import { BuildService } from "./services/buildService.js";
 import { TreeService } from "./services/treeService.js";
 import { WatchService } from "./services/watchService.js";
+import { ValidationService } from "./services/validationService.js";
 
 // Import types
 import type {
@@ -83,6 +84,7 @@ class PoBMCPServer {
   private buildService: BuildService;
   private treeService: TreeService;
   private watchService: WatchService;
+  private validationService: ValidationService;
 
   // Context builder
   private contextBuilder: ContextBuilder;
@@ -123,6 +125,7 @@ class PoBMCPServer {
     this.buildService = new BuildService(this.pobDirectory);
     this.treeService = new TreeService(this.buildService);
     this.watchService = new WatchService(this.pobDirectory, this.buildService);
+    this.validationService = new ValidationService();
 
     // Initialize server modules
     this.toolGate = new ToolGate();
@@ -136,6 +139,7 @@ class PoBMCPServer {
       buildService: this.buildService,
       treeService: this.treeService,
       watchService: this.watchService,
+      validationService: this.validationService,
       pobDirectory: this.pobDirectory,
       luaEnabled: luaEnabled,
       useTcpMode: useTcpMode,

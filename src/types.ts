@@ -264,6 +264,29 @@ export interface JewelAnalysis {
   recommendations: string[];
 }
 
+// Build Validation Interfaces
+export type ValidationSeverity = 'critical' | 'warning' | 'info';
+
+export interface ValidationIssue {
+  severity: ValidationSeverity;
+  category: 'resistances' | 'defenses' | 'immunities' | 'mana' | 'accuracy' | 'general';
+  title: string;
+  description: string;
+  currentValue?: string | number;
+  recommendedValue?: string | number;
+  suggestions: string[];
+  location?: string; // e.g., "Gear", "Passive Tree", "Flasks"
+}
+
+export interface BuildValidation {
+  isValid: boolean;
+  overallScore: number; // 0-10
+  criticalIssues: ValidationIssue[];
+  warnings: ValidationIssue[];
+  recommendations: ValidationIssue[];
+  summary: string;
+}
+
 // Flask System Interfaces
 export interface Flask {
   id: string;

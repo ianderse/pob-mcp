@@ -8,6 +8,7 @@
 import type { BuildService } from '../services/buildService.js';
 import type { TreeService } from '../services/treeService.js';
 import type { WatchService } from '../services/watchService.js';
+import type { ValidationService } from '../services/validationService.js';
 import type { PoBLuaApiClient, PoBLuaTcpClient } from '../pobLuaBridge.js';
 
 /**
@@ -16,6 +17,7 @@ import type { PoBLuaApiClient, PoBLuaTcpClient } from '../pobLuaBridge.js';
 export interface HandlerContext {
   buildService: BuildService;
   treeService: TreeService;
+  validationService: ValidationService;
 }
 
 /**
@@ -65,6 +67,7 @@ export interface ContextDependencies {
   buildService: BuildService;
   treeService: TreeService;
   watchService: WatchService;
+  validationService: ValidationService;
   pobDirectory: string;
   luaEnabled: boolean;
   useTcpMode: boolean;
@@ -86,6 +89,7 @@ export class ContextBuilder {
     return {
       buildService: this.deps.buildService,
       treeService: this.deps.treeService,
+      validationService: this.deps.validationService,
     };
   }
 
@@ -107,6 +111,7 @@ export class ContextBuilder {
     return {
       buildService: this.deps.buildService,
       treeService: this.deps.treeService,
+      validationService: this.deps.validationService,
     };
   }
 

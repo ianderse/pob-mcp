@@ -6,12 +6,14 @@ import type { ContextDependencies } from '../src/utils/contextBuilder';
 const mockBuildService = {} as any;
 const mockTreeService = {} as any;
 const mockWatchService = {} as any;
+const mockValidationService = {} as any;
 const mockLuaClient = {} as any;
 
 const mockDeps: ContextDependencies = {
   buildService: mockBuildService,
   treeService: mockTreeService,
   watchService: mockWatchService,
+  validationService: mockValidationService,
   pobDirectory: '/test/pob',
   luaEnabled: true,
   useTcpMode: false,
@@ -24,12 +26,13 @@ describe('ContextBuilder', () => {
   const builder = new ContextBuilder(mockDeps);
 
   describe('buildHandlerContext', () => {
-    it('should return context with buildService and treeService', () => {
+    it('should return context with buildService, treeService, and validationService', () => {
       const context = builder.buildHandlerContext();
 
       expect(context.buildService).toBe(mockBuildService);
       expect(context.treeService).toBe(mockTreeService);
-      expect(Object.keys(context)).toHaveLength(2);
+      expect(context.validationService).toBe(mockValidationService);
+      expect(Object.keys(context)).toHaveLength(3);
     });
   });
 
@@ -45,12 +48,13 @@ describe('ContextBuilder', () => {
   });
 
   describe('buildTreeContext', () => {
-    it('should return context with buildService and treeService', () => {
+    it('should return context with buildService, treeService, and validationService', () => {
       const context = builder.buildTreeContext();
 
       expect(context.buildService).toBe(mockBuildService);
       expect(context.treeService).toBe(mockTreeService);
-      expect(Object.keys(context)).toHaveLength(2);
+      expect(context.validationService).toBe(mockValidationService);
+      expect(Object.keys(context)).toHaveLength(3);
     });
   });
 

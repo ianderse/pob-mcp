@@ -1,10 +1,12 @@
 import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
+import type { ValidationService } from "../services/validationService.js";
 import type { TreeAnalysisResult } from "../types.js";
 
 export interface HandlerContext {
   buildService: BuildService;
   treeService: TreeService;
+  validationService: ValidationService;
 }
 
 export async function handleListBuilds(context: HandlerContext) {
@@ -87,6 +89,17 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
       summary += `Passive tree analysis unavailable: ${errorMsg}\n`;
       summary += "Other build sections are still available above.\n";
     }
+  }
+
+  // Add build validation (at the end, after all data sections)
+  try {
+    const flaskAnalysis = context.buildService.parseFlasks(build);
+    const validation = context.validationService.validateBuild(build, flaskAnalysis);
+    summary += "\n" + context.validationService.formatValidation(validation);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    summary += "\n=== Build Validation ===\n\n";
+    summary += `Validation error: ${errorMsg}\n`;
   }
 
   return {
