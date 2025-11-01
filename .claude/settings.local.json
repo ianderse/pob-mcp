@@ -13,7 +13,15 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(npm test:*)",
-      "Bash(npm run test:coverage:*)"
+      "Bash(npm run test:coverage:*)",
+      "WebSearch",
+      "WebFetch(domain:www.pathofexile.com)",
+      "Bash(find:*)",
+      "Bash(awk:*)",
+      "Bash(test:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Read(//Users/ianderse/Path of Building/Builds/3.27/**)"
     ],
     "deny": [],
     "ask": []

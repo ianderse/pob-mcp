@@ -1,7 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import fs from "fs/promises";
 import path from "path";
-import type { PoBBuild, CachedBuild } from "../types.js";
+import type { PoBBuild, CachedBuild, ParsedConfiguration, ConfigInput, ConfigSet } from "../types.js";
 
 export class BuildService {
   private parser: XMLParser;
@@ -199,5 +199,213 @@ export class BuildService {
 
   invalidateBuild(buildName: string): void {
     this.buildCache.delete(buildName);
+  }
+
+  /**
+   * Parse configuration state from a PoB build
+   * Extracts active config set, charges, conditions, enemy settings, and multipliers
+   */
+  parseConfiguration(build: PoBBuild): ParsedConfiguration | null {
+    if (!build.Config) {
+      return null;
+    }
+
+    const activeConfigSetId = build.Config.activeConfigSet || "1";
+
+    // Get the active ConfigSet
+    let activeConfigSet: ConfigSet | undefined;
+    if (Array.isArray(build.Config.ConfigSet)) {
+      activeConfigSet = build.Config.ConfigSet.find(cs => cs.id === activeConfigSetId) || build.Config.ConfigSet[0];
+    } else {
+      activeConfigSet = build.Config.ConfigSet;
+    }
+
+    if (!activeConfigSet) {
+      return null;
+    }
+
+    const activeConfigSetTitle = activeConfigSet.title || "Default";
+
+    // Normalize inputs to array
+    const inputs = activeConfigSet.Input ?
+      (Array.isArray(activeConfigSet.Input) ? activeConfigSet.Input : [activeConfigSet.Input]) : [];
+
+    const placeholders = activeConfigSet.Placeholder ?
+      (Array.isArray(activeConfigSet.Placeholder) ? activeConfigSet.Placeholder : [activeConfigSet.Placeholder]) : [];
+
+    // Combine all inputs
+    const allInputsArray = [...inputs, ...placeholders];
+    const allInputs = new Map<string, ConfigInput>();
+
+    for (const input of allInputsArray) {
+      allInputs.set(input.name, input);
+    }
+
+    // Parse charge usage
+    const chargeUsage = {
+      powerCharges: this.getBooleanInput(allInputs, 'usePowerCharges'),
+      frenzyCharges: this.getBooleanInput(allInputs, 'useFrenzyCharges'),
+      enduranceCharges: this.getBooleanInput(allInputs, 'useEnduranceCharges'),
+    };
+
+    // Parse conditions (all keys starting with "condition")
+    const conditions: { [key: string]: boolean } = {};
+    for (const [name, input] of allInputs) {
+      if (name.startsWith('condition') && input.boolean !== undefined) {
+        conditions[name] = this.parseBoolean(input.boolean);
+      }
+    }
+
+    // Parse custom mods
+    const customMods = this.getStringInput(allInputs, 'customMods');
+
+    // Parse enemy settings
+    const enemySettings: ParsedConfiguration['enemySettings'] = {
+      level: this.getNumberInput(allInputs, 'enemyLevel'),
+      lightningResist: this.getNumberInput(allInputs, 'enemyLightningResist'),
+      coldResist: this.getNumberInput(allInputs, 'enemyColdResist'),
+      fireResist: this.getNumberInput(allInputs, 'enemyFireResist'),
+      chaosResist: this.getNumberInput(allInputs, 'enemyChaosResist'),
+      armour: this.getNumberInput(allInputs, 'enemyArmour'),
+      evasion: this.getNumberInput(allInputs, 'enemyEvasion'),
+    };
+
+    // Add all enemy-related settings
+    for (const [name, input] of allInputs) {
+      if (name.startsWith('enemy') && !enemySettings[name]) {
+        enemySettings[name] = this.getInputValue(input);
+      }
+    }
+
+    // Parse multipliers (all keys starting with "multiplier")
+    const multipliers: { [key: string]: number } = {};
+    for (const [name, input] of allInputs) {
+      if (name.startsWith('multiplier') && input.number !== undefined) {
+        const num = this.parseNumber(input.number);
+        if (num !== undefined) {
+          multipliers[name] = num;
+        }
+      }
+    }
+
+    // Parse bandit choice
+    const bandit = this.getStringInput(allInputs, 'bandit') ||
+                   build.Build?.bandit;
+
+    return {
+      activeConfigSetId,
+      activeConfigSetTitle,
+      chargeUsage,
+      conditions,
+      customMods,
+      enemySettings,
+      multipliers,
+      bandit,
+      allInputs,
+    };
+  }
+
+  private parseBoolean(value: string | boolean | undefined): boolean {
+    if (value === undefined) return false;
+    if (typeof value === 'boolean') return value;
+    return value === 'true';
+  }
+
+  private parseNumber(value: string | number | undefined): number | undefined {
+    if (value === undefined) return undefined;
+    if (typeof value === 'number') return value;
+    const num = parseFloat(value);
+    return isNaN(num) ? undefined : num;
+  }
+
+  private getInputValue(input: ConfigInput): any {
+    if (input.boolean !== undefined) return this.parseBoolean(input.boolean);
+    if (input.number !== undefined) return this.parseNumber(input.number);
+    if (input.string !== undefined) return input.string;
+    return undefined;
+  }
+
+  private getBooleanInput(inputs: Map<string, ConfigInput>, name: string): boolean {
+    const input = inputs.get(name);
+    if (!input) return false;
+    return this.parseBoolean(input.boolean);
+  }
+
+  private getStringInput(inputs: Map<string, ConfigInput>, name: string): string {
+    const input = inputs.get(name);
+    if (!input || input.string === undefined) return '';
+    return input.string;
+  }
+
+  private getNumberInput(inputs: Map<string, ConfigInput>, name: string): number | undefined {
+    const input = inputs.get(name);
+    if (!input) return undefined;
+    return this.parseNumber(input.number);
+  }
+
+  /**
+   * Format configuration for display
+   */
+  formatConfiguration(config: ParsedConfiguration): string {
+    let output = `=== Configuration: ${config.activeConfigSetTitle} ===\n\n`;
+
+    // Charges
+    output += "=== Charges ===\n";
+    output += `Power Charges: ${config.chargeUsage.powerCharges ? 'Active' : 'Inactive'}\n`;
+    output += `Frenzy Charges: ${config.chargeUsage.frenzyCharges ? 'Active' : 'Inactive'}\n`;
+    output += `Endurance Charges: ${config.chargeUsage.enduranceCharges ? 'Active' : 'Inactive'}\n\n`;
+
+    // Conditions
+    if (Object.keys(config.conditions).length > 0) {
+      output += "=== Active Conditions ===\n";
+      for (const [name, value] of Object.entries(config.conditions)) {
+        if (value) {
+          // Format condition name to be more readable
+          const readable = name
+            .replace('condition', '')
+            .replace(/([A-Z])/g, ' $1')
+            .trim();
+          output += `✓ ${readable}\n`;
+        }
+      }
+      output += "\n";
+    }
+
+    // Enemy Settings
+    output += "=== Enemy Settings ===\n";
+    if (config.enemySettings.level) output += `Level: ${config.enemySettings.level}\n`;
+    if (config.enemySettings.fireResist !== undefined) output += `Fire Resist: ${config.enemySettings.fireResist}%\n`;
+    if (config.enemySettings.coldResist !== undefined) output += `Cold Resist: ${config.enemySettings.coldResist}%\n`;
+    if (config.enemySettings.lightningResist !== undefined) output += `Lightning Resist: ${config.enemySettings.lightningResist}%\n`;
+    if (config.enemySettings.chaosResist !== undefined) output += `Chaos Resist: ${config.enemySettings.chaosResist}%\n`;
+    if (config.enemySettings.armour) output += `Armour: ${config.enemySettings.armour}\n`;
+    if (config.enemySettings.evasion) output += `Evasion: ${config.enemySettings.evasion}\n`;
+    output += "\n";
+
+    // Multipliers
+    if (Object.keys(config.multipliers).length > 0) {
+      output += "=== Multipliers ===\n";
+      for (const [name, value] of Object.entries(config.multipliers)) {
+        const readable = name
+          .replace('multiplier', '')
+          .replace(/([A-Z])/g, ' $1')
+          .trim();
+        output += `${readable}: ${value}\n`;
+      }
+      output += "\n";
+    }
+
+    // Custom Mods
+    if (config.customMods) {
+      output += "=== Custom Mods ===\n";
+      output += config.customMods + "\n\n";
+    }
+
+    // Bandit
+    if (config.bandit) {
+      output += `=== Bandit Choice ===\n${config.bandit}\n\n`;
+    }
+
+    return output;
   }
 }

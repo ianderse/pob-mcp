@@ -380,6 +380,290 @@ describe('BuildService', () => {
     });
   });
 
+  describe('parseConfiguration', () => {
+    it('should return null if build has no config', () => {
+      const build = { Build: {} };
+      const config = buildService.parseConfiguration(build);
+      expect(config).toBeNull();
+    });
+
+    it('should parse basic configuration with charges', () => {
+      const build = {
+        Config: {
+          activeConfigSet: '1',
+          ConfigSet: {
+            id: '1',
+            title: 'Default',
+            Input: [
+              { name: 'usePowerCharges', boolean: 'true' },
+              { name: 'useFrenzyCharges', boolean: 'true' },
+              { name: 'useEnduranceCharges', boolean: 'false' },
+            ],
+          },
+        },
+      };
+
+      const config = buildService.parseConfiguration(build);
+      expect(config).not.toBeNull();
+      expect(config?.activeConfigSetTitle).toBe('Default');
+      expect(config?.chargeUsage.powerCharges).toBe(true);
+      expect(config?.chargeUsage.frenzyCharges).toBe(true);
+      expect(config?.chargeUsage.enduranceCharges).toBe(false);
+    });
+
+    it('should parse conditions', () => {
+      const build = {
+        Config: {
+          ConfigSet: {
+            Input: [
+              { name: 'conditionEnemyShocked', boolean: 'true' },
+              { name: 'conditionEnemyChilled', boolean: 'true' },
+              { name: 'conditionFullLife', boolean: 'false' },
+            ],
+          },
+        },
+      };
+
+      const config = buildService.parseConfiguration(build);
+      expect(config?.conditions.conditionEnemyShocked).toBe(true);
+      expect(config?.conditions.conditionEnemyChilled).toBe(true);
+      expect(config?.conditions.conditionFullLife).toBe(false);
+    });
+
+    it('should parse enemy settings', () => {
+      const build = {
+        Config: {
+          ConfigSet: {
+            Placeholder: [
+              { name: 'enemyLevel', number: '84' },
+              { name: 'enemyLightningResist', number: '50' },
+              { name: 'enemyFireResist', number: '50' },
+              { name: 'enemyArmour', number: '20000' },
+            ],
+          },
+        },
+      };
+
+      const config = buildService.parseConfiguration(build);
+      expect(config?.enemySettings.level).toBe(84);
+      expect(config?.enemySettings.lightningResist).toBe(50);
+      expect(config?.enemySettings.fireResist).toBe(50);
+      expect(config?.enemySettings.armour).toBe(20000);
+    });
+
+    it('should parse multipliers', () => {
+      const build = {
+        Config: {
+          ConfigSet: {
+            Input: [
+              { name: 'multiplierRage', number: '30' },
+              { name: 'multiplierWitheredStackCountSelf', number: '15' },
+            ],
+          },
+        },
+      };
+
+      const config = buildService.parseConfiguration(build);
+      expect(config?.multipliers.multiplierRage).toBe(30);
+      expect(config?.multipliers.multiplierWitheredStackCountSelf).toBe(15);
+    });
+
+    it('should parse custom mods', () => {
+      const build = {
+        Config: {
+          ConfigSet: {
+            Input: {
+              name: 'customMods',
+              string: '20% increased effect of herald buffs\n50% more damage',
+            },
+          },
+        },
+      };
+
+      const config = buildService.parseConfiguration(build);
+      expect(config?.customMods).toContain('herald buffs');
+      expect(config?.customMods).toContain('50% more damage');
+    });
+
+    it('should parse bandit choice from config', () => {
+      const build = {
+        Config: {
+          ConfigSet: {
+            Input: {
+              name: 'bandit',
+              string: 'Alira',
+            },
+          },
+        },
+      };
+
+      const config = buildService.parseConfiguration(build);
+      expect(config?.bandit).toBe('Alira');
+    });
+
+    it('should fallback to build bandit if not in config', () => {
+      const build = {
+        Build: {
+          bandit: 'Oak',
+        },
+        Config: {
+          ConfigSet: {
+            Input: [],
+          },
+        },
+      };
+
+      const config = buildService.parseConfiguration(build);
+      expect(config?.bandit).toBe('Oak');
+    });
+
+    it('should handle single Input instead of array', () => {
+      const build = {
+        Config: {
+          ConfigSet: {
+            Input: { name: 'usePowerCharges', boolean: 'true' },
+          },
+        },
+      };
+
+      const config = buildService.parseConfiguration(build);
+      expect(config?.chargeUsage.powerCharges).toBe(true);
+    });
+
+    it('should handle multiple ConfigSets and use active one', () => {
+      const build = {
+        Config: {
+          activeConfigSet: '2',
+          ConfigSet: [
+            {
+              id: '1',
+              title: 'Config 1',
+              Input: { name: 'usePowerCharges', boolean: 'false' },
+            },
+            {
+              id: '2',
+              title: 'Config 2',
+              Input: { name: 'usePowerCharges', boolean: 'true' },
+            },
+          ],
+        },
+      };
+
+      const config = buildService.parseConfiguration(build);
+      expect(config?.activeConfigSetId).toBe('2');
+      expect(config?.activeConfigSetTitle).toBe('Config 2');
+      expect(config?.chargeUsage.powerCharges).toBe(true);
+    });
+
+    it('should parse boolean attributes correctly', () => {
+      const build = {
+        Config: {
+          ConfigSet: {
+            Input: [
+              { name: 'test1', boolean: true },
+              { name: 'test2', boolean: 'true' },
+              { name: 'test3', boolean: false },
+              { name: 'test4', boolean: 'false' },
+            ],
+          },
+        },
+      };
+
+      const config = buildService.parseConfiguration(build);
+      const test1 = config?.allInputs.get('test1');
+      const test2 = config?.allInputs.get('test2');
+      const test3 = config?.allInputs.get('test3');
+      const test4 = config?.allInputs.get('test4');
+
+      expect(test1?.boolean).toBe(true);
+      expect(test2?.boolean).toBe('true');
+      expect(test3?.boolean).toBe(false);
+      expect(test4?.boolean).toBe('false');
+    });
+
+    it('should parse number attributes correctly', () => {
+      const build = {
+        Config: {
+          ConfigSet: {
+            Input: [
+              { name: 'test1', number: 42 },
+              { name: 'test2', number: '50' },
+            ],
+          },
+        },
+      };
+
+      const config = buildService.parseConfiguration(build);
+      const test1 = config?.allInputs.get('test1');
+      const test2 = config?.allInputs.get('test2');
+
+      expect(test1?.number).toBe(42);
+      expect(test2?.number).toBe('50');
+    });
+  });
+
+  describe('formatConfiguration', () => {
+    it('should format configuration output', () => {
+      const config = {
+        activeConfigSetId: '1',
+        activeConfigSetTitle: 'Boss DPS',
+        chargeUsage: {
+          powerCharges: true,
+          frenzyCharges: true,
+          enduranceCharges: false,
+        },
+        conditions: {
+          conditionEnemyShocked: true,
+        },
+        customMods: '20% increased damage',
+        enemySettings: {
+          level: 84,
+          lightningResist: 50,
+        },
+        multipliers: {
+          multiplierRage: 30,
+        },
+        bandit: 'Alira',
+        allInputs: new Map(),
+      };
+
+      const formatted = buildService.formatConfiguration(config);
+      expect(formatted).toContain('Boss DPS');
+      expect(formatted).toContain('Power Charges: Active');
+      expect(formatted).toContain('Frenzy Charges: Active');
+      expect(formatted).toContain('Endurance Charges: Inactive');
+      expect(formatted).toContain('Enemy Shocked'); // Formatted from "conditionEnemyShocked"
+      expect(formatted).toContain('Level: 84');
+      expect(formatted).toContain('Lightning Resist: 50%');
+      expect(formatted).toContain('Rage: 30');
+      expect(formatted).toContain('20% increased damage');
+      expect(formatted).toContain('Alira');
+    });
+
+    it('should handle empty configuration sections', () => {
+      const config = {
+        activeConfigSetId: '1',
+        activeConfigSetTitle: 'Default',
+        chargeUsage: {
+          powerCharges: false,
+          frenzyCharges: false,
+          enduranceCharges: false,
+        },
+        conditions: {},
+        customMods: '',
+        enemySettings: {},
+        multipliers: {},
+        allInputs: new Map(),
+      };
+
+      const formatted = buildService.formatConfiguration(config);
+      expect(formatted).toContain('Default');
+      expect(formatted).toContain('Power Charges: Inactive');
+      // Should not crash on empty sections
+      expect(formatted).toBeDefined();
+    });
+  });
+
   describe('cache management', () => {
     const sampleBuild = `<?xml version="1.0" encoding="UTF-8"?>
 <PathOfBuilding>

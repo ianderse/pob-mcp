@@ -25,6 +25,18 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
   const build = await context.buildService.readBuild(buildName);
   let summary = context.buildService.generateBuildSummary(build);
 
+  // Add configuration analysis
+  try {
+    const config = context.buildService.parseConfiguration(build);
+    if (config) {
+      summary += "\n" + context.buildService.formatConfiguration(config);
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    summary += "\n=== Configuration ===\n\n";
+    summary += `Configuration parsing error: ${errorMsg}\n`;
+  }
+
   // Add tree analysis
   try {
     const treeAnalysis = await context.treeService.analyzePassiveTree(build);

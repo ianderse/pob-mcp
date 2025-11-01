@@ -37,6 +37,7 @@ export interface PoBBuild {
     level?: string;
     className?: string;
     ascendClassName?: string;
+    bandit?: string;
     PlayerStat?: Array<{stat: string; value: string}> | {stat: string; value: string};
   };
   Tree?: {
@@ -70,6 +71,55 @@ export interface PoBBuild {
     };
   };
   Notes?: string;
+  Config?: {
+    activeConfigSet?: string;
+    ConfigSet?: ConfigSet | ConfigSet[];
+  };
+}
+
+// Configuration State Interfaces
+export interface ConfigInput {
+  name: string;
+  // XML attributes - only one will be present per input
+  boolean?: string | boolean;
+  number?: string | number;
+  string?: string;
+}
+
+export interface ConfigSet {
+  id?: string;
+  title?: string;
+  Input?: ConfigInput | ConfigInput[];
+  Placeholder?: ConfigInput | ConfigInput[];
+}
+
+export interface ParsedConfiguration {
+  activeConfigSetId: string;
+  activeConfigSetTitle: string;
+  chargeUsage: {
+    powerCharges: boolean;
+    frenzyCharges: boolean;
+    enduranceCharges: boolean;
+  };
+  conditions: {
+    [key: string]: boolean;
+  };
+  customMods: string;
+  enemySettings: {
+    level?: number;
+    lightningResist?: number;
+    coldResist?: number;
+    fireResist?: number;
+    chaosResist?: number;
+    armour?: number;
+    evasion?: number;
+    [key: string]: any;
+  };
+  multipliers: {
+    [key: string]: number;
+  };
+  bandit?: string;
+  allInputs: Map<string, ConfigInput>;
 }
 
 // Build cache entry interface
