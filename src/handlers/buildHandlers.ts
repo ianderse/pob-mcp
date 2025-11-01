@@ -37,6 +37,18 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
     summary += `Configuration parsing error: ${errorMsg}\n`;
   }
 
+  // Add flask analysis
+  try {
+    const flaskAnalysis = context.buildService.parseFlasks(build);
+    if (flaskAnalysis) {
+      summary += "\n" + context.buildService.formatFlaskAnalysis(flaskAnalysis);
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    summary += "\n=== Flask Setup ===\n\n";
+    summary += `Flask parsing error: ${errorMsg}\n`;
+  }
+
   // Add tree analysis
   try {
     const treeAnalysis = await context.treeService.analyzePassiveTree(build);

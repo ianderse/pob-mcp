@@ -67,6 +67,8 @@ export interface PoBBuild {
       Slot?: Array<{
         name?: string;
         Item?: string;
+        active?: string | boolean;
+        itemId?: string;
       }>;
     };
   };
@@ -196,4 +198,40 @@ export interface AllocationChange {
   type: 'allocate' | 'remove';
   nodeIdentifier: string;
   node?: PassiveTreeNode;
+}
+
+// Flask System Interfaces
+export interface Flask {
+  id: string;
+  slotNumber: number; // 1-5
+  isActive: boolean;
+  rarity: 'NORMAL' | 'MAGIC' | 'RARE' | 'UNIQUE';
+  name: string;
+  baseType: string;
+  quality: number;
+  levelRequirement: number;
+  prefix?: string;
+  suffix?: string;
+  mods: string[];
+  isUnique: boolean;
+  variant?: string;
+}
+
+export interface FlaskAnalysis {
+  totalFlasks: number;
+  activeFlasks: number;
+  flasks: Flask[];
+  flaskTypes: {
+    life: number;
+    mana: number;
+    hybrid: number;
+    utility: number;
+  };
+  hasBleedImmunity: boolean;
+  hasFreezeImmunity: boolean;
+  hasPoisonImmunity: boolean;
+  hasCurseImmunity: boolean;
+  uniqueFlasks: string[];
+  warnings: string[];
+  recommendations: string[];
 }

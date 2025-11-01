@@ -664,6 +664,347 @@ describe('BuildService', () => {
     });
   });
 
+  describe('parseFlasks', () => {
+    it('should return null if build has no items', () => {
+      const build = { Build: {} };
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks).toBeNull();
+    });
+
+    it('should parse basic flask setup', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              {
+                name: 'Flask 1',
+                active: 'true',
+                Item: `Rarity: MAGIC
+Surgeon's Diamond Flask of Rupturing
+Diamond Flask
+Crafted: true
+Quality: 20
+LevelReq: 64
+35% chance to gain a Flask Charge when you deal a Critical Strike
+40% increased Critical Strike Chance during Effect`,
+              },
+              {
+                name: 'Flask 2',
+                Item: `Rarity: MAGIC
+Quicksilver Flask
+Quicksilver Flask
+Quality: 20
+LevelReq: 4`,
+              },
+            ],
+          },
+        },
+      };
+
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks).not.toBeNull();
+      expect(flasks?.totalFlasks).toBe(2);
+      expect(flasks?.activeFlasks).toBe(1);
+      expect(flasks?.flasks[0].name).toBe("Surgeon's Diamond Flask of Rupturing");
+      expect(flasks?.flasks[0].isActive).toBe(true);
+      expect(flasks?.flasks[0].quality).toBe(20);
+      expect(flasks?.flasks[1].isActive).toBe(false);
+    });
+
+    it('should categorize flask types correctly', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              { name: 'Flask 1', Item: 'Rarity: MAGIC\nDivine Life Flask\nDivine Life Flask' },
+              { name: 'Flask 2', Item: 'Rarity: MAGIC\nEternal Mana Flask\nEternal Mana Flask' },
+              { name: 'Flask 3', Item: 'Rarity: MAGIC\nQuicksilver Flask\nQuicksilver Flask' },
+            ],
+          },
+        },
+      };
+
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks?.flaskTypes.life).toBe(1);
+      expect(flasks?.flaskTypes.mana).toBe(1);
+      expect(flasks?.flaskTypes.utility).toBe(1);
+    });
+
+    it('should detect bleed immunity', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              {
+                name: 'Flask 1',
+                Item: `Rarity: MAGIC
+Divine Life Flask of Staunching
+Divine Life Flask
+Grants Immunity to Bleeding for 4 seconds if used while Bleeding`,
+              },
+            ],
+          },
+        },
+      };
+
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks?.hasBleedImmunity).toBe(true);
+    });
+
+    it('should detect freeze immunity', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              {
+                name: 'Flask 1',
+                Item: `Rarity: MAGIC
+Quicksilver Flask of Heat
+Quicksilver Flask
+Grants Immunity to Freeze and Chill for 5 seconds if used while Frozen`,
+              },
+            ],
+          },
+        },
+      };
+
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks?.hasFreezeImmunity).toBe(true);
+    });
+
+    it('should detect corrupted blood immunity', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              {
+                name: 'Flask 1',
+                Item: `Rarity: MAGIC
+Life Flask of Alleviation
+Divine Life Flask
+Grants Immunity to Corrupted Blood for 11 seconds if used while affected by Corrupted Blood`,
+              },
+            ],
+          },
+        },
+      };
+
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks?.hasBleedImmunity).toBe(true);
+    });
+
+    it('should detect unique flasks', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              {
+                name: 'Flask 1',
+                Item: `Rarity: UNIQUE
+Dying Sun
+Ruby Flask
+Quality: 20`,
+              },
+            ],
+          },
+        },
+      };
+
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks?.uniqueFlasks).toContain('Dying Sun');
+      expect(flasks?.flasks[0].isUnique).toBe(true);
+    });
+
+    it('should warn about missing flask slots', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              { name: 'Flask 1', Item: 'Rarity: MAGIC\nLife Flask\nLife Flask' },
+              { name: 'Flask 2', Item: 'Rarity: MAGIC\nQuicksilver Flask\nQuicksilver Flask' },
+            ],
+          },
+        },
+      };
+
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks?.warnings).toContain('Only 2/5 flask slots filled');
+    });
+
+    it('should warn about no life flask', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              { name: 'Flask 1', Item: 'Rarity: MAGIC\nQuicksilver Flask\nQuicksilver Flask' },
+            ],
+          },
+        },
+      };
+
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks?.warnings).toContain('No life flask equipped - risky for recovery');
+    });
+
+    it('should recommend bleed immunity if missing', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              { name: 'Flask 1', Item: 'Rarity: MAGIC\nLife Flask\nLife Flask' },
+            ],
+          },
+        },
+      };
+
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks?.recommendations.some(r => r.includes('bleed'))).toBe(true);
+    });
+
+    it('should recommend freeze immunity if missing', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              { name: 'Flask 1', Item: 'Rarity: MAGIC\nLife Flask\nLife Flask' },
+            ],
+          },
+        },
+      };
+
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks?.recommendations.some(r => r.includes('freeze'))).toBe(true);
+    });
+
+    it('should parse prefix and suffix', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              {
+                name: 'Flask 1',
+                Item: `Rarity: MAGIC
+Surgeon's Diamond Flask of Rupturing
+Diamond Flask
+Prefix: {range:1}FlaskChanceRechargeOnCrit5
+Suffix: {range:0.306}FlaskBuffCriticalChanceWhileHealing3
+35% chance to gain a Flask Charge when you deal a Critical Strike
+40% increased Critical Strike Chance during Effect`,
+              },
+            ],
+          },
+        },
+      };
+
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks?.flasks[0].prefix).toBe('FlaskChanceRechargeOnCrit5');
+      expect(flasks?.flasks[0].suffix).toBe('FlaskBuffCriticalChanceWhileHealing3');
+    });
+
+    it('should extract base flask type from magic name', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              {
+                name: 'Flask 1',
+                Item: `Rarity: MAGIC
+Surgeon's Diamond Flask of Rupturing
+Diamond Flask`,
+              },
+            ],
+          },
+        },
+      };
+
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks?.flasks[0].baseType).toBe('Diamond Flask');
+    });
+
+    it('should handle empty flask slots gracefully', () => {
+      const build = {
+        Items: {
+          ItemSet: {
+            Slot: [
+              { name: 'Weapon 1', Item: 'Some weapon' },
+              { name: 'Flask 1' }, // Empty flask slot
+            ],
+          },
+        },
+      };
+
+      const flasks = buildService.parseFlasks(build);
+      expect(flasks?.totalFlasks).toBe(0);
+      expect(flasks?.warnings).toContain('No flasks equipped');
+    });
+  });
+
+  describe('formatFlaskAnalysis', () => {
+    it('should format flask analysis output', () => {
+      const analysis = {
+        totalFlasks: 3,
+        activeFlasks: 1,
+        flasks: [
+          {
+            id: 'flask_1',
+            slotNumber: 1,
+            isActive: true,
+            rarity: 'MAGIC' as const,
+            name: 'Diamond Flask',
+            baseType: 'Diamond Flask',
+            quality: 20,
+            levelRequirement: 64,
+            mods: ['40% increased Critical Strike Chance during Effect'],
+            isUnique: false,
+          },
+        ],
+        flaskTypes: {
+          life: 0,
+          mana: 0,
+          hybrid: 0,
+          utility: 3,
+        },
+        hasBleedImmunity: false,
+        hasFreezeImmunity: true,
+        hasPoisonImmunity: false,
+        hasCurseImmunity: false,
+        uniqueFlasks: [],
+        warnings: ['No life flask equipped - risky for recovery'],
+        recommendations: ['Add bleed immunity'],
+      };
+
+      const formatted = buildService.formatFlaskAnalysis(analysis);
+      expect(formatted).toContain('Flasks Equipped: 3/5');
+      expect(formatted).toContain('Active in Config: 1');
+      expect(formatted).toContain('Utility Flasks: 3');
+      expect(formatted).toContain('Bleed/Corrupted Blood: ✗');
+      expect(formatted).toContain('Freeze/Chill: ✓');
+      expect(formatted).toContain('Flask 1: Diamond Flask [ACTIVE]');
+      expect(formatted).toContain('⚠️  No life flask equipped');
+      expect(formatted).toContain('💡 Add bleed immunity');
+    });
+
+    it('should handle empty flask analysis', () => {
+      const analysis = {
+        totalFlasks: 0,
+        activeFlasks: 0,
+        flasks: [],
+        flaskTypes: { life: 0, mana: 0, hybrid: 0, utility: 0 },
+        hasBleedImmunity: false,
+        hasFreezeImmunity: false,
+        hasPoisonImmunity: false,
+        hasCurseImmunity: false,
+        uniqueFlasks: [],
+        warnings: [],
+        recommendations: [],
+      };
+
+      const formatted = buildService.formatFlaskAnalysis(analysis);
+      expect(formatted).toContain('Flasks Equipped: 0/5');
+      expect(formatted).toBeDefined();
+    });
+  });
+
   describe('cache management', () => {
     const sampleBuild = `<?xml version="1.0" encoding="UTF-8"?>
 <PathOfBuilding>
