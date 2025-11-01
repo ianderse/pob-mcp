@@ -30,7 +30,11 @@ export async function handleAddItem(
     text += `Item: ${result.name || 'Unknown'}\n`;
     text += `Item ID: ${result.id}\n`;
     text += `Slot: ${result.slot || 'Not equipped'}\n\n`;
-    text += `Stats have been recalculated. Use lua_get_stats to see updated values.`;
+    text += `⚠️ **STOP HERE** ⚠️\n\n`;
+    text += `Do NOT add more items automatically. Ask the user if they want to:\n`;
+    text += `- Add another item\n`;
+    text += `- View stats with lua_get_stats\n`;
+    text += `- View all items with lua_get_items`;
 
     return {
       content: [
@@ -270,7 +274,8 @@ export async function handleCreateSocketGroup(
     }
     text += `Enabled: ${enabled !== false ? 'Yes' : 'No'}\n`;
     text += `Contributes to Full DPS: ${includeInFullDPS === true ? 'Yes' : 'No'}\n\n`;
-    text += `Use lua_add_gem to add gems to this socket group.`;
+    text += `⚠️ **STOP HERE** ⚠️\n\n`;
+    text += `Do NOT automatically add gems. Ask the user which gems they want to add to this socket group.`;
 
     return {
       content: [
@@ -330,7 +335,11 @@ export async function handleAddGem(
       text += `Quality Type: ${qualityId}\n`;
     }
     text += `Enabled: ${enabled !== false ? 'Yes' : 'No'}\n\n`;
-    text += `Stats have been recalculated. Use lua_get_stats to see updated values.`;
+    text += `⚠️ **STOP HERE** ⚠️\n\n`;
+    text += `Do NOT add more gems automatically. Ask the user if they want to:\n`;
+    text += `- Add another gem to this socket group\n`;
+    text += `- View the current setup with lua_get_skill_setup\n`;
+    text += `- Check stats with lua_get_stats`;
 
     return {
       content: [

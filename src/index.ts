@@ -91,6 +91,17 @@ class PoBMCPServer {
   private luaEnabled: boolean = false;
   private useTcpMode: boolean = false;
 
+  // Manual gate to prevent tool chaining - requires explicit "continue" command
+  private toolGateLocked: boolean = false;
+  private lastToolCalled: string = '';
+  private readonly HIGH_IMPACT_TOOLS = [
+    'optimize_tree',
+    'suggest_optimal_nodes',
+    'search_tree_nodes',
+    'analyze_build',
+    'compare_trees'
+  ];
+
   constructor() {
     this.server = new Server(
       {
@@ -144,12 +155,62 @@ class PoBMCPServer {
       console.error("[MCP Error]", error);
     };
 
+    // Handle EPIPE errors (broken pipe) gracefully
+    process.stdout.on('error', (err: any) => {
+      if (err.code === 'EPIPE') {
+        // Client disconnected, exit gracefully
+        process.exit(0);
+      } else {
+        console.error('stdout error:', err);
+      }
+    });
+
+    process.stderr.on('error', (err: any) => {
+      if (err.code === 'EPIPE') {
+        // Client disconnected, exit gracefully
+        process.exit(0);
+      }
+    });
+
     process.on("SIGINT", async () => {
       await this.watchService.stopWatching();
       await this.stopLuaClient();
       await this.server.close();
       process.exit(0);
     });
+  }
+
+  // Manual gate check - blocks all tools after one is used until "continue" is called
+  private checkToolGate(toolName: string): void {
+    // Skip gate for non-high-impact tools and the continue tool itself
+    if (!this.HIGH_IMPACT_TOOLS.includes(toolName)) {
+      return;
+    }
+
+    // If gate is locked, block the tool call
+    if (this.toolGateLocked) {
+      throw new Error(
+        `🚫 TOOL GATE LOCKED 🚫\n\n` +
+        `The tool gate is locked after the previous tool call: "${this.lastToolCalled}"\n\n` +
+        `You MUST stop making tool calls and ask the user what to do next.\n\n` +
+        `DO NOT call any more tools. Instead:\n` +
+        `1. Tell the user what you just did\n` +
+        `2. Show them the results\n` +
+        `3. Ask what they want to do next\n` +
+        `4. Wait for their response\n\n` +
+        `The user can unlock this by saying "continue" or making a new request.`
+      );
+    }
+
+    // Lock the gate after this tool executes
+    this.toolGateLocked = true;
+    this.lastToolCalled = toolName;
+  }
+
+  // Unlock the tool gate (called by continue tool or on new conversations)
+  private unlockToolGate(): void {
+    this.toolGateLocked = false;
+    this.lastToolCalled = '';
   }
 
   // Lua Bridge Methods
@@ -383,6 +444,15 @@ class PoBMCPServer {
     // List available tools
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       const tools: any[] = [
+        {
+          name: "continue",
+          description: "Unlock the tool gate to allow calling more tools. The server locks after EVERY tool call to prevent automatic chaining. You MUST call this first before any other tool if the gate is locked. This tool exists to force you to pause and ask the user what they want before proceeding.",
+          inputSchema: {
+            type: "object",
+            properties: {},
+            required: [],
+          },
+        },
         {
           name: "analyze_build",
           description: "Analyze a Path of Building build file and extract detailed information including stats, skills, gear, passive skill tree analysis with keystones, notables, jewel sockets, build archetype detection, and optimization suggestions",
@@ -756,7 +826,7 @@ class PoBMCPServer {
               properties: {
                 item_text: {
                   type: "string",
-                  description: "Item text in Path of Exile format (Rarity, name, mods, etc.)",
+                  description: "Item text in Path of Exile format with proper newlines. Each line must be separated by \\n. Example: \"Rarity: Rare\\nImbued Wand\\nAdds 1 to 85 Lightning Damage\\n26% increased Attack Speed\\n35% increased Critical Strike Chance\" - Note the \\n between each line.",
                 },
                 slot_name: {
                   type: "string",
@@ -1072,6 +1142,9 @@ class PoBMCPServer {
       const { name, arguments: args } = request.params;
 
       try {
+        // Check tool gate first
+        this.checkToolGate(name);
+
         // Create handler contexts
         const handlerContext = {
           buildService: this.buildService,
@@ -1112,6 +1185,17 @@ class PoBMCPServer {
         };
 
         switch (name) {
+          case "continue":
+            this.unlockToolGate();
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: "✅ Tool gate unlocked. You may now call ONE more tool.\n\nRemember: The gate will lock again after the next tool call, so use it wisely and then ask the user what to do next.",
+                },
+              ],
+            };
+
           case "list_builds":
             return await handleListBuilds(handlerContext);
 
