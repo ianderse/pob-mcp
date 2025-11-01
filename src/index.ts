@@ -65,7 +65,7 @@ import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBui
 import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handleWatchStatus, handleRefreshTreeData } from "./handlers/watchHandlers.js";
 import { handleCompareTrees, handleTestAllocation, handleGetNearbyNodes, handleFindPath, handleAllocateNodes, handlePlanTree } from "./handlers/treeHandlers.js";
 import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaLoadBuild, handleLuaGetStats, handleLuaGetTree, handleLuaSetTree, handleSearchTreeNodes } from "./handlers/luaHandlers.js";
-import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem } from "./handlers/itemSkillHandlers.js";
+import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems } from "./handlers/itemSkillHandlers.js";
 import { handleAnalyzeDefenses, handleSuggestOptimalNodes, handleOptimizeTree } from "./handlers/optimizationHandlers.js";
 
 class PoBMCPServer {
@@ -99,7 +99,14 @@ class PoBMCPServer {
     'suggest_optimal_nodes',
     'search_tree_nodes',
     'analyze_build',
-    'compare_trees'
+    'compare_trees',
+    'add_gem',
+    'add_item',
+    'create_socket_group',
+    'lua_set_tree',
+    'lua_new_build',
+    'lua_load_build',
+    'allocate_nodes'
   ];
 
   constructor() {
@@ -701,7 +708,7 @@ class PoBMCPServer {
           },
           {
             name: "lua_new_build",
-            description: "Create a new empty build in the PoB headless session. This creates a blank build that you can then populate with items, skills, and passive tree selections.\n\nIMPORTANT: After calling this tool, STOP and ask the user what they want to do next. Suggest logical next steps like:\n- Use lua_set_tree to set class/ascendancy and allocate passive nodes\n- Use create_socket_group to add skill socket groups\n- Use search_tree_nodes to find relevant passive nodes\nDO NOT chain multiple tools together. Wait for user confirmation between each major step.",
+            description: "Create a new empty build in the PoB headless session.",
             inputSchema: {
               type: "object",
               properties: {},
@@ -754,7 +761,7 @@ class PoBMCPServer {
           },
           {
             name: "lua_set_tree",
-            description: "Set the passive tree in PoB (class, ascendancy, allocated nodes, mastery effects). This will recalculate all stats based on the new tree.\n\nIMPORTANT: After setting the tree, STOP and ask the user what they want to do next. Suggest:\n- Use lua_get_stats to see the updated build stats\n- Use search_tree_nodes to find more nodes to allocate\n- Use suggest_optimal_nodes to get AI-powered node recommendations\n- Move on to configuring skills or items\nDO NOT automatically chain multiple operations.",
+            description: "Set the passive tree in PoB (class, ascendancy, allocated nodes, mastery effects). This will recalculate all stats based on the new tree.",
             inputSchema: {
               type: "object",
               properties: {
@@ -789,7 +796,7 @@ class PoBMCPServer {
           },
           {
             name: "search_tree_nodes",
-            description: "Search the passive tree for nodes by keyword. Returns node IDs, names, stats, types, and allocation status. Very useful for finding specific nodes like 'wand', 'herald', 'life', etc. You can filter by node type (notable, keystone, normal) and control whether to show already-allocated nodes. Use the returned node IDs with lua_set_tree or suggest_optimal_nodes.\n\nIMPORTANT: After showing search results, STOP and ask the user which nodes they want to allocate. Suggest:\n- Using lua_set_tree to allocate specific nodes by ID\n- Searching with different keywords if results aren't helpful\n- Using suggest_optimal_nodes for AI-powered recommendations\nDO NOT automatically allocate nodes without user confirmation.",
+            description: "Search the passive tree for nodes by keyword. Returns node IDs, names, stats, types, and allocation status.",
             inputSchema: {
               type: "object",
               properties: {
@@ -820,7 +827,7 @@ class PoBMCPServer {
         tools.push(
           {
             name: "add_item",
-            description: "Add an item to the build from PoE item text format (copied from game or trade site). The item will be added to the build and stats will be recalculated. Optionally specify a slot to equip it to.\n\nIMPORTANT: After adding an item, STOP and ask the user what they want to do next. Suggest:\n- Add another item to a different slot\n- Use get_equipped_items to see current gear\n- Use lua_get_stats to see how the item affected stats\n- Configure flasks with toggle_flask\nDO NOT add multiple items in sequence without user confirmation.",
+            description: "Add an item to the build from PoE item text format (copied from game or trade site). The item will be added to the build and stats will be recalculated.",
             inputSchema: {
               type: "object",
               properties: {
@@ -898,7 +905,7 @@ class PoBMCPServer {
           },
           {
             name: "create_socket_group",
-            description: "Create a new empty socket group in the build. After creation, use add_gem to add gems to this group. This enables building skill setups from scratch.\n\nIMPORTANT: After creating the socket group, STOP and ask the user which gems they want to add. Suggest using:\n- add_gem to add the active skill gem\n- add_gem again for each support gem\n- get_skill_setup to verify the setup\nDO NOT automatically add gems without user input.",
+            description: "Create a new empty socket group in the build. After creation, use add_gem to add gems to this group.",
             inputSchema: {
               type: "object",
               properties: {
@@ -923,7 +930,7 @@ class PoBMCPServer {
           },
           {
             name: "add_gem",
-            description: "Add a gem to an existing socket group. This allows you to build complete skill setups by adding active gems and support gems one by one. Gem names must match Path of Exile gem names exactly.\n\nIMPORTANT: After adding a gem, STOP and ask the user if they want to:\n- Add another gem to this socket group\n- Modify gem level/quality with set_gem_level or set_gem_quality\n- View current setup with get_skill_setup\n- Move on to other tasks\nDO NOT add multiple gems in sequence without user confirmation.",
+            description: "Add a gem to an existing socket group. Gem names must match Path of Exile gem names exactly.",
             inputSchema: {
               type: "object",
               properties: {
@@ -1034,6 +1041,57 @@ class PoBMCPServer {
               },
               required: ["group_index", "gem_index"],
             },
+          },
+          {
+            name: "setup_skill_with_gems",
+            description: "Batch operation: Create a socket group and add all gems in one call. Reduces tool calls from N+1 to 1.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                gems: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string", description: "Gem name (must match PoE exactly)" },
+                      level: { type: "number", description: "Gem level (1-40, default: 20)" },
+                      quality: { type: "number", description: "Gem quality (0-23, default: 0)" },
+                      quality_id: { type: "string", description: "'Default', 'Alternate1', 'Alternate2', 'Alternate3'" },
+                      enabled: { type: "boolean", description: "Whether gem is enabled (default: true)" },
+                    },
+                    required: ["name"],
+                  },
+                  description: "Array of gems to add to the socket group",
+                },
+                label: { type: "string", description: "Optional label for the socket group" },
+                slot: { type: "string", description: "Optional item slot" },
+                enabled: { type: "boolean", description: "Whether group is enabled (default: true)" },
+                include_in_full_dps: { type: "boolean", description: "Include in full DPS (default: false)" },
+              },
+              required: ["gems"],
+            },
+          },
+          {
+            name: "add_multiple_items",
+            description: "Batch operation: Add multiple items in one call. Reduces tool calls from N to 1.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                items: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      item_text: { type: "string", description: "Item text in PoE format" },
+                      slot_name: { type: "string", description: "Optional slot to equip to" },
+                    },
+                    required: ["item_text"],
+                  },
+                  description: "Array of items to add",
+                },
+              },
+              required: ["items"],
+            },
           }
         );
 
@@ -1055,7 +1113,7 @@ class PoBMCPServer {
           },
           {
             name: "suggest_optimal_nodes",
-            description: "Intelligently suggest the best passive tree nodes to allocate based on a specific goal. Analyzes reachable nodes, calculates actual stat impact using PoB's engine, and ranks by efficiency (stat gain per point). Goals: 'maximize_dps', 'maximize_life', 'maximize_es', 'resistances', 'armour', 'evasion', 'block', 'crit_chance', 'balanced', etc. Returns top recommendations with paths and stat projections.\n\nIMPORTANT: After showing suggestions, STOP and ask the user which recommendation they want to apply. Suggest:\n- Review the top recommendations and their stat impacts\n- Try different optimization goals to compare options\n- Use allocate_nodes to apply a specific recommendation\nDO NOT automatically allocate suggested nodes without user approval.",
+            description: "Intelligently suggest the best passive tree nodes to allocate based on a specific goal. Analyzes reachable nodes, calculates actual stat impact using PoB's engine, and ranks by efficiency (stat gain per point). Returns top recommendations with paths and stat projections.",
             inputSchema: {
               type: "object",
               properties: {
@@ -1362,6 +1420,24 @@ class PoBMCPServer {
           case "remove_gem":
             if (!args) throw new Error("Missing arguments");
             return await handleRemoveGem(itemSkillContext, args.group_index as number, args.gem_index as number);
+
+          case "setup_skill_with_gems":
+            if (!args) throw new Error("Missing arguments");
+            return await handleSetupSkillWithGems(
+              itemSkillContext,
+              args.gems as Array<{name: string; level?: number; quality?: number; quality_id?: string; enabled?: boolean}>,
+              args.label as string | undefined,
+              args.slot as string | undefined,
+              args.enabled as boolean | undefined,
+              args.include_in_full_dps as boolean | undefined
+            );
+
+          case "add_multiple_items":
+            if (!args) throw new Error("Missing arguments");
+            return await handleAddMultipleItems(
+              itemSkillContext,
+              args.items as Array<{item_text: string; slot_name?: string}>
+            );
 
           // Phase 6: Build Optimization tools
           case "analyze_defenses":

@@ -9,7 +9,9 @@
       "Bash(\"C:\\Users\\iande\\AppData\\Local\\LuaJit\\luajit.exe\" HeadlessWrapper.lua)",
       "Read(//c/Users/iande/OneDrive/Documents/Path of Building/Builds/3.27/**)",
       "Bash(if not exist \"src\\services\" mkdir \"src\\services\")",
-      "Bash(src/index.ts.temp)"
+      "Bash(src/index.ts.temp)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

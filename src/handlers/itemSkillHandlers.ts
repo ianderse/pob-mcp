@@ -25,16 +25,7 @@ export async function handleAddItem(
 
     const result = await luaClient.addItem(itemText, slotName, noAutoEquip);
 
-    let text = "=== Item Added ===\n\n";
-    text += `Successfully added item to build.\n\n`;
-    text += `Item: ${result.name || 'Unknown'}\n`;
-    text += `Item ID: ${result.id}\n`;
-    text += `Slot: ${result.slot || 'Not equipped'}\n\n`;
-    text += `⚠️ **STOP HERE** ⚠️\n\n`;
-    text += `Do NOT add more items automatically. Ask the user if they want to:\n`;
-    text += `- Add another item\n`;
-    text += `- View stats with lua_get_stats\n`;
-    text += `- View all items with lua_get_items`;
+    let text = `✅ Item added: ${result.name || 'Unknown'} → ${result.slot || 'Not equipped'}`;
 
     return {
       content: [
@@ -120,9 +111,7 @@ export async function handleToggleFlask(
 
     await luaClient.setFlaskActive(flaskNumber, active);
 
-    let text = "=== Flask Status Updated ===\n\n";
-    text += `Flask ${flaskNumber} is now ${active ? 'activated' : 'deactivated'}.\n\n`;
-    text += `Stats have been recalculated. Use lua_get_stats to see updated values.`;
+    let text = `✅ Flask ${flaskNumber} ${active ? 'activated' : 'deactivated'}.`;
 
     return {
       content: [
@@ -218,15 +207,14 @@ export async function handleSetMainSkill(
       skillPart,
     });
 
-    let text = "=== Main Skill Updated ===\n\n";
-    text += `Successfully set main socket group to ${socketGroup}.\n`;
+    let text = `✅ Main skill set to group ${socketGroup}`;
     if (activeSkillIndex !== undefined) {
-      text += `Active skill index set to ${activeSkillIndex}.\n`;
+      text += `, skill ${activeSkillIndex}`;
     }
     if (skillPart !== undefined) {
-      text += `Skill part set to ${skillPart}.\n`;
+      text += `, part ${skillPart}`;
     }
-    text += `\nStats have been recalculated. Use lua_get_stats to see updated values.`;
+    text += `.`;
 
     return {
       content: [
@@ -264,18 +252,11 @@ export async function handleCreateSocketGroup(
       includeInFullDPS,
     });
 
-    let text = "=== Socket Group Created ===\n\n";
-    text += `Successfully created socket group at index ${result.index}.\n`;
+    let text = `✅ Socket group ${result.index} created`;
     if (label) {
-      text += `Label: ${label}\n`;
+      text += ` (${label})`;
     }
-    if (slot) {
-      text += `Slot: ${slot}\n`;
-    }
-    text += `Enabled: ${enabled !== false ? 'Yes' : 'No'}\n`;
-    text += `Contributes to Full DPS: ${includeInFullDPS === true ? 'Yes' : 'No'}\n\n`;
-    text += `⚠️ **STOP HERE** ⚠️\n\n`;
-    text += `Do NOT automatically add gems. Ask the user which gems they want to add to this socket group.`;
+    text += `.`;
 
     return {
       content: [
@@ -325,21 +306,7 @@ export async function handleAddGem(
       enabled,
     });
 
-    let text = "=== Gem Added ===\n\n";
-    text += `Successfully added gem to socket group ${groupIndex}.\n\n`;
-    text += `Gem: ${result.name}\n`;
-    text += `Gem Index: ${result.gemIndex}\n`;
-    text += `Level: ${level || 20}\n`;
-    text += `Quality: ${quality || 0}\n`;
-    if (qualityId && qualityId !== 'Default') {
-      text += `Quality Type: ${qualityId}\n`;
-    }
-    text += `Enabled: ${enabled !== false ? 'Yes' : 'No'}\n\n`;
-    text += `⚠️ **STOP HERE** ⚠️\n\n`;
-    text += `Do NOT add more gems automatically. Ask the user if they want to:\n`;
-    text += `- Add another gem to this socket group\n`;
-    text += `- View the current setup with lua_get_skill_setup\n`;
-    text += `- Check stats with lua_get_stats`;
+    let text = `✅ Added ${result.name} (L${level || 20}, Q${quality || 0}) to group ${groupIndex}.`;
 
     return {
       content: [
@@ -383,11 +350,7 @@ export async function handleSetGemLevel(
 
     await luaClient.setGemLevel({ groupIndex, gemIndex, level });
 
-    let text = "=== Gem Level Updated ===\n\n";
-    text += `Successfully set gem level to ${level}.\n`;
-    text += `Socket Group: ${groupIndex}\n`;
-    text += `Gem Index: ${gemIndex}\n\n`;
-    text += `Stats have been recalculated. Use lua_get_stats to see updated values.`;
+    let text = `✅ Set gem level to ${level} (group ${groupIndex}, gem ${gemIndex}).`;
 
     return {
       content: [
@@ -432,14 +395,7 @@ export async function handleSetGemQuality(
 
     await luaClient.setGemQuality({ groupIndex, gemIndex, quality, qualityId });
 
-    let text = "=== Gem Quality Updated ===\n\n";
-    text += `Successfully set gem quality to ${quality}.\n`;
-    text += `Socket Group: ${groupIndex}\n`;
-    text += `Gem Index: ${gemIndex}\n`;
-    if (qualityId && qualityId !== 'Default') {
-      text += `Quality Type: ${qualityId}\n`;
-    }
-    text += `\nStats have been recalculated. Use lua_get_stats to see updated values.`;
+    let text = `✅ Set gem quality to ${quality}${qualityId && qualityId !== 'Default' ? ` (${qualityId})` : ''} (group ${groupIndex}, gem ${gemIndex}).`;
 
     return {
       content: [
@@ -473,9 +429,7 @@ export async function handleRemoveSkill(
 
     await luaClient.removeSkill({ groupIndex });
 
-    let text = "=== Socket Group Removed ===\n\n";
-    text += `Successfully removed socket group ${groupIndex}.\n\n`;
-    text += `Stats have been recalculated. Use lua_get_stats to see updated values.`;
+    let text = `✅ Removed socket group ${groupIndex}.`;
 
     return {
       content: [
@@ -514,10 +468,7 @@ export async function handleRemoveGem(
 
     await luaClient.removeGem({ groupIndex, gemIndex });
 
-    let text = "=== Gem Removed ===\n\n";
-    text += `Successfully removed gem from socket group ${groupIndex}.\n`;
-    text += `Gem Index: ${gemIndex}\n\n`;
-    text += `Stats have been recalculated. Use lua_get_stats to see updated values.`;
+    let text = `✅ Removed gem ${gemIndex} from group ${groupIndex}.`;
 
     return {
       content: [
@@ -530,5 +481,125 @@ export async function handleRemoveGem(
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to remove gem: ${errorMsg}`);
+  }
+}
+
+export async function handleSetupSkillWithGems(
+  context: ItemSkillHandlerContext,
+  gems: Array<{
+    name: string;
+    level?: number;
+    quality?: number;
+    quality_id?: string;
+    enabled?: boolean;
+  }>,
+  label?: string,
+  slot?: string,
+  enabled?: boolean,
+  includeInFullDPS?: boolean
+) {
+  try {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized. Use lua_start first.');
+    }
+
+    if (!gems || gems.length === 0) {
+      throw new Error('gems array cannot be empty');
+    }
+
+    // Create socket group
+    const groupResult = await luaClient.createSocketGroup({
+      label,
+      slot,
+      enabled,
+      includeInFullDPS,
+    });
+
+    // Add all gems to the group
+    const addedGems: string[] = [];
+    for (const gem of gems) {
+      if (!gem.name || gem.name.trim().length === 0) {
+        throw new Error('gem name cannot be empty');
+      }
+
+      const result = await luaClient.addGem({
+        groupIndex: groupResult.index,
+        gemName: gem.name,
+        level: gem.level,
+        quality: gem.quality,
+        qualityId: gem.quality_id,
+        enabled: gem.enabled,
+      });
+
+      addedGems.push(`${result.name} (L${gem.level || 20}, Q${gem.quality || 0})`);
+    }
+
+    let text = `✅ Created socket group ${groupResult.index}`;
+    if (label) {
+      text += ` "${label}"`;
+    }
+    text += ` with ${addedGems.length} gem${addedGems.length > 1 ? 's' : ''}:\n`;
+    text += addedGems.map(g => `  - ${g}`).join('\n');
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text,
+        },
+      ],
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to setup skill with gems: ${errorMsg}`);
+  }
+}
+
+export async function handleAddMultipleItems(
+  context: ItemSkillHandlerContext,
+  items: Array<{
+    item_text: string;
+    slot_name?: string;
+  }>
+) {
+  try {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized. Use lua_start first.');
+    }
+
+    if (!items || items.length === 0) {
+      throw new Error('items array cannot be empty');
+    }
+
+    const addedItems: string[] = [];
+    for (const item of items) {
+      if (!item.item_text || item.item_text.trim().length === 0) {
+        throw new Error('item_text cannot be empty');
+      }
+
+      const result = await luaClient.addItem(item.item_text, item.slot_name);
+      addedItems.push(`${result.name || 'Unknown'} → ${result.slot || 'Not equipped'}`);
+    }
+
+    let text = `✅ Added ${addedItems.length} item${addedItems.length > 1 ? 's' : ''}:\n`;
+    text += addedItems.map(i => `  - ${i}`).join('\n');
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text,
+        },
+      ],
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to add multiple items: ${errorMsg}`);
   }
 }

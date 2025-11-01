@@ -59,7 +59,7 @@ export async function handleLuaNewBuild(context: LuaHandlerContext) {
       content: [
         {
           type: "text" as const,
-          text: "New empty build created successfully.\n\n⚠️ **STOP HERE** ⚠️\n\nDo NOT call any more tools automatically. Ask the user what they want to do next:\n- Use lua_set_tree to set class/ascendancy and allocate passive nodes\n- Use create_socket_group to add skill socket groups\n- Use add_item to add equipment\n- Use search_tree_nodes to find relevant passive nodes",
+          text: "✅ New empty build created.",
         },
       ],
     };
@@ -102,7 +102,7 @@ export async function handleLuaLoadBuild(
       content: [
         {
           type: "text" as const,
-          text: `Build "${name || 'MCP Build'}" loaded successfully into PoB.\n\n⚠️ **STOP HERE** ⚠️\n\nDo NOT call any more tools automatically. Ask the user what they want to inspect or modify:\n- Use lua_get_stats to view calculated stats\n- Use lua_get_tree to view passive tree\n- Use lua_get_items to view equipped items\n- Use lua_get_skill_setup to view skill gems`,
+          text: `✅ Build "${name || 'MCP Build'}" loaded.`,
         },
       ],
     };
@@ -237,15 +237,7 @@ export async function handleLuaSetTree(context: LuaHandlerContext, args: any) {
       treeVersion: args.treeVersion,
     });
 
-    let text = "=== Passive Tree Updated ===\n\n";
-    text += `Successfully updated passive tree in PoB.\n`;
-    text += `Allocated ${args.nodes.length} nodes.\n\n`;
-    text += `⚠️ **STOP HERE** ⚠️\n\n`;
-    text += `Do NOT call any more tools automatically. Ask the user if they want to:\n`;
-    text += `- View stats with lua_get_stats\n`;
-    text += `- Search for more nodes with search_tree_nodes\n`;
-    text += `- Add items with add_item\n`;
-    text += `- Add skills with create_socket_group`;
+    let text = `✅ Passive tree updated. Allocated ${args.nodes.length} nodes.`;
 
     return {
       content: [
@@ -335,9 +327,6 @@ export async function handleSearchTreeNodes(
 
         text += `\n`;
       }
-
-      text += "\n\n⚠️ **STOP HERE** ⚠️\n\n";
-      text += "Do NOT automatically allocate nodes or call lua_set_tree. Ask the user which nodes they want to allocate.";
     }
 
     return {
