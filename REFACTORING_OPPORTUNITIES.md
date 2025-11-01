@@ -337,29 +337,67 @@ export async function benchmark<T>(
 
 ## 📊 Suggested Implementation Order
 
-### Sprint 1 (Week 1): Foundation
-1. Remove test.ts cleanup
-2. Add error handling utility
-3. Extract context builder
-4. Add logging layer
+### Sprint 1 (Week 1): Foundation ✅ COMPLETED
+1. ✅ Remove test.ts cleanup
+2. ✅ Add error handling utility (wrapHandler, wrapHandlerSync - 100% coverage)
+3. ✅ Extract context builder (ContextBuilder class - 100% coverage)
+4. ⏭️  Add logging layer (deferred - current console.error sufficient)
 
 **Goal**: Cleaner foundation for future work
+**Status**: COMPLETED (2025-11-01)
+**Commits**:
+- `debbac7` - Refactor: Extract reusable utilities and improve code organization
+- `e4eea6d` - Add comprehensive tests for treeService and watchService
 
-### Sprint 2 (Week 2): Testing
-1. Add treeService tests
-2. Add watchService tests
-3. Add handler tests (pick 2-3)
-4. Expand pobLuaBridge tests
+### Sprint 2 (Week 2): Testing 🚧 IN PROGRESS
+1. ✅ Add treeService tests (28 tests, 27% coverage - complex service)
+2. ✅ Add watchService tests (20 tests, 91% coverage)
+3. ⏭️  Add handler tests (pick 2-3) - NEXT UP
+4. ⏭️  Expand pobLuaBridge tests
 
 **Goal**: 70%+ test coverage
+**Status**: PARTIAL (50% complete)
+**Progress**: 164 total tests (up from 102), new services tested
 
-### Sprint 3 (Week 3): Refactoring
-1. Break up index.ts into modules
-2. Enable TypeScript strict mode
-3. Add configuration validation
-4. Add JSDoc comments
+### Sprint 3 (Week 3): Refactoring 📋 PLANNED
+1. ⏭️  Break up index.ts into modules (see detailed plan below)
+2. ⏭️  Enable TypeScript strict mode
+3. ⏭️  Add configuration validation
+4. ⏭️  Add JSDoc comments
 
 **Goal**: Better code organization and type safety
+
+#### index.ts Refactoring Plan (1,646 lines → multiple modules)
+
+**Current Structure**:
+- Lines 1-75: Imports
+- Lines 76-122: PoBMCPServer class properties (48 tool definitions)
+- Lines 123-218: Constructor (initialization)
+- Lines 220-260: Tool gate methods
+- Lines 262-431: Lua client methods
+- Lines 433-1285: setupHandlers() - Tool schemas (800+ lines!)
+- Lines 1287-1641: Tool routing switch statement (350+ lines!)
+- Lines 1642-1646: Server startup
+
+**Proposed Structure**:
+```
+src/server/
+  toolSchemas.ts       # 48 tool schema definitions (~800 lines)
+  toolRouter.ts        # Tool routing logic (~350 lines)
+  mcpServer.ts         # Main server class (~200 lines)
+  toolGate.ts          # Tool gate/locking logic (~40 lines)
+  luaClientManager.ts  # Lua client lifecycle (~170 lines)
+```
+
+**Benefits**:
+- Each file < 1000 lines
+- Clear separation of concerns
+- Easier to test individual components
+- Better git history (fewer conflicts)
+- Easier onboarding for contributors
+
+**Estimated Effort**: 4-6 hours
+**Risk**: Medium (large refactor, needs careful testing)
 
 ### Sprint 4 (Week 4): Polish
 1. Performance profiling
