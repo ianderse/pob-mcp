@@ -12,7 +12,6 @@ import path from "path";
 import os from "os";
 import fs from "fs/promises";
 import https from "https";
-import chokidar from "chokidar";
 import { PoBLuaApiClient, PoBLuaTcpClient } from "./pobLuaBridge.js";
 import { XMLParser } from "fast-xml-parser";
 import { analyzeDefenses, formatDefensiveAnalysis } from "./defensiveAnalyzer.js";
@@ -56,8 +55,6 @@ import type {
   PathOptimization,
   EfficiencyScore,
   OptimizationSuggestion,
-  TreeDataCache,
-  CachedBuild,
 } from "./types.js";
 
 // Import utilities
@@ -93,14 +90,6 @@ class PoBMCPServer {
   // Server modules
   private toolGate: ToolGate;
   private luaClientManager: LuaClientManager;
-
-  // Legacy properties (still used by methods not yet refactored)
-  private watcher: ReturnType<typeof chokidar.watch> | null = null;
-  private buildCache: Map<string, CachedBuild> = new Map();
-  private treeDataCache: Map<string, TreeDataCache> = new Map();
-  private recentChanges: Array<{file: string; timestamp: number; type: string}> = [];
-  private watchEnabled: boolean = false;
-  private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
 
   constructor() {
     this.server = new Server(
@@ -231,85 +220,6 @@ class PoBMCPServer {
   private async analyzePassiveTree(build: PoBBuild): Promise<TreeAnalysisResult | null> {
     // Delegate to TreeService
     return await this.treeService.analyzePassiveTree(build);
-  }
-
-  // Phase 3: Tree Comparison
-  private startWatching() {
-    if (this.watcher) {
-      console.error("[File Watcher] Already watching directory");
-      return;
-    }
-
-    console.error(`[File Watcher] Starting to watch: ${this.pobDirectory}`);
-
-    this.watcher = chokidar.watch(this.pobDirectory, {
-      ignored: /(^|[\/\\])\../, // ignore dotfiles
-      persistent: true,
-      ignoreInitial: true, // don't trigger for existing files
-      awaitWriteFinish: {
-        stabilityThreshold: 500, // wait for file writes to finish
-        pollInterval: 100
-      }
-    });
-
-    this.watcher
-      .on("add", (filePath: string) => this.handleFileChange(filePath, "added"))
-      .on("change", (filePath: string) => this.handleFileChange(filePath, "modified"))
-      .on("unlink", (filePath: string) => this.handleFileChange(filePath, "deleted"))
-      .on("error", (error: unknown) => console.error("[File Watcher] Error:", error));
-
-    this.watchEnabled = true;
-  }
-
-  private async stopWatching() {
-    if (this.watcher) {
-      console.error("[File Watcher] Stopping watch");
-      await this.watcher.close();
-      this.watcher = null;
-      this.watchEnabled = false;
-    }
-  }
-
-  private handleFileChange(filePath: string, changeType: string) {
-    const fileName = path.basename(filePath);
-
-    // Only process .xml files
-    if (!fileName.endsWith(".xml")) {
-      return;
-    }
-
-    // Clear any existing debounce timer for this file
-    const existingTimer = this.debounceTimers.get(fileName);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-    }
-
-    // Set new debounce timer (500ms)
-    const timer = setTimeout(() => {
-      this.processFileChange(fileName, changeType);
-      this.debounceTimers.delete(fileName);
-    }, 500);
-
-    this.debounceTimers.set(fileName, timer);
-  }
-
-  private processFileChange(fileName: string, changeType: string) {
-    console.error(`[File Watcher] Build ${changeType}: ${fileName}`);
-
-    // Invalidate cache for this build
-    this.buildCache.delete(fileName);
-
-    // Track recent change
-    this.recentChanges.push({
-      file: fileName,
-      timestamp: Date.now(),
-      type: changeType
-    });
-
-    // Keep only last 50 changes
-    if (this.recentChanges.length > 50) {
-      this.recentChanges = this.recentChanges.slice(-50);
-    }
   }
 
   private setupHandlers() {
