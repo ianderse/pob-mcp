@@ -306,9 +306,7 @@ export class BuildService {
   }
 
   private parseBoolean(value: string | boolean | undefined): boolean {
-    if (value === undefined) return false;
-    if (typeof value === 'boolean') return value;
-    return value === 'true';
+    return value === undefined ? false : typeof value === 'boolean' ? value : value === 'true';
   }
 
   private parseNumber(value: string | number | undefined): number | undefined {
@@ -319,28 +317,21 @@ export class BuildService {
   }
 
   private getInputValue(input: ConfigInput): any {
-    if (input.boolean !== undefined) return this.parseBoolean(input.boolean);
-    if (input.number !== undefined) return this.parseNumber(input.number);
-    if (input.string !== undefined) return input.string;
-    return undefined;
+    return input.boolean !== undefined ? this.parseBoolean(input.boolean) :
+           input.number !== undefined ? this.parseNumber(input.number) :
+           input.string;
   }
 
   private getBooleanInput(inputs: Map<string, ConfigInput>, name: string): boolean {
-    const input = inputs.get(name);
-    if (!input) return false;
-    return this.parseBoolean(input.boolean);
+    return this.parseBoolean(inputs.get(name)?.boolean);
   }
 
   private getStringInput(inputs: Map<string, ConfigInput>, name: string): string {
-    const input = inputs.get(name);
-    if (!input || input.string === undefined) return '';
-    return input.string;
+    return inputs.get(name)?.string || '';
   }
 
   private getNumberInput(inputs: Map<string, ConfigInput>, name: string): number | undefined {
-    const input = inputs.get(name);
-    if (!input) return undefined;
-    return this.parseNumber(input.number);
+    return this.parseNumber(inputs.get(name)?.number);
   }
 
   /**

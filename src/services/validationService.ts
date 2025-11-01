@@ -71,44 +71,50 @@ export class ValidationService {
       { key: 'ChaosResist', name: 'Chaos' },
     ];
 
-    for (const resist of resistances) {
-      const value = stats.get(resist.key) || 0;
+    for (const { key, name } of resistances) {
+      const value = stats.get(key) || 0;
 
-      if (resist.key !== 'ChaosResist' && value < resistCap) {
-        // Fire, Cold, Lightning must be 75% for maps
-        criticalIssues.push({
-          severity: 'critical',
-          category: 'resistances',
-          title: `${resist.name} Resistance Too Low`,
-          description: `${resist.name} resistance is ${value}%. You need ${resistCap}% for endgame content.`,
-          currentValue: value,
-          recommendedValue: resistCap,
-          suggestions: [
-            `Craft +${resistCap - value}% ${resist.name} Resistance on gear with open suffix`,
-            `Use a ${resist.name.toLowerCase()} resistance flask temporarily`,
-            `Allocate resistance nodes on the passive tree`,
-            `Upgrade jewelry pieces - rings and amulets can have high resistance rolls`,
-          ],
-          location: 'Gear',
-        });
-      } else if (resist.key === 'ChaosResist' && value < 0) {
-        // Chaos resist should be at least 0% (negative is dangerous)
-        warnings.push({
-          severity: 'warning',
-          category: 'resistances',
-          title: 'Negative Chaos Resistance',
-          description: `Chaos resistance is ${value}%. Negative chaos resist makes you take more chaos damage.`,
-          currentValue: value,
-          recommendedValue: 0,
-          suggestions: [
-            `Craft chaos resistance on gear`,
-            `Use an Amethyst Flask for temporary chaos resistance`,
-            `Consider taking the "Crystal Skin" notable on the tree (+15% chaos res)`,
-          ],
-          location: 'Gear',
-        });
+      if (key !== 'ChaosResist' && value < resistCap) {
+        criticalIssues.push(this.createResistIssue(name, value, resistCap));
+      } else if (key === 'ChaosResist' && value < 0) {
+        warnings.push(this.createChaosResistWarning(value));
       }
     }
+  }
+
+  private createResistIssue(name: string, current: number, cap: number): ValidationIssue {
+    return {
+      severity: 'critical',
+      category: 'resistances',
+      title: `${name} Resistance Too Low`,
+      description: `${name} resistance is ${current}%. You need ${cap}% for endgame content.`,
+      currentValue: current,
+      recommendedValue: cap,
+      suggestions: [
+        `Craft +${cap - current}% ${name} Resistance on gear with open suffix`,
+        `Use a ${name.toLowerCase()} resistance flask temporarily`,
+        `Allocate resistance nodes on the passive tree`,
+        `Upgrade jewelry pieces - rings and amulets can have high resistance rolls`,
+      ],
+      location: 'Gear',
+    };
+  }
+
+  private createChaosResistWarning(value: number): ValidationIssue {
+    return {
+      severity: 'warning',
+      category: 'resistances',
+      title: 'Negative Chaos Resistance',
+      description: `Chaos resistance is ${value}%. Negative chaos resist makes you take more chaos damage.`,
+      currentValue: value,
+      recommendedValue: 0,
+      suggestions: [
+        `Craft chaos resistance on gear`,
+        `Use an Amethyst Flask for temporary chaos resistance`,
+        `Consider taking the "Crystal Skin" notable on the tree (+15% chaos res)`,
+      ],
+      location: 'Gear',
+    };
   }
 
   private validateDefenses(
