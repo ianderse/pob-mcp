@@ -60,6 +60,9 @@ import type {
   CachedBuild,
 } from "./types.js";
 
+// Import utilities
+import { ContextBuilder } from "./utils/contextBuilder.js";
+
 // Import handlers
 import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats } from "./handlers/buildHandlers.js";
 import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handleWatchStatus, handleRefreshTreeData } from "./handlers/watchHandlers.js";
@@ -78,6 +81,9 @@ class PoBMCPServer {
   private buildService: BuildService;
   private treeService: TreeService;
   private watchService: WatchService;
+
+  // Context builder
+  private contextBuilder: ContextBuilder;
 
   // Legacy properties (still used by methods not yet refactored)
   private watcher: ReturnType<typeof chokidar.watch> | null = null;
@@ -156,6 +162,19 @@ class PoBMCPServer {
     // Check if Lua bridge is enabled
     this.luaEnabled = process.env.POB_LUA_ENABLED === 'true';
     this.useTcpMode = process.env.POB_API_TCP === 'true';
+
+    // Initialize context builder
+    this.contextBuilder = new ContextBuilder({
+      buildService: this.buildService,
+      treeService: this.treeService,
+      watchService: this.watchService,
+      pobDirectory: this.pobDirectory,
+      luaEnabled: this.luaEnabled,
+      useTcpMode: this.useTcpMode,
+      getLuaClient: () => this.luaClient,
+      ensureLuaClient: () => this.ensureLuaClient(),
+      stopLuaClient: () => this.stopLuaClient(),
+    });
 
     if (this.luaEnabled) {
       console.error('[MCP Server] PoB Lua Bridge enabled');
@@ -1272,44 +1291,13 @@ class PoBMCPServer {
         // Check tool gate first
         this.checkToolGate(name);
 
-        // Create handler contexts
-        const handlerContext = {
-          buildService: this.buildService,
-          treeService: this.treeService,
-        };
-
-        const watchContext = {
-          buildService: this.buildService,
-          treeService: this.treeService,
-          watchService: this.watchService,
-        };
-
-        const treeContext = {
-          buildService: this.buildService,
-          treeService: this.treeService,
-        };
-
-        const luaContext = {
-          pobDirectory: this.pobDirectory,
-          luaEnabled: this.luaEnabled,
-          useTcpMode: this.useTcpMode,
-          getLuaClient: () => this.luaClient,
-          ensureLuaClient: () => this.ensureLuaClient(),
-          stopLuaClient: () => this.stopLuaClient(),
-        };
-
-        const itemSkillContext = {
-          getLuaClient: () => this.luaClient,
-          ensureLuaClient: () => this.ensureLuaClient(),
-        };
-
-        const optimizationContext = {
-          buildService: this.buildService,
-          treeService: this.treeService,
-          pobDirectory: this.pobDirectory,
-          getLuaClient: () => this.luaClient,
-          ensureLuaClient: () => this.ensureLuaClient(),
-        };
+        // Create handler contexts using contextBuilder
+        const handlerContext = this.contextBuilder.buildHandlerContext();
+        const watchContext = this.contextBuilder.buildWatchContext();
+        const treeContext = this.contextBuilder.buildTreeContext();
+        const luaContext = this.contextBuilder.buildLuaContext();
+        const itemSkillContext = this.contextBuilder.buildItemSkillContext();
+        const optimizationContext = this.contextBuilder.buildOptimizationContext();
 
         switch (name) {
           case "continue":
