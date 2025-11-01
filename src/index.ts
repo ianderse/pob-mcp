@@ -67,6 +67,7 @@ import { handleCompareTrees, handleTestAllocation, handleGetNearbyNodes, handleF
 import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaLoadBuild, handleLuaGetStats, handleLuaGetTree, handleLuaSetTree, handleSearchTreeNodes } from "./handlers/luaHandlers.js";
 import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems } from "./handlers/itemSkillHandlers.js";
 import { handleAnalyzeDefenses, handleSuggestOptimalNodes, handleOptimizeTree } from "./handlers/optimizationHandlers.js";
+import { handleAnalyzeItems, handleOptimizeSkillLinks, handleCreateBudgetBuild } from "./handlers/advancedOptimizationHandlers.js";
 
 class PoBMCPServer {
   private server: Server;
@@ -1188,6 +1189,64 @@ class PoBMCPServer {
               },
               required: ["build_name", "goal"],
             },
+          },
+          {
+            name: "analyze_items",
+            description: "Analyze all equipped items and suggest upgrades based on build goals. Identifies empty slots, under-leveled items, missing resistances, and provides prioritized upgrade recommendations. Works with both XML builds and Lua-loaded builds for accurate stat analysis.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                build_name: {
+                  type: "string",
+                  description: "Optional: Name of the build file to analyze (e.g., 'MyBuild.xml'). If omitted and Lua bridge is active, analyzes currently loaded build.",
+                },
+              },
+            },
+          },
+          {
+            name: "optimize_skill_links",
+            description: "Analyze skill gem setups and suggest link optimizations. Identifies missing supports, low-level gems, anti-synergies, and provides gem recommendations based on skill type. Helps maximize DPS and utility from socket groups.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                build_name: {
+                  type: "string",
+                  description: "Optional: Name of the build file to analyze (e.g., 'MyBuild.xml'). If omitted and Lua bridge is active, analyzes currently loaded build.",
+                },
+              },
+            },
+          },
+          {
+            name: "create_budget_build",
+            description: "Generate a comprehensive budget build plan based on requirements. Provides skill link recommendations, gearing strategy, defensive layers, passive tree priorities, and leveling tips. Perfect for league starts or creating new builds from scratch.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                class_name: {
+                  type: "string",
+                  description: "Character class (e.g., 'Ranger', 'Witch', 'Marauder', 'Shadow', 'Duelist', 'Templar', 'Scion')",
+                },
+                ascendancy: {
+                  type: "string",
+                  description: "Optional ascendancy class (e.g., 'Deadeye', 'Occultist', 'Berserker')",
+                },
+                main_skill: {
+                  type: "string",
+                  description: "Main skill gem to build around (e.g., 'Lightning Arrow', 'Detonate Dead', 'Righteous Fire')",
+                },
+                budget_level: {
+                  type: "string",
+                  enum: ["low", "medium", "high"],
+                  description: "Budget tier: 'low' (<50 chaos), 'medium' (50-500c), 'high' (500c+)",
+                },
+                focus: {
+                  type: "string",
+                  enum: ["offense", "defense", "balanced"],
+                  description: "Build focus (default: 'balanced')",
+                },
+              },
+              required: ["class_name", "main_skill", "budget_level"],
+            },
           }
         );
       }
@@ -1464,6 +1523,46 @@ class PoBMCPServer {
               args.max_points as number | undefined,
               args.max_iterations as number | undefined,
               args.constraints as OptimizationConstraints | undefined
+            );
+
+          case "analyze_items":
+            const advancedOptContext = {
+              buildService: this.buildService,
+              getLuaClient: () => this.luaClient,
+              ensureLuaClient: () => this.ensureLuaClient(),
+            };
+            return await handleAnalyzeItems(
+              advancedOptContext,
+              args?.build_name as string | undefined
+            );
+
+          case "optimize_skill_links":
+            const skillLinkContext = {
+              buildService: this.buildService,
+              getLuaClient: () => this.luaClient,
+              ensureLuaClient: () => this.ensureLuaClient(),
+            };
+            return await handleOptimizeSkillLinks(
+              skillLinkContext,
+              args?.build_name as string | undefined
+            );
+
+          case "create_budget_build":
+            if (!args) throw new Error("Missing arguments");
+            const budgetBuildContext = {
+              buildService: this.buildService,
+              getLuaClient: () => this.luaClient,
+              ensureLuaClient: () => this.ensureLuaClient(),
+            };
+            return await handleCreateBudgetBuild(
+              budgetBuildContext,
+              {
+                class_name: args.class_name as string,
+                ascendancy: args.ascendancy as string | undefined,
+                main_skill: args.main_skill as string,
+                budget_level: args.budget_level as 'low' | 'medium' | 'high',
+                focus: args.focus as 'offense' | 'defense' | 'balanced' | undefined,
+              }
             );
 
           default:

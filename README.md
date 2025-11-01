@@ -588,6 +588,73 @@ Full tree optimizer that can add and remove nodes to meet a goal within constrai
 
 **Returns**: Optimized allocation and stat outcome
 
+#### `analyze_items`
+Analyze all equipped items and suggest upgrades based on build goals. Identifies empty slots, resistance gaps, and item quality issues.
+
+**Parameters**:
+- `build_name` (optional): Build file to analyze. If omitted and Lua bridge is active, analyzes currently loaded build.
+
+**Returns**:
+- Item analysis with priority rankings (high/medium/low)
+- Resistance cap status
+- Life/ES pool warnings
+- Slot-by-slot upgrade recommendations
+
+**Example**: "Analyze my items for upgrade opportunities"
+
+**Use Cases**:
+- Identify gear weaknesses
+- Cap elemental resistances
+- Find empty item slots
+- Optimize defensive layers
+
+#### `optimize_skill_links`
+Analyze skill gem setups and suggest link optimizations. Detects missing support gems, low-level gems, anti-synergies, and provides gem recommendations.
+
+**Parameters**:
+- `build_name` (optional): Build file to analyze. If omitted and Lua bridge is active, analyzes currently loaded build.
+
+**Returns**:
+- Skill group analysis for all socket groups
+- Missing link warnings
+- Support gem recommendations by skill type
+- Low level/quality gem alerts
+- Anti-synergy detection (e.g., Elemental Focus + Ignite supports)
+
+**Example**: "Optimize my skill links for maximum DPS"
+
+**Use Cases**:
+- Maximize damage from 6-link setups
+- Find missing support gems
+- Detect conflicting support gems
+- Ensure gems are properly leveled and quality'd
+
+#### `create_budget_build`
+Generate a comprehensive budget build plan based on requirements. Provides skill link recommendations, gearing strategy, defensive layers, passive tree priorities, and leveling tips.
+
+**Parameters**:
+- `class_name` (required): Character class (e.g., 'Ranger', 'Witch', 'Marauder')
+- `ascendancy` (optional): Ascendancy class (e.g., 'Deadeye', 'Occultist')
+- `main_skill` (required): Main skill gem (e.g., 'Lightning Arrow', 'Detonate Dead')
+- `budget_level` (required): 'low' (<50c), 'medium' (50-500c), 'high' (500c+)
+- `focus` (optional): 'offense', 'defense', or 'balanced' (default: 'balanced')
+
+**Returns**:
+- Budget breakdown and guidelines
+- Recommended skill links for budget tier
+- Defensive layer priorities
+- Gearing strategy by slot
+- Passive tree priorities
+- Leveling tips and next steps
+
+**Example**: "Create a budget Lightning Arrow Deadeye build for league start"
+
+**Use Cases**:
+- Plan league starter builds
+- Create budget builds for new players
+- Get comprehensive build guidance
+- Understand gearing priorities for your budget
+
 ## Development
 
 ### Watch mode for development:
@@ -875,14 +942,13 @@ Quick test checklist:
 - ✅ Direct node allocation with stat calculations (`allocate_nodes`)
 - ✅ **Intelligent node recommendations** (`suggest_optimal_nodes`) 🎯
 - ✅ Full reallocation optimizer (`optimize_tree`)
+- ✅ **Item upgrade recommendations** (`analyze_items`) 🎯
+- ✅ **Skill link optimization suggestions** (`optimize_skill_links`) 🎯
+- ✅ **Budget build creation from requirements** (`create_budget_build`) 🎯
 - ✅ Fixed Lua bridge timeless jewel data loading (Glorious Vanity, etc.)
 - ✅ Fixed passive tree connection parsing for proper graph traversal
-- ⏸️ Item upgrade recommendations
-- ⏸️ Skill link optimization suggestions
-- ⏸️ Budget build creation from requirements
-- ⏸️ Trade site integration for finding upgrades
 
-**Total Tools**: 27 (8 XML + 6 Lua Bridge + 3 Phase 3 + 5 Phase 4 + 5 Phase 6)
+**Total Tools**: 30 (8 XML + 6 Lua Bridge + 3 Phase 3 + 5 Phase 4 + 8 Phase 6)
 
 ### Complete Passive Tree Optimization Workflow 🎯
 

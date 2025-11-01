@@ -11,7 +11,9 @@
       "Bash(if not exist \"src\\services\" mkdir \"src\\services\")",
       "Bash(src/index.ts.temp)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npm test:*)",
+      "Bash(npm run test:coverage:*)"
     ],
     "deny": [],
     "ask": []
