@@ -8,6 +8,14 @@ An MCP (Model Context Protocol) server that enables Claude to analyze and work w
 
 ---
 
+## 🚀 Optimized for Claude Desktop
+
+This server is specifically optimized to prevent timeouts in Claude Desktop:
+- **Tool Gate System**: Prevents excessive tool chaining - 22 high-impact tools require explicit "continue" command
+- **Response Truncation**: Automatically limits responses to 8000 characters with helpful summaries
+- **Batch Operations**: Combines multiple operations (e.g., `setup_skill_with_gems`, `add_multiple_items`)
+- **Concise Responses**: Streamlined output focusing on actionable information
+
 ## Features
 
 ### XML-Based Analysis (Always Available)

@@ -107,7 +107,17 @@ class PoBMCPServer {
     'lua_set_tree',
     'lua_new_build',
     'lua_load_build',
-    'allocate_nodes'
+    'allocate_nodes',
+    'analyze_defenses',
+    'analyze_items',
+    'optimize_skill_links',
+    'create_budget_build',
+    'get_nearby_nodes',
+    'find_path_to_node',
+    'plan_tree',
+    'test_allocation',
+    'setup_skill_with_gems',
+    'add_multiple_items'
   ];
 
   constructor() {
@@ -1318,7 +1328,9 @@ class PoBMCPServer {
 
           case "analyze_build":
             if (!args) throw new Error("Missing arguments");
-            return await handleAnalyzeBuild(handlerContext, args.build_name as string);
+            return this.wrapWithTruncation(
+              await handleAnalyzeBuild(handlerContext, args.build_name as string)
+            );
 
           case "compare_builds":
             if (!args) throw new Error("Missing arguments");
@@ -1500,29 +1512,35 @@ class PoBMCPServer {
 
           // Phase 6: Build Optimization tools
           case "analyze_defenses":
-            return await handleAnalyzeDefenses(optimizationContext, args?.build_name as string | undefined);
+            return this.wrapWithTruncation(
+              await handleAnalyzeDefenses(optimizationContext, args?.build_name as string | undefined)
+            );
 
           case "suggest_optimal_nodes":
             if (!args) throw new Error("Missing arguments");
-            return await handleSuggestOptimalNodes(
-              optimizationContext,
-              args.build_name as string,
-              args.goal as string,
-              args.max_points as number | undefined,
-              args.max_distance as number | undefined,
-              args.min_efficiency as number | undefined,
-              args.include_keystones as boolean | undefined
+            return this.wrapWithTruncation(
+              await handleSuggestOptimalNodes(
+                optimizationContext,
+                args.build_name as string,
+                args.goal as string,
+                args.max_points as number | undefined,
+                args.max_distance as number | undefined,
+                args.min_efficiency as number | undefined,
+                args.include_keystones as boolean | undefined
+              )
             );
 
           case "optimize_tree":
             if (!args) throw new Error("Missing arguments");
-            return await handleOptimizeTree(
-              optimizationContext,
-              args.build_name as string,
-              args.goal as string,
-              args.max_points as number | undefined,
-              args.max_iterations as number | undefined,
-              args.constraints as OptimizationConstraints | undefined
+            return this.wrapWithTruncation(
+              await handleOptimizeTree(
+                optimizationContext,
+                args.build_name as string,
+                args.goal as string,
+                args.max_points as number | undefined,
+                args.max_iterations as number | undefined,
+                args.constraints as OptimizationConstraints | undefined
+              )
             );
 
           case "analyze_items":
@@ -1531,9 +1549,11 @@ class PoBMCPServer {
               getLuaClient: () => this.luaClient,
               ensureLuaClient: () => this.ensureLuaClient(),
             };
-            return await handleAnalyzeItems(
-              advancedOptContext,
-              args?.build_name as string | undefined
+            return this.wrapWithTruncation(
+              await handleAnalyzeItems(
+                advancedOptContext,
+                args?.build_name as string | undefined
+              )
             );
 
           case "optimize_skill_links":
@@ -1542,9 +1562,11 @@ class PoBMCPServer {
               getLuaClient: () => this.luaClient,
               ensureLuaClient: () => this.ensureLuaClient(),
             };
-            return await handleOptimizeSkillLinks(
-              skillLinkContext,
-              args?.build_name as string | undefined
+            return this.wrapWithTruncation(
+              await handleOptimizeSkillLinks(
+                skillLinkContext,
+                args?.build_name as string | undefined
+              )
             );
 
           case "create_budget_build":
@@ -1554,15 +1576,17 @@ class PoBMCPServer {
               getLuaClient: () => this.luaClient,
               ensureLuaClient: () => this.ensureLuaClient(),
             };
-            return await handleCreateBudgetBuild(
-              budgetBuildContext,
-              {
-                class_name: args.class_name as string,
-                ascendancy: args.ascendancy as string | undefined,
-                main_skill: args.main_skill as string,
-                budget_level: args.budget_level as 'low' | 'medium' | 'high',
-                focus: args.focus as 'offense' | 'defense' | 'balanced' | undefined,
-              }
+            return this.wrapWithTruncation(
+              await handleCreateBudgetBuild(
+                budgetBuildContext,
+                {
+                  class_name: args.class_name as string,
+                  ascendancy: args.ascendancy as string | undefined,
+                  main_skill: args.main_skill as string,
+                  budget_level: args.budget_level as 'low' | 'medium' | 'high',
+                  focus: args.focus as 'offense' | 'defense' | 'balanced' | undefined,
+                }
+              )
             );
 
           default:
@@ -1590,6 +1614,36 @@ class PoBMCPServer {
     if (seconds < 60) return `${seconds}s ago`;
     if (minutes < 60) return `${minutes}m ago`;
     return `${hours}h ago`;
+  }
+
+  /**
+   * Truncate response text if it exceeds a reasonable limit for Claude Desktop.
+   * This prevents timeouts when responses are too large.
+   */
+  private truncateResponse(text: string, maxLength: number = 8000): string {
+    if (text.length <= maxLength) {
+      return text;
+    }
+
+    const truncated = text.substring(0, maxLength);
+    const lastNewline = truncated.lastIndexOf('\n');
+    const safeText = lastNewline > 0 ? truncated.substring(0, lastNewline) : truncated;
+
+    const remaining = text.length - safeText.length;
+    const remainingLines = text.substring(safeText.length).split('\n').length;
+
+    return safeText + `\n\n[Response truncated: ${remaining} characters, ~${remainingLines} lines remaining]\n` +
+           `[Use more specific queries to see detailed information]`;
+  }
+
+  /**
+   * Wrap handler result with truncation for large responses
+   */
+  private wrapWithTruncation(result: { content: Array<{ type: string; text: string }> }, maxLength: number = 8000): typeof result {
+    if (result.content[0] && result.content[0].type === 'text') {
+      result.content[0].text = this.truncateResponse(result.content[0].text, maxLength);
+    }
+    return result;
   }
 
   async run() {
