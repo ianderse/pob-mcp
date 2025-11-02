@@ -3,25 +3,32 @@ import type { PoBBuild, BuildValidation, ValidationIssue, FlaskAnalysis } from "
 export class ValidationService {
   /**
    * Validate a complete build and return all issues found
+   *
+   * @param build - Build data from XML
+   * @param flaskAnalysis - Flask analysis (optional)
+   * @param luaStats - Stats from Lua bridge (optional, more accurate)
    */
   validateBuild(
     build: PoBBuild,
-    flaskAnalysis: FlaskAnalysis | null
+    flaskAnalysis: FlaskAnalysis | null = null,
+    luaStats?: any
   ): BuildValidation {
     const criticalIssues: ValidationIssue[] = [];
     const warnings: ValidationIssue[] = [];
     const recommendations: ValidationIssue[] = [];
 
-    // Extract stats from build
-    const stats = this.extractStats(build);
+    // Prefer Lua stats, fall back to XML stats
+    const stats = luaStats || this.extractStats(build);
 
     // Run validation rules
     this.validateResistances(stats, criticalIssues, warnings);
     this.validateDefenses(stats, build, criticalIssues, warnings);
+    this.validateMana(stats, build, criticalIssues, warnings, recommendations);
+    this.validateAccuracy(stats, build, criticalIssues, warnings);
     this.validateImmunities(flaskAnalysis, criticalIssues, warnings, recommendations);
 
     // Calculate overall score
-    const overallScore = this.calculateScore(criticalIssues, warnings);
+    const overallScore = this.calculateScore(criticalIssues, warnings, recommendations);
     const isValid = criticalIssues.length === 0;
 
     // Generate summary
@@ -59,10 +66,15 @@ export class ValidationService {
   }
 
   private validateResistances(
-    stats: Map<string, number>,
+    stats: any,
     criticalIssues: ValidationIssue[],
     warnings: ValidationIssue[]
   ): void {
+    // Get resist value (works with both Lua stats object and Map from XML)
+    const getResist = (key: string): number => {
+      return typeof stats.get === 'function' ? (stats.get(key) || 0) : (stats[key] || 0);
+    };
+
     const resistCap = 75;
     const resistances = [
       { key: 'FireResist', name: 'Fire' },
@@ -72,7 +84,7 @@ export class ValidationService {
     ];
 
     for (const { key, name } of resistances) {
-      const value = stats.get(key) || 0;
+      const value = getResist(key);
 
       if (key !== 'ChaosResist' && value < resistCap) {
         criticalIssues.push(this.createResistIssue(name, value, resistCap));
@@ -118,13 +130,18 @@ export class ValidationService {
   }
 
   private validateDefenses(
-    stats: Map<string, number>,
+    stats: any,
     build: PoBBuild,
     criticalIssues: ValidationIssue[],
     warnings: ValidationIssue[]
   ): void {
-    const life = stats.get('Life') || 0;
-    const es = stats.get('EnergyShield') || 0;
+    // Get defense stats (works with both Lua stats object and Map from XML)
+    const getDefense = (key: string): number => {
+      return typeof stats.get === 'function' ? (stats.get(key) || 0) : (stats[key] || 0);
+    };
+
+    const life = getDefense('Life');
+    const es = getDefense('EnergyShield');
     const level = parseInt(build.Build?.level || '0', 10);
 
     // Determine if this is a life or ES build
@@ -182,6 +199,137 @@ export class ValidationService {
     }
   }
 
+  private validateMana(
+    stats: any,
+    build: PoBBuild,
+    criticalIssues: ValidationIssue[],
+    warnings: ValidationIssue[],
+    recommendations: ValidationIssue[]
+  ): void {
+    // Get mana stats (works with both Lua stats object and Map from XML)
+    const getMana = (key: string): number => {
+      return typeof stats.get === 'function' ? (stats.get(key) || 0) : (stats[key] || 0);
+    };
+
+    const mana = getMana('Mana');
+    const manaUnreserved = getMana('ManaUnreserved');
+    const manaRegen = getMana('ManaRegen');
+
+    // Skip if no mana data available
+    if (mana === 0 && manaUnreserved === 0) {
+      return;
+    }
+
+    // Check unreserved mana
+    if (manaUnreserved < 50) {
+      criticalIssues.push({
+        severity: 'critical',
+        category: 'mana',
+        title: 'Insufficient Unreserved Mana',
+        description: `Only ${manaUnreserved.toFixed(0)} unreserved mana. You need at least 50 to cast most skills.`,
+        currentValue: manaUnreserved,
+        recommendedValue: 100,
+        suggestions: [
+          'Reduce aura reservation',
+          'Add Enlighten Support to aura links',
+          'Use -mana cost crafts on rings/amulet',
+          'Consider Elreon -mana cost crafted jewelry',
+        ],
+        location: 'Gear & Skills',
+      });
+    } else if (manaUnreserved < 100) {
+      warnings.push({
+        severity: 'warning',
+        category: 'mana',
+        title: 'Low Unreserved Mana',
+        description: `${manaUnreserved.toFixed(0)} unreserved mana is low. You may struggle with mana-intensive skills.`,
+        currentValue: manaUnreserved,
+        recommendedValue: 150,
+        suggestions: [
+          'Reduce aura reservation slightly',
+          'Add -mana cost crafts',
+          'Consider increasing mana pool or regeneration',
+        ],
+        location: 'Gear & Skills',
+      });
+    }
+
+    // Check mana regeneration for caster builds (if mana costs are significant)
+    if (manaRegen > 0 && manaRegen < 50 && manaUnreserved > 100) {
+      recommendations.push({
+        severity: 'info',
+        category: 'mana',
+        title: 'Low Mana Regeneration',
+        description: `${manaRegen.toFixed(1)} mana/s regeneration may be insufficient for sustained casting.`,
+        currentValue: manaRegen,
+        recommendedValue: 100,
+        suggestions: [
+          'Enable Clarity aura',
+          'Allocate mana regeneration nodes',
+          'Add mana regeneration to gear',
+          'Consider a mana flask for long fights',
+        ],
+        location: 'Gear & Tree',
+      });
+    }
+  }
+
+  private validateAccuracy(
+    stats: any,
+    build: PoBBuild,
+    criticalIssues: ValidationIssue[],
+    warnings: ValidationIssue[]
+  ): void {
+    // Get accuracy stats (works with both Lua stats object and Map from XML)
+    const getAccuracy = (key: string): number => {
+      return typeof stats.get === 'function' ? (stats.get(key) || 0) : (stats[key] || 0);
+    };
+
+    const hitChance = getAccuracy('HitChance');
+    const accuracy = getAccuracy('Accuracy');
+
+    // Skip if no accuracy data (likely a spell build)
+    if (hitChance === 0 && accuracy === 0) {
+      return;
+    }
+
+    // Check hit chance for attack builds
+    if (hitChance > 0) {
+      if (hitChance < 85) {
+        criticalIssues.push({
+          severity: 'critical',
+          category: 'accuracy',
+          title: 'Very Low Hit Chance',
+          description: `${hitChance.toFixed(1)}% chance to hit means you miss ${(100 - hitChance).toFixed(1)}% of attacks. This severely reduces your DPS.`,
+          currentValue: hitChance,
+          recommendedValue: 95,
+          suggestions: [
+            'Add accuracy to gear (gloves, helmet, jewelry)',
+            'Enable Precision aura',
+            'Allocate accuracy nodes on the passive tree',
+            'Consider using a "Hits can\'t be Evaded" weapon',
+          ],
+          location: 'Gear & Tree',
+        });
+      } else if (hitChance < 90) {
+        warnings.push({
+          severity: 'warning',
+          category: 'accuracy',
+          title: 'Low Hit Chance',
+          description: `${hitChance.toFixed(1)}% chance to hit is below the recommended 95%+.`,
+          currentValue: hitChance,
+          recommendedValue: 95,
+          suggestions: [
+            'Add more accuracy to gear',
+            'Enable or level up Precision aura',
+            'Allocate nearby accuracy nodes',
+          ],
+          location: 'Gear & Tree',
+        });
+      }
+    }
+  }
+
   private validateImmunities(
     flaskAnalysis: FlaskAnalysis | null,
     criticalIssues: ValidationIssue[],
@@ -194,11 +342,11 @@ export class ValidationService {
 
     // Check for critical immunities
     if (!flaskAnalysis.hasBleedImmunity) {
-      criticalIssues.push({
-        severity: 'critical',
+      warnings.push({
+        severity: 'warning',
         category: 'immunities',
         title: 'No Bleed Immunity',
-        description: 'You have no way to remove bleeding. This is extremely dangerous as bleeds can kill you rapidly while moving.',
+        description: 'You have no way to remove bleeding. This is dangerous as bleeds can kill you rapidly while moving.',
         suggestions: [
           `Add a "of Staunching" suffix to your life flask`,
           `Use a flask with "Grants Immunity to Bleeding"`,
@@ -209,8 +357,8 @@ export class ValidationService {
     }
 
     if (!flaskAnalysis.hasFreezeImmunity) {
-      criticalIssues.push({
-        severity: 'critical',
+      warnings.push({
+        severity: 'warning',
         category: 'immunities',
         title: 'No Freeze Immunity',
         description: 'You have no freeze immunity. Getting frozen leaves you unable to act and is often fatal.',
@@ -242,16 +390,20 @@ export class ValidationService {
 
   private calculateScore(
     criticalIssues: ValidationIssue[],
-    warnings: ValidationIssue[]
+    warnings: ValidationIssue[],
+    recommendations: ValidationIssue[]
   ): number {
     // Start at 10 (perfect)
     let score = 10;
 
-    // Each critical issue removes 2 points
-    score -= criticalIssues.length * 2;
+    // Each critical issue removes 3 points
+    score -= criticalIssues.length * 3;
 
-    // Each warning removes 0.5 points
-    score -= warnings.length * 0.5;
+    // Each warning removes 1 point
+    score -= warnings.length * 1;
+
+    // Each recommendation removes 0.25 points
+    score -= recommendations.length * 0.25;
 
     // Clamp to 0-10
     return Math.max(0, Math.min(10, score));

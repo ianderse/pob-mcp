@@ -65,7 +65,7 @@ import { ContextBuilder } from "./utils/contextBuilder.js";
 // Import server modules
 import { ToolGate } from "./server/toolGate.js";
 import { LuaClientManager } from "./server/luaClientManager.js";
-import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getExportToolSchemas } from "./server/toolSchemas.js";
+import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getValidationToolSchemas, getExportToolSchemas } from "./server/toolSchemas.js";
 
 // Import handlers
 import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats } from "./handlers/buildHandlers.js";
@@ -75,6 +75,7 @@ import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaLoadBuild, h
 import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems } from "./handlers/itemSkillHandlers.js";
 import { handleAnalyzeDefenses, handleSuggestOptimalNodes, handleOptimizeTree } from "./handlers/optimizationHandlers.js";
 import { handleAnalyzeItems, handleOptimizeSkillLinks, handleCreateBudgetBuild } from "./handlers/advancedOptimizationHandlers.js";
+import { handleValidateBuild } from "./handlers/validationHandlers.js";
 import { handleExportBuild, handleSaveTree, handleSnapshotBuild, handleListSnapshots, handleRestoreSnapshot } from "./handlers/exportHandlers.js";
 
 class PoBMCPServer {
@@ -291,6 +292,9 @@ class PoBMCPServer {
 
       // Add optimization tools
       tools.push(...getOptimizationToolSchemas());
+
+      // Add validation tools
+      tools.push(...getValidationToolSchemas());
 
       // Add export and persistence tools
       tools.push(...getExportToolSchemas());
@@ -592,6 +596,18 @@ class PoBMCPServer {
                 }
               )
             );
+
+          // Phase 7: Build Validation
+          case "validate_build":
+            const validationContext = {
+              buildService: this.buildService,
+              validationService: this.validationService,
+              getLuaClient: () => this.luaClientManager.getClient(),
+              ensureLuaClient: () => this.luaClientManager.ensureClient(),
+            };
+            return await handleValidateBuild(validationContext, {
+              build_name: args?.build_name as string | undefined,
+            });
 
           // Phase 8: Export and Persistence Tools
           case "export_build":

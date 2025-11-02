@@ -716,6 +716,27 @@ export function getOptimizationToolSchemas(): any[] {
 }
 
 /**
+ * Get build validation tool schemas (Phase 7)
+ */
+export function getValidationToolSchemas(): any[] {
+  return [
+    {
+      name: "validate_build",
+      description: "Comprehensive build validation - checks resistances, defenses, mana, accuracy, and immunities. Provides prioritized recommendations with severity levels (critical/warning/info).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Build to validate. If omitted and Lua bridge is active, validates currently loaded build.",
+          },
+        },
+      },
+    },
+  ];
+}
+
+/**
  * Get export and persistence tool schemas (Phase 8)
  */
 export function getExportToolSchemas(): any[] {

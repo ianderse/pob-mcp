@@ -28,6 +28,8 @@ const HIGH_IMPACT_TOOLS = [
   'test_allocation',
   'setup_skill_with_gems',
   'add_multiple_items',
+  // Phase 7: Build validation (comprehensive analysis)
+  'validate_build',
   // Phase 8: Export and persistence tools (file-modifying)
   'export_build',
   'save_tree',
