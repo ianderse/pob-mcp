@@ -51,6 +51,13 @@ This server is specifically optimized to prevent timeouts in Claude Desktop:
 - **Actionable Suggestions**: Specific fixes for each problem (gear, tree, flasks)
 - **Smart Context**: Different thresholds for life/ES builds, attack/spell builds, character level
 
+### Configuration & Enemy Settings (Phase 9)
+- **View Configuration**: See current charge usage, enemy settings, and active conditions
+- **Modify Settings**: Toggle buffs, charges, and combat conditions
+- **Enemy Parameters**: Configure enemy level, resistances, armor, and evasion
+- **Scenario Testing**: Test DPS against bosses (Shaper, Maven, map bosses)
+- **Impact Analysis**: Before/after DPS comparison with change percentage
+
 ### Build Export & Persistence (Phase 8)
 - **Export Builds**: Create copies/variants of builds to XML files with optional notes
 - **Save Tree**: Update passive tree in existing builds without affecting gear or skills
@@ -182,7 +189,7 @@ The Lua bridge enables high-fidelity stat calculations using PoB's actual calcul
 
 ## Usage
 
-The server provides 36 tools organized into functional categories. All tools are accessible through natural language conversation with Claude.
+The server provides 39 tools organized into functional categories. All tools are accessible through natural language conversation with Claude.
 
 ### Tool Categories
 
@@ -192,11 +199,14 @@ The server provides 36 tools organized into functional categories. All tools are
 - Stat extraction from XML
 - Raw XML access and tree data management
 
-**Lua Bridge Core Tools (6 tools)** - Require `POB_LUA_ENABLED=true`:
+**Lua Bridge Core Tools (9 tools)** - Require `POB_LUA_ENABLED=true`:
 - Bridge lifecycle management (start/stop)
 - Build loading into calculation engine
 - High-fidelity stat calculation
 - Passive tree viewing and modification
+- Configuration state viewing and modification
+- Enemy parameter configuration
+- Scenario testing (boss DPS, charge impact, etc.)
 
 **Tree Planning Tools (3 tools)** - Require Lua bridge:
 - Tree comparison between builds
@@ -995,7 +1005,16 @@ Quick test checklist:
 - Rollback to previous snapshots (`restore_snapshot`)
 - 5 export and persistence tools
 
-**Total Available Tools**: 36 tools across 7 categories
+**Phase 9: Configuration & Enemy Settings** ✅
+- View configuration state (`get_config`)
+- Modify configuration inputs (`set_config`)
+- Configure enemy parameters (`set_enemy_stats`)
+- Toggle charges, buffs, and conditions
+- Test DPS against different enemy types
+- Before/after impact analysis
+- 3 configuration tools
+
+**Total Available Tools**: 39 tools across 7 categories
 
 ### Technical Achievements
 
