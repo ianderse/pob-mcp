@@ -11,7 +11,7 @@ An MCP (Model Context Protocol) server that enables Claude to analyze and work w
 ## 🚀 Optimized for Claude Desktop
 
 This server is specifically optimized to prevent timeouts in Claude Desktop:
-- **Tool Gate System**: Prevents excessive tool chaining - 26 high-impact tools require explicit "continue" command
+- **Tool Gate System**: Prevents excessive tool chaining - 27 high-impact tools require explicit "continue" command
 - **Response Truncation**: Automatically limits responses to 8000 characters with helpful summaries
 - **Batch Operations**: Combines multiple operations (e.g., `setup_skill_with_gems`, `add_multiple_items`)
 - **Concise Responses**: Streamlined output focusing on actionable information
@@ -43,6 +43,13 @@ This server is specifically optimized to prevent timeouts in Claude Desktop:
 - **Item Management**: Add items from PoE text format, manage flasks, and test gear upgrades
 - **Skill Configuration**: View and modify skill setups, compare DPS between different socket groups
 - **Interactive Sessions**: Load builds and modify them programmatically with immediate stat recalculation
+
+### Build Validation (Phase 7)
+- **Comprehensive Validation**: Check resistances, defenses, mana, accuracy, and immunities
+- **Severity Classification**: Critical issues, warnings, and recommendations
+- **Build Scoring**: Overall health score (0-10) based on issue severity
+- **Actionable Suggestions**: Specific fixes for each problem (gear, tree, flasks)
+- **Smart Context**: Different thresholds for life/ES builds, attack/spell builds, character level
 
 ### Build Export & Persistence (Phase 8)
 - **Export Builds**: Create copies/variants of builds to XML files with optional notes
@@ -175,7 +182,7 @@ The Lua bridge enables high-fidelity stat calculations using PoB's actual calcul
 
 ## Usage
 
-The server provides 35 tools organized into functional categories. All tools are accessible through natural language conversation with Claude.
+The server provides 36 tools organized into functional categories. All tools are accessible through natural language conversation with Claude.
 
 ### Tool Categories
 
@@ -211,6 +218,12 @@ The server provides 35 tools organized into functional categories. All tools are
 - Item upgrade recommendations
 - Skill link optimization
 - Budget build creation from requirements
+
+**Build Validation Tools (1 tool)** - Works with or without Lua bridge:
+- Comprehensive build validation (resistances, defenses, mana, accuracy, immunities)
+- Severity-based issue classification
+- Overall build health scoring
+- Actionable recommendations
 
 **Build Export & Persistence Tools (5 tools)** - Always available:
 - Export builds to XML files with optional notes
@@ -636,6 +649,61 @@ Generate a comprehensive budget build plan based on requirements. Provides skill
 - Get comprehensive build guidance
 - Understand gearing priorities for your budget
 
+### Build Validation Tools (Works with or without Lua Bridge)
+
+#### `validate_build`
+Comprehensive build validation - checks resistances, defenses, mana, accuracy, and immunities. Provides prioritized recommendations with severity levels.
+
+**Parameters**:
+- `build_name` (required): Build to validate
+
+**Returns**:
+- Overall build score (0-10)
+- Critical issues (must fix immediately)
+- Warnings (should address soon)
+- Recommendations (nice to have improvements)
+- Actionable suggestions for each issue
+
+**Validation Categories**:
+1. **Resistances**: Fire/Cold/Lightning/Chaos resistance caps
+2. **Defenses**: Life/ES pool validation with level-appropriate thresholds
+3. **Mana Management**: Unreserved mana and regeneration checking
+4. **Accuracy**: Hit chance validation for attack builds
+5. **Immunities**: Bleed/freeze/poison immunity detection
+
+**Example**: "Validate my Deadeye build"
+
+**Use Cases**:
+- Check build readiness before mapping
+- Identify critical gaps in defenses
+- Get specific suggestions for improvements
+- Verify resistance caps after gear changes
+- Ensure adequate mana for skills
+
+**Smart Features**:
+- Prefers Lua bridge stats (more accurate), falls back to XML parsing
+- Context-aware (different thresholds for life vs ES builds, attack vs spell)
+- Level-appropriate validation (league start vs endgame)
+- Severity-weighted scoring
+
+**Output Example**:
+```
+=== Build Validation Report ===
+Overall Score: 7.0/10
+Status: Build is solid but has some issues to address.
+
+❌ Critical Issues (2):
+- Fire Resistance Too Low (45% → need 75%)
+- Life Pool Too Low (3450 → need 4500+)
+
+⚠️  Warnings (2):
+- No Bleed Immunity
+- Low Unreserved Mana (85 mana)
+
+💡 Recommendations (1):
+- Consider Poison Immunity
+```
+
 ### Build Export & Persistence Tools (Always Available)
 
 #### `export_build`
@@ -910,6 +978,15 @@ Quick test checklist:
 - Budget build creation from requirements (`create_budget_build`)
 - 8 optimization tools
 
+**Phase 7: Build Validation** ✅
+- Comprehensive build validation (`validate_build`)
+- Resistance, defense, mana, accuracy, and immunity checking
+- Severity-based issue classification (critical/warning/info)
+- Overall build health scoring (0-10)
+- Actionable recommendations with specific suggestions
+- Works with Lua bridge (accurate) or XML fallback
+- 1 validation tool
+
 **Phase 8: Build Export & Persistence** ✅
 - Export builds to XML files (`export_build`)
 - Update passive tree without affecting gear/skills (`save_tree`)
@@ -918,7 +995,7 @@ Quick test checklist:
 - Rollback to previous snapshots (`restore_snapshot`)
 - 5 export and persistence tools
 
-**Total Available Tools**: 35 tools across 6 categories
+**Total Available Tools**: 36 tools across 7 categories
 
 ### Technical Achievements
 
