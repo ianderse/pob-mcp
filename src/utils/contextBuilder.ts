@@ -10,6 +10,7 @@ import type { TreeService } from '../services/treeService.js';
 import type { WatchService } from '../services/watchService.js';
 import type { ValidationService } from '../services/validationService.js';
 import type { BuildExportService } from '../services/buildExportService.js';
+import type { SkillGemService } from '../services/skillGemService.js';
 import type { PoBLuaApiClient, PoBLuaTcpClient } from '../pobLuaBridge.js';
 
 /**
@@ -71,6 +72,14 @@ export interface ExportContext {
 }
 
 /**
+ * Context for skill gem analysis operations
+ */
+export interface SkillGemContext {
+  buildService: BuildService;
+  skillGemService: SkillGemService;
+}
+
+/**
  * Dependencies needed to build all context types
  */
 export interface ContextDependencies {
@@ -79,6 +88,7 @@ export interface ContextDependencies {
   watchService: WatchService;
   validationService: ValidationService;
   exportService: BuildExportService;
+  skillGemService: SkillGemService;
   pobDirectory: string;
   luaEnabled: boolean;
   useTcpMode: boolean;
@@ -171,6 +181,16 @@ export class ContextBuilder {
       buildService: this.deps.buildService,
       exportService: this.deps.exportService,
       luaClient: this.deps.getLuaClient() || undefined,
+    };
+  }
+
+  /**
+   * Build context for skill gem analysis operations
+   */
+  buildSkillGemContext(): SkillGemContext {
+    return {
+      buildService: this.deps.buildService,
+      skillGemService: this.deps.skillGemService,
     };
   }
 }

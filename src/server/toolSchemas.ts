@@ -807,6 +807,143 @@ export function getValidationToolSchemas(): any[] {
 }
 
 /**
+ * Get skill gem analysis tool schemas (Phase 11)
+ */
+export function getSkillGemToolSchemas(): any[] {
+  return [
+    {
+      name: "analyze_skill_links",
+      description: "Analyze skill gem setup and evaluate support gem choices. Detects build archetype, rates each support gem, and identifies issues with current setup.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Build to analyze",
+          },
+          skill_index: {
+            type: "number",
+            description: "Which skill to analyze (0 = main skill, default: 0)",
+          },
+        },
+        required: ["build_name"],
+      },
+    },
+    {
+      name: "suggest_support_gems",
+      description: "Get intelligent support gem recommendations based on build archetype. Provides ranked suggestions with DPS estimates, cost, and reasoning.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Build to analyze",
+          },
+          skill_index: {
+            type: "number",
+            description: "Which skill to optimize (0 = main skill, default: 0)",
+          },
+          count: {
+            type: "number",
+            description: "Number of suggestions to return (default: 5)",
+          },
+          include_awakened: {
+            type: "boolean",
+            description: "Include awakened gem recommendations (default: true)",
+          },
+          budget: {
+            type: "string",
+            description: "Budget tier: 'league_start', 'mid_league', or 'endgame' (default: 'endgame')",
+          },
+        },
+        required: ["build_name"],
+      },
+    },
+    {
+      name: "compare_gem_setups",
+      description: "Compare multiple gem configurations side-by-side to evaluate different options. NOTE: Full DPS comparison requires Lua bridge integration (future enhancement).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Build to test",
+          },
+          skill_index: {
+            type: "number",
+            description: "Which skill to test (default: 0)",
+          },
+          setups: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                gems: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+              },
+              required: ["name", "gems"],
+            },
+            description: "Array of gem setups to compare (minimum 2)",
+          },
+        },
+        required: ["build_name", "setups"],
+      },
+    },
+    {
+      name: "validate_gem_quality",
+      description: "Check all gems for quality and level improvements. Identifies missing quality, awakened upgrade opportunities, and corruption targets.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Build to validate",
+          },
+          include_corrupted: {
+            type: "boolean",
+            description: "Include corruption recommendations for 21/23 gems (default: true)",
+          },
+        },
+        required: ["build_name"],
+      },
+    },
+    {
+      name: "find_optimal_links",
+      description: "Auto-generate the best support gem combination for a skill based on budget and optimization goal. Provides step-by-step upgrade path.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Build to optimize",
+          },
+          skill_index: {
+            type: "number",
+            description: "Which skill to optimize (default: 0)",
+          },
+          link_count: {
+            type: "number",
+            description: "Number of links (4, 5, or 6)",
+          },
+          budget: {
+            type: "string",
+            description: "Budget tier: 'league_start', 'mid_league', or 'endgame' (default: 'endgame')",
+          },
+          optimize_for: {
+            type: "string",
+            description: "Optimization target: 'dps', 'clear_speed', 'bossing', or 'defense' (default: 'dps')",
+          },
+        },
+        required: ["build_name", "link_count"],
+      },
+    },
+  ];
+}
+
+/**
  * Get export and persistence tool schemas (Phase 8)
  */
 export function getExportToolSchemas(): any[] {

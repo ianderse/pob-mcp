@@ -45,6 +45,7 @@ import { TreeService } from "./services/treeService.js";
 import { WatchService } from "./services/watchService.js";
 import { ValidationService } from "./services/validationService.js";
 import { BuildExportService } from "./services/buildExportService.js";
+import { SkillGemService } from "./services/skillGemService.js";
 
 // Import types
 import type {
@@ -65,7 +66,7 @@ import { ContextBuilder } from "./utils/contextBuilder.js";
 // Import server modules
 import { ToolGate } from "./server/toolGate.js";
 import { LuaClientManager } from "./server/luaClientManager.js";
-import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getConfigToolSchemas, getValidationToolSchemas, getExportToolSchemas } from "./server/toolSchemas.js";
+import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getConfigToolSchemas, getValidationToolSchemas, getExportToolSchemas, getSkillGemToolSchemas } from "./server/toolSchemas.js";
 
 // Import handlers
 import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats } from "./handlers/buildHandlers.js";
@@ -78,6 +79,7 @@ import { handleAnalyzeItems, handleOptimizeSkillLinks, handleCreateBudgetBuild }
 import { handleGetConfig, handleSetConfig, handleSetEnemyStats } from "./handlers/configHandlers.js";
 import { handleValidateBuild } from "./handlers/validationHandlers.js";
 import { handleExportBuild, handleSaveTree, handleSnapshotBuild, handleListSnapshots, handleRestoreSnapshot } from "./handlers/exportHandlers.js";
+import { handleAnalyzeSkillLinks, handleSuggestSupportGems, handleCompareGemSetups, handleValidateGemQuality, handleFindOptimalLinks } from "./handlers/skillGemHandlers.js";
 
 class PoBMCPServer {
   private server: Server;
@@ -90,6 +92,7 @@ class PoBMCPServer {
   private watchService: WatchService;
   private validationService: ValidationService;
   private exportService: BuildExportService;
+  private skillGemService: SkillGemService;
 
   // Context builder
   private contextBuilder: ContextBuilder;
@@ -132,6 +135,7 @@ class PoBMCPServer {
     this.watchService = new WatchService(this.pobDirectory, this.buildService);
     this.validationService = new ValidationService();
     this.exportService = new BuildExportService(this.pobDirectory);
+    this.skillGemService = new SkillGemService();
 
     // Initialize server modules
     this.toolGate = new ToolGate();
@@ -147,6 +151,7 @@ class PoBMCPServer {
       watchService: this.watchService,
       validationService: this.validationService,
       exportService: this.exportService,
+      skillGemService: this.skillGemService,
       pobDirectory: this.pobDirectory,
       luaEnabled: luaEnabled,
       useTcpMode: useTcpMode,
@@ -301,6 +306,9 @@ class PoBMCPServer {
       // Add export and persistence tools
       tools.push(...getExportToolSchemas());
 
+      // Add skill gem analysis tools
+      tools.push(...getSkillGemToolSchemas());
+
       return { tools };
     });
 
@@ -320,6 +328,7 @@ class PoBMCPServer {
         const itemSkillContext = this.contextBuilder.buildItemSkillContext();
         const optimizationContext = this.contextBuilder.buildOptimizationContext();
         const exportContext = this.contextBuilder.buildExportContext();
+        const skillGemContext = this.contextBuilder.buildSkillGemContext();
 
         switch (name) {
           case "continue":
@@ -687,6 +696,34 @@ class PoBMCPServer {
               build_name: args.build_name as string,
               snapshot_id: args.snapshot_id as string,
               backup_current: args.backup_current as boolean | undefined,
+            });
+
+          // Skill Gem Analysis Tools (Phase 11)
+          case "analyze_skill_links":
+            return await handleAnalyzeSkillLinks(skillGemContext, args);
+
+          case "suggest_support_gems":
+            return await handleSuggestSupportGems(skillGemContext, args);
+
+          case "compare_gem_setups":
+            if (!args) throw new Error("Missing arguments");
+            return await handleCompareGemSetups(skillGemContext, {
+              build_name: args.build_name as string,
+              skill_index: args.skill_index as number | undefined,
+              setups: args.setups as Array<{ name: string; gems: string[] }>,
+            });
+
+          case "validate_gem_quality":
+            return await handleValidateGemQuality(skillGemContext, args);
+
+          case "find_optimal_links":
+            if (!args) throw new Error("Missing arguments");
+            return await handleFindOptimalLinks(skillGemContext, {
+              build_name: args.build_name as string,
+              skill_index: args.skill_index as number | undefined,
+              link_count: args.link_count as number,
+              budget: args.budget as "league_start" | "mid_league" | "endgame" | undefined,
+              optimize_for: args.optimize_for as "dps" | "clear_speed" | "bossing" | "defense" | undefined,
             });
 
           default:

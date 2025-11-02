@@ -51,6 +51,15 @@ This server is specifically optimized to prevent timeouts in Claude Desktop:
 - **Actionable Suggestions**: Specific fixes for each problem (gear, tree, flasks)
 - **Smart Context**: Different thresholds for life/ES builds, attack/spell builds, character level
 
+### Skill Gem Recommendations (Phase 11)
+- **Skill Analysis**: Evaluate current gem setup and detect build archetype
+- **Smart Suggestions**: AI-driven support gem recommendations with DPS estimates
+- **Archetype Detection**: Automatically classify builds (Elemental Bow Attack, Critical Spell, etc.)
+- **Quality Validation**: Check for missing gem quality, corruption opportunities, and awakened upgrades
+- **Budget Awareness**: League-start, mid-league, and endgame recommendations
+- **Optimal Links**: Auto-generate best support gem combinations for 4/5/6-link setups
+- **Gem Database**: Curated database of support gems with synergies and anti-synergies
+
 ### Configuration & Enemy Settings (Phase 9)
 - **View Configuration**: See current charge usage, enemy settings, and active conditions
 - **Modify Settings**: Toggle buffs, charges, and combat conditions
@@ -189,7 +198,7 @@ The Lua bridge enables high-fidelity stat calculations using PoB's actual calcul
 
 ## Usage
 
-The server provides 39 tools organized into functional categories. All tools are accessible through natural language conversation with Claude.
+The server provides 44 tools organized into functional categories. All tools are accessible through natural language conversation with Claude.
 
 ### Tool Categories
 
@@ -241,6 +250,13 @@ The server provides 39 tools organized into functional categories. All tools are
 - Create versioned snapshots with metadata
 - View snapshot history with stats
 - Rollback to previous snapshots
+
+**Skill Gem Analysis Tools (5 tools)** - Always available:
+- Analyze skill gem setups with archetype detection
+- Get intelligent support gem recommendations
+- Validate gem quality and suggest upgrades
+- Compare multiple gem configurations
+- Generate optimal support gem combinations
 
 ## Available Tools
 
@@ -838,6 +854,155 @@ Restore a build from a snapshot. Optionally creates a backup of current state be
 - Validation of snapshot file
 - Build cache invalidation after restore
 
+### Skill Gem Analysis Tools (Always Available)
+
+#### `analyze_skill_links`
+Analyzes a skill's gem setup, evaluates support gem choices, and detects build archetype.
+
+**Parameters**:
+- `build_name` (required): Build to analyze
+- `skill_index` (optional): Which skill to analyze (0 = main skill, default: 0)
+
+**Returns**:
+- Active skill name, level, quality, and tags
+- Support gem ratings (excellent/good/suboptimal/poor)
+- Build archetype classification
+- Archetype match percentage
+- Detected issues and recommendations
+
+**Example Output**:
+```
+=== Skill Analysis: Lightning Arrow ===
+
+Active Skill: Lightning Arrow (Level 21/20)
+Tags: Attack, Projectile, AoE, Lightning, Bow
+Archetype: Elemental Bow Attack
+
+=== Support Gems (6-Link) ===
+1. ✓ Awakened Elemental Damage with Attacks (5/5) - Excellent
+2. ✓ Inspiration Support (4/0) - Good (consider quality)
+3. ⚠ Added Lightning Damage (1/0) - Suboptimal
+   → Recommendation: Replace with Awakened Added Lightning Damage
+...
+
+=== Archetype Match: 85% ===
+Strong alignment with "Elemental Bow Attack" archetype
+```
+
+#### `suggest_support_gems`
+Provides intelligent support gem recommendations based on build archetype.
+
+**Parameters**:
+- `build_name` (required): Build to analyze
+- `skill_index` (optional): Which skill to optimize (default: 0)
+- `count` (optional): Number of suggestions (default: 5)
+- `include_awakened` (optional): Include awakened gems (default: true)
+- `budget` (optional): "league_start", "mid_league", or "endgame" (default: "endgame")
+
+**Returns**:
+- Ranked support gem recommendations
+- Estimated DPS increase for each
+- Reasoning and synergy explanation
+- Cost estimates
+- Required conditions or conflicts
+
+**Use Cases**:
+- "What support gems should I use?"
+- "Best budget gem upgrades?"
+- "Show me endgame support gem options"
+
+#### `validate_gem_quality`
+Checks all gems for quality and level improvements.
+
+**Parameters**:
+- `build_name` (required): Build to validate
+- `include_corrupted` (optional): Include corruption recommendations (default: true)
+
+**Returns**:
+- Gems needing quality improvement
+- Awakened gem upgrade opportunities
+- Corruption targets for 21/23 gems
+- Priority recommendations
+
+**Example Output**:
+```
+=== Gem Quality Validation ===
+
+⚠ 3 gems need quality improvement:
+1. Lightning Arrow: 21/0 → 21/20 (Impact: High)
+2. Inspiration Support: 4/0 → 20/20 (Impact: Medium)
+...
+
+⭐ Awakened Gem Upgrades Available:
+1. Elemental Damage with Attacks → Awakened EDWA
+   Est. DPS Gain: ~8-12%
+...
+
+💡 Priority: Quality your Lightning Arrow first (highest impact)
+```
+
+#### `compare_gem_setups`
+Compares multiple gem configurations side-by-side.
+
+**Parameters**:
+- `build_name` (required): Build to test
+- `skill_index` (optional): Which skill to test (default: 0)
+- `setups` (required): Array of gem setups with format `{name: string, gems: string[]}`
+
+**Returns**:
+- Side-by-side comparison of gem setups
+- Structural analysis
+- Best setup recommendation
+
+**Note**: Full DPS comparison requires Lua bridge integration (planned for future enhancement).
+
+**Use Cases**:
+- "Which 6-link is better?"
+- "Compare awakened gems vs budget setup"
+
+#### `find_optimal_links`
+Auto-generates the best support gem combination for a skill.
+
+**Parameters**:
+- `build_name` (required): Build to optimize
+- `skill_index` (optional): Which skill to optimize (default: 0)
+- `link_count` (required): Number of links (4, 5, or 6)
+- `budget` (optional): "league_start", "mid_league", or "endgame" (default: "endgame")
+- `optimize_for` (optional): "dps", "clear_speed", "bossing", or "defense" (default: "dps")
+
+**Returns**:
+- Optimal gem combination for specified link count
+- Step-by-step upgrade path
+- Estimated DPS increases
+- Total cost estimate
+
+**Example Output**:
+```
+=== Optimal 6-Link for Lightning Arrow ===
+
+Optimization Target: DPS (Bossing)
+Budget: Endgame
+
+🏆 Optimal Setup:
+1. Lightning Arrow (21/20)
+2. Awakened Elemental Damage with Attacks Support (5/20)
+3. Awakened Added Lightning Damage Support (5/20)
+4. Awakened Lightning Penetration Support (5/20)
+5. Inspiration Support (21/20)
+6. Elemental Focus Support (21/20)
+
+=== Upgrade Path ===
+Step 1: Add Awakened Lightning Penetration
+Est. DPS Increase: +26.5%
+Cost: ~50 Divine Orbs
+...
+```
+
+**Use Cases**:
+- "What's my best 6-link?"
+- "Show me a league-start 4-link"
+- "Optimize my main skill for bossing"
+
 ## Development
 
 ### Watch mode for development:
@@ -1014,7 +1179,18 @@ Quick test checklist:
 - Before/after impact analysis
 - 3 configuration tools
 
-**Total Available Tools**: 39 tools across 7 categories
+**Phase 11: Skill Gem Recommendations** ✅
+- Skill gem setup analysis (`analyze_skill_links`)
+- Intelligent support gem suggestions (`suggest_support_gems`)
+- Gem quality validation (`validate_gem_quality`)
+- Gem configuration comparison (`compare_gem_setups`)
+- Optimal link generation (`find_optimal_links`)
+- Build archetype detection (Elemental Bow Attack, Critical Spell, etc.)
+- Budget-aware recommendations (league-start to endgame)
+- Curated gem database with synergies and anti-synergies
+- 5 skill gem analysis tools
+
+**Total Available Tools**: 44 tools across 8 categories
 
 ### Technical Achievements
 
