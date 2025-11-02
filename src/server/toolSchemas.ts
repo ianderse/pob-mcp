@@ -716,6 +716,76 @@ export function getOptimizationToolSchemas(): any[] {
 }
 
 /**
+ * Get configuration tool schemas (Phase 9)
+ */
+export function getConfigToolSchemas(): any[] {
+  return [
+    {
+      name: "get_config",
+      description: "View current configuration state including charge usage, enemy settings, and active conditions. Requires Lua bridge with a loaded build.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "set_config",
+      description: "Modify configuration inputs to test different scenarios. Common configs: usePowerCharges, useFrenzyCharges, enemyIsBoss, conditionFortify, conditionLeeching, buffOnslaught. Requires Lua bridge.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          config_name: {
+            type: "string",
+            description: "Name of configuration input to change (e.g., 'usePowerCharges', 'enemyIsBoss', 'conditionFortify')",
+          },
+          value: {
+            description: "New value (boolean for most flags, number for counts)",
+          },
+        },
+        required: ["config_name", "value"],
+      },
+    },
+    {
+      name: "set_enemy_stats",
+      description: "Configure enemy parameters for DPS calculations. Test against different enemy types (map boss, Shaper, Maven). Requires Lua bridge.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          level: {
+            type: "number",
+            description: "Enemy level (default: 84)",
+          },
+          fire_resist: {
+            type: "number",
+            description: "Fire resistance % (default: 40)",
+          },
+          cold_resist: {
+            type: "number",
+            description: "Cold resistance % (default: 40)",
+          },
+          lightning_resist: {
+            type: "number",
+            description: "Lightning resistance % (default: 40)",
+          },
+          chaos_resist: {
+            type: "number",
+            description: "Chaos resistance % (default: 20)",
+          },
+          armor: {
+            type: "number",
+            description: "Enemy armor value",
+          },
+          evasion: {
+            type: "number",
+            description: "Enemy evasion value",
+          },
+        },
+      },
+    },
+  ];
+}
+
+/**
  * Get build validation tool schemas (Phase 7)
  */
 export function getValidationToolSchemas(): any[] {

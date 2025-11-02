@@ -65,7 +65,7 @@ import { ContextBuilder } from "./utils/contextBuilder.js";
 // Import server modules
 import { ToolGate } from "./server/toolGate.js";
 import { LuaClientManager } from "./server/luaClientManager.js";
-import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getValidationToolSchemas, getExportToolSchemas } from "./server/toolSchemas.js";
+import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getConfigToolSchemas, getValidationToolSchemas, getExportToolSchemas } from "./server/toolSchemas.js";
 
 // Import handlers
 import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats } from "./handlers/buildHandlers.js";
@@ -75,6 +75,7 @@ import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaLoadBuild, h
 import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems } from "./handlers/itemSkillHandlers.js";
 import { handleAnalyzeDefenses, handleSuggestOptimalNodes, handleOptimizeTree } from "./handlers/optimizationHandlers.js";
 import { handleAnalyzeItems, handleOptimizeSkillLinks, handleCreateBudgetBuild } from "./handlers/advancedOptimizationHandlers.js";
+import { handleGetConfig, handleSetConfig, handleSetEnemyStats } from "./handlers/configHandlers.js";
 import { handleValidateBuild } from "./handlers/validationHandlers.js";
 import { handleExportBuild, handleSaveTree, handleSnapshotBuild, handleListSnapshots, handleRestoreSnapshot } from "./handlers/exportHandlers.js";
 
@@ -288,6 +289,7 @@ class PoBMCPServer {
       // Add Lua tools if enabled
       if (this.luaClientManager.isEnabled()) {
         tools.push(...getLuaToolSchemas());
+        tools.push(...getConfigToolSchemas()); // Phase 9: Config tools (require Lua)
       }
 
       // Add optimization tools
@@ -443,6 +445,40 @@ class PoBMCPServer {
 
           case "lua_get_tree":
             return await handleLuaGetTree(luaContext);
+
+          // Phase 9: Configuration Tools
+          case "get_config":
+            const getConfigContext = {
+              getLuaClient: () => this.luaClientManager.getClient(),
+              ensureLuaClient: () => this.luaClientManager.ensureClient(),
+            };
+            return await handleGetConfig(getConfigContext);
+
+          case "set_config":
+            if (!args) throw new Error("Missing arguments");
+            const setConfigContext = {
+              getLuaClient: () => this.luaClientManager.getClient(),
+              ensureLuaClient: () => this.luaClientManager.ensureClient(),
+            };
+            return await handleSetConfig(setConfigContext, {
+              config_name: args.config_name as string,
+              value: args.value as boolean | number | string,
+            });
+
+          case "set_enemy_stats":
+            const setEnemyContext = {
+              getLuaClient: () => this.luaClientManager.getClient(),
+              ensureLuaClient: () => this.luaClientManager.ensureClient(),
+            };
+            return await handleSetEnemyStats(setEnemyContext, {
+              level: args?.level as number | undefined,
+              fire_resist: args?.fire_resist as number | undefined,
+              cold_resist: args?.cold_resist as number | undefined,
+              lightning_resist: args?.lightning_resist as number | undefined,
+              chaos_resist: args?.chaos_resist as number | undefined,
+              armor: args?.armor as number | undefined,
+              evasion: args?.evasion as number | undefined,
+            });
 
           case "lua_set_tree":
             if (!args) throw new Error("Missing arguments");
