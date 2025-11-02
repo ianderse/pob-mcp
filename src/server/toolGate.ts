@@ -27,7 +27,12 @@ const HIGH_IMPACT_TOOLS = [
   'plan_tree',
   'test_allocation',
   'setup_skill_with_gems',
-  'add_multiple_items'
+  'add_multiple_items',
+  // Phase 8: Export and persistence tools (file-modifying)
+  'export_build',
+  'save_tree',
+  'snapshot_build',
+  'restore_snapshot'
 ];
 
 export class ToolGate {

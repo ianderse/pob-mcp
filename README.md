@@ -11,7 +11,7 @@ An MCP (Model Context Protocol) server that enables Claude to analyze and work w
 ## 🚀 Optimized for Claude Desktop
 
 This server is specifically optimized to prevent timeouts in Claude Desktop:
-- **Tool Gate System**: Prevents excessive tool chaining - 22 high-impact tools require explicit "continue" command
+- **Tool Gate System**: Prevents excessive tool chaining - 26 high-impact tools require explicit "continue" command
 - **Response Truncation**: Automatically limits responses to 8000 characters with helpful summaries
 - **Batch Operations**: Combines multiple operations (e.g., `setup_skill_with_gems`, `add_multiple_items`)
 - **Concise Responses**: Streamlined output focusing on actionable information
@@ -43,6 +43,13 @@ This server is specifically optimized to prevent timeouts in Claude Desktop:
 - **Item Management**: Add items from PoE text format, manage flasks, and test gear upgrades
 - **Skill Configuration**: View and modify skill setups, compare DPS between different socket groups
 - **Interactive Sessions**: Load builds and modify them programmatically with immediate stat recalculation
+
+### Build Export & Persistence (Phase 8)
+- **Export Builds**: Create copies/variants of builds to XML files with optional notes
+- **Save Tree**: Update passive tree in existing builds without affecting gear or skills
+- **Snapshot Management**: Create versioned snapshots with metadata tracking stats and changes
+- **Snapshot History**: List all snapshots for a build with timestamps, tags, and stat comparisons
+- **Rollback Support**: Restore builds from snapshots with automatic backup of current state
 
 ## Installation
 
@@ -168,7 +175,7 @@ The Lua bridge enables high-fidelity stat calculations using PoB's actual calcul
 
 ## Usage
 
-The server provides 30 tools organized into functional categories. All tools are accessible through natural language conversation with Claude.
+The server provides 35 tools organized into functional categories. All tools are accessible through natural language conversation with Claude.
 
 ### Tool Categories
 
@@ -204,6 +211,13 @@ The server provides 30 tools organized into functional categories. All tools are
 - Item upgrade recommendations
 - Skill link optimization
 - Budget build creation from requirements
+
+**Build Export & Persistence Tools (5 tools)** - Always available:
+- Export builds to XML files with optional notes
+- Update passive tree without affecting gear/skills
+- Create versioned snapshots with metadata
+- View snapshot history with stats
+- Rollback to previous snapshots
 
 ## Available Tools
 
@@ -622,6 +636,130 @@ Generate a comprehensive budget build plan based on requirements. Provides skill
 - Get comprehensive build guidance
 - Understand gearing priorities for your budget
 
+### Build Export & Persistence Tools (Always Available)
+
+#### `export_build`
+Export a copy of a build to an XML file. Creates variants/copies from existing build files with optional notes.
+
+**Parameters**:
+- `build_name` (required): Source build filename (e.g., 'MyBuild.xml')
+- `output_name` (required): Output filename (without .xml extension)
+- `output_directory` (optional): Target directory (defaults to POB_DIRECTORY/.pob-mcp/exports)
+- `overwrite` (optional): Allow overwriting existing file (default: false)
+- `notes` (optional): Additional notes to append to build notes
+
+**Returns**:
+- Full path to exported file
+- Confirmation message
+- Brief build summary (class, ascendancy, level)
+
+**Example**: "Export my Deadeye build as 'Deadeye_Variant'"
+
+**Use Cases**:
+- Create build variations before making changes
+- Duplicate builds for different strategies
+- Export to different locations
+- Add notes to build copies
+
+**Note**: This does NOT export from Lua bridge - use `save_tree` to apply Lua bridge modifications.
+
+#### `save_tree`
+Update only the passive tree in an existing build file. Use this to apply tree optimizations or Lua bridge modifications back to the original build.
+
+**Parameters**:
+- `build_name` (required): Target build filename to update
+- `nodes` (required): Array of node IDs to allocate
+- `mastery_effects` (optional): Mastery selections (object mapping node ID to effect ID)
+- `backup` (optional): Create backup before modifying (default: true)
+
+**Returns**:
+- Confirmation message
+- Backup file path (if created)
+- Summary of changes (nodes added/removed)
+
+**Example**: "Save these nodes to my Deadeye build: [1234, 5678, 9012]"
+
+**Use Cases**:
+- Apply tree optimizations to existing builds
+- Update passive tree without touching gear/gems
+- Quick tree modifications
+- Persist Lua bridge tree changes to files
+
+#### `snapshot_build`
+Create a versioned snapshot of a build for easy rollback. Snapshots are stored separately with metadata tracking stats and changes.
+
+**Parameters**:
+- `build_name` (required): Build to snapshot
+- `description` (optional): Description of this snapshot
+- `tag` (optional): User-friendly tag (e.g., 'before-respec', 'league-start')
+
+**Returns**:
+- Snapshot ID (timestamp-based)
+- Snapshot filename and storage location
+- Instructions for restoration
+
+**Example**: "Create a snapshot of my build before tree respec"
+
+**Use Cases**:
+- Save build state before major changes
+- Track build progression over time
+- Easy rollback if changes don't work out
+- Build history management
+
+**Snapshot Format**:
+```
+.pob-mcp/snapshots/BuildName.xml/
+  2025-01-15_143052_before-respec.xml
+  2025-01-15_143052_metadata.json
+```
+
+#### `list_snapshots`
+List all snapshots for a build with metadata and stats.
+
+**Parameters**:
+- `build_name` (required): Build to list snapshots for
+- `limit` (optional): Maximum number of snapshots to return
+- `tag_filter` (optional): Filter by tag
+
+**Returns**:
+- Array of snapshots with timestamps, tags, and descriptions
+- Stat snapshots (life, DPS, allocated nodes)
+- Total snapshot count and disk space used
+
+**Example**: "Show me all snapshots for my Deadeye build"
+
+**Use Cases**:
+- Review build history
+- Find specific snapshots by tag
+- Monitor disk space usage
+- Track stat progression
+
+#### `restore_snapshot`
+Restore a build from a snapshot. Optionally creates a backup of current state before restoring.
+
+**Parameters**:
+- `build_name` (required): Build to restore
+- `snapshot_id` (required): Snapshot ID (timestamp) or tag to restore from
+- `backup_current` (optional): Create snapshot of current state before restore (default: true)
+
+**Returns**:
+- Confirmation message
+- Backup snapshot ID (if created)
+- Summary of restored build
+
+**Example**: "Restore my build from the 'before-respec' snapshot"
+
+**Use Cases**:
+- Rollback unwanted changes
+- Compare different build versions
+- Restore to known-good state
+- A/B testing different strategies
+
+**Safety Features**:
+- Automatic backup before restoration
+- Validation of snapshot file
+- Build cache invalidation after restore
+
 ## Development
 
 ### Watch mode for development:
@@ -772,7 +910,15 @@ Quick test checklist:
 - Budget build creation from requirements (`create_budget_build`)
 - 8 optimization tools
 
-**Total Available Tools**: 30 tools across 5 categories
+**Phase 8: Build Export & Persistence** ✅
+- Export builds to XML files (`export_build`)
+- Update passive tree without affecting gear/skills (`save_tree`)
+- Create versioned snapshots with metadata (`snapshot_build`)
+- View snapshot history with stats (`list_snapshots`)
+- Rollback to previous snapshots (`restore_snapshot`)
+- 5 export and persistence tools
+
+**Total Available Tools**: 35 tools across 6 categories
 
 ### Technical Achievements
 
