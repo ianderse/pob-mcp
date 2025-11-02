@@ -44,6 +44,7 @@ import { BuildService } from "./services/buildService.js";
 import { TreeService } from "./services/treeService.js";
 import { WatchService } from "./services/watchService.js";
 import { ValidationService } from "./services/validationService.js";
+import { BuildExportService } from "./services/buildExportService.js";
 
 // Import types
 import type {
@@ -64,7 +65,7 @@ import { ContextBuilder } from "./utils/contextBuilder.js";
 // Import server modules
 import { ToolGate } from "./server/toolGate.js";
 import { LuaClientManager } from "./server/luaClientManager.js";
-import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas } from "./server/toolSchemas.js";
+import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getExportToolSchemas } from "./server/toolSchemas.js";
 
 // Import handlers
 import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats } from "./handlers/buildHandlers.js";
@@ -74,6 +75,7 @@ import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaLoadBuild, h
 import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems } from "./handlers/itemSkillHandlers.js";
 import { handleAnalyzeDefenses, handleSuggestOptimalNodes, handleOptimizeTree } from "./handlers/optimizationHandlers.js";
 import { handleAnalyzeItems, handleOptimizeSkillLinks, handleCreateBudgetBuild } from "./handlers/advancedOptimizationHandlers.js";
+import { handleExportBuild, handleSaveTree, handleSnapshotBuild, handleListSnapshots, handleRestoreSnapshot } from "./handlers/exportHandlers.js";
 
 class PoBMCPServer {
   private server: Server;
@@ -85,6 +87,7 @@ class PoBMCPServer {
   private treeService: TreeService;
   private watchService: WatchService;
   private validationService: ValidationService;
+  private exportService: BuildExportService;
 
   // Context builder
   private contextBuilder: ContextBuilder;
@@ -126,6 +129,7 @@ class PoBMCPServer {
     this.treeService = new TreeService(this.buildService);
     this.watchService = new WatchService(this.pobDirectory, this.buildService);
     this.validationService = new ValidationService();
+    this.exportService = new BuildExportService(this.pobDirectory);
 
     // Initialize server modules
     this.toolGate = new ToolGate();
@@ -140,6 +144,7 @@ class PoBMCPServer {
       treeService: this.treeService,
       watchService: this.watchService,
       validationService: this.validationService,
+      exportService: this.exportService,
       pobDirectory: this.pobDirectory,
       luaEnabled: luaEnabled,
       useTcpMode: useTcpMode,
@@ -287,6 +292,9 @@ class PoBMCPServer {
       // Add optimization tools
       tools.push(...getOptimizationToolSchemas());
 
+      // Add export and persistence tools
+      tools.push(...getExportToolSchemas());
+
       return { tools };
     });
 
@@ -305,6 +313,7 @@ class PoBMCPServer {
         const luaContext = this.contextBuilder.buildLuaContext();
         const itemSkillContext = this.contextBuilder.buildItemSkillContext();
         const optimizationContext = this.contextBuilder.buildOptimizationContext();
+        const exportContext = this.contextBuilder.buildExportContext();
 
         switch (name) {
           case "continue":
@@ -583,6 +592,50 @@ class PoBMCPServer {
                 }
               )
             );
+
+          // Phase 8: Export and Persistence Tools
+          case "export_build":
+            if (!args) throw new Error("Missing arguments");
+            return await handleExportBuild(exportContext, {
+              build_name: args.build_name as string,
+              output_name: args.output_name as string,
+              output_directory: args.output_directory as string | undefined,
+              overwrite: args.overwrite as boolean | undefined,
+              notes: args.notes as string | undefined,
+            });
+
+          case "save_tree":
+            if (!args) throw new Error("Missing arguments");
+            return await handleSaveTree(exportContext, {
+              build_name: args.build_name as string,
+              nodes: args.nodes as string[],
+              mastery_effects: args.mastery_effects as Record<string, number> | undefined,
+              backup: args.backup as boolean | undefined,
+            });
+
+          case "snapshot_build":
+            if (!args) throw new Error("Missing arguments");
+            return await handleSnapshotBuild(exportContext, {
+              build_name: args.build_name as string,
+              description: args.description as string | undefined,
+              tag: args.tag as string | undefined,
+            });
+
+          case "list_snapshots":
+            if (!args) throw new Error("Missing arguments");
+            return await handleListSnapshots(exportContext, {
+              build_name: args.build_name as string,
+              limit: args.limit as number | undefined,
+              tag_filter: args.tag_filter as string | undefined,
+            });
+
+          case "restore_snapshot":
+            if (!args) throw new Error("Missing arguments");
+            return await handleRestoreSnapshot(exportContext, {
+              build_name: args.build_name as string,
+              snapshot_id: args.snapshot_id as string,
+              backup_current: args.backup_current as boolean | undefined,
+            });
 
           default:
             throw new Error(`Unknown tool: ${name}`);

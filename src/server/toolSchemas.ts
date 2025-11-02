@@ -714,3 +714,134 @@ export function getOptimizationToolSchemas(): any[] {
     },
   ];
 }
+
+/**
+ * Get export and persistence tool schemas (Phase 8)
+ */
+export function getExportToolSchemas(): any[] {
+  return [
+    {
+      name: "export_build",
+      description: "Export a copy of a build to an XML file. Creates a variant/copy from an existing build file. NOTE: This does NOT export from Lua bridge - use save_tree to apply Lua bridge modifications back to files.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Source build filename (e.g., 'MyBuild.xml')",
+          },
+          output_name: {
+            type: "string",
+            description: "Output filename (without .xml extension)",
+          },
+          output_directory: {
+            type: "string",
+            description: "Target directory (optional, defaults to POB_DIRECTORY/.pob-mcp/exports)",
+          },
+          overwrite: {
+            type: "boolean",
+            description: "Allow overwriting existing file (default: false)",
+          },
+          notes: {
+            type: "string",
+            description: "Additional notes to append to build notes",
+          },
+        },
+        required: ["build_name", "output_name"],
+      },
+    },
+    {
+      name: "save_tree",
+      description: "Update only the passive tree in an existing build file. Use this to apply tree optimizations or Lua bridge modifications back to the original build.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Target build filename to update",
+          },
+          nodes: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of node IDs to allocate",
+          },
+          mastery_effects: {
+            type: "object",
+            description: "Mastery selections as object mapping node ID to effect ID (optional)",
+          },
+          backup: {
+            type: "boolean",
+            description: "Create backup before modifying (default: true)",
+          },
+        },
+        required: ["build_name", "nodes"],
+      },
+    },
+    {
+      name: "snapshot_build",
+      description: "Create a versioned snapshot of a build for easy rollback. Snapshots are stored separately with metadata tracking stats and changes.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Build to snapshot",
+          },
+          description: {
+            type: "string",
+            description: "Description of this snapshot (optional)",
+          },
+          tag: {
+            type: "string",
+            description: "User-friendly tag (e.g., 'before-respec', 'league-start') (optional)",
+          },
+        },
+        required: ["build_name"],
+      },
+    },
+    {
+      name: "list_snapshots",
+      description: "List all snapshots for a build with metadata and stats",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Build to list snapshots for",
+          },
+          limit: {
+            type: "number",
+            description: "Maximum number of snapshots to return (optional)",
+          },
+          tag_filter: {
+            type: "string",
+            description: "Filter by tag (optional)",
+          },
+        },
+        required: ["build_name"],
+      },
+    },
+    {
+      name: "restore_snapshot",
+      description: "Restore a build from a snapshot. Optionally creates a backup of current state before restoring.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Build to restore",
+          },
+          snapshot_id: {
+            type: "string",
+            description: "Snapshot ID (timestamp) or tag to restore from",
+          },
+          backup_current: {
+            type: "boolean",
+            description: "Create snapshot of current state before restore (default: true)",
+          },
+        },
+        required: ["build_name", "snapshot_id"],
+      },
+    },
+  ];
+}

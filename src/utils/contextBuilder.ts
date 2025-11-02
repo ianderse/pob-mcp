@@ -9,6 +9,7 @@ import type { BuildService } from '../services/buildService.js';
 import type { TreeService } from '../services/treeService.js';
 import type { WatchService } from '../services/watchService.js';
 import type { ValidationService } from '../services/validationService.js';
+import type { BuildExportService } from '../services/buildExportService.js';
 import type { PoBLuaApiClient, PoBLuaTcpClient } from '../pobLuaBridge.js';
 
 /**
@@ -61,6 +62,15 @@ export interface OptimizationContext {
 }
 
 /**
+ * Context for export and persistence operations
+ */
+export interface ExportContext {
+  buildService: BuildService;
+  exportService: BuildExportService;
+  luaClient?: PoBLuaApiClient | PoBLuaTcpClient;
+}
+
+/**
  * Dependencies needed to build all context types
  */
 export interface ContextDependencies {
@@ -68,6 +78,7 @@ export interface ContextDependencies {
   treeService: TreeService;
   watchService: WatchService;
   validationService: ValidationService;
+  exportService: BuildExportService;
   pobDirectory: string;
   luaEnabled: boolean;
   useTcpMode: boolean;
@@ -149,6 +160,17 @@ export class ContextBuilder {
       pobDirectory: this.deps.pobDirectory,
       getLuaClient: this.deps.getLuaClient,
       ensureLuaClient: this.deps.ensureLuaClient,
+    };
+  }
+
+  /**
+   * Build context for export and persistence operations
+   */
+  buildExportContext(): ExportContext {
+    return {
+      buildService: this.deps.buildService,
+      exportService: this.deps.exportService,
+      luaClient: this.deps.getLuaClient() || undefined,
     };
   }
 }
