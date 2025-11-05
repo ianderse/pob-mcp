@@ -162,7 +162,7 @@ export interface TradeFilters {
 export interface TradeQuery {
   query: {
     status?: {
-      option: 'online' | 'onlineleague' | 'any';
+      option: 'available' | 'online' | 'onlineleague' | 'any';
     };
     name?: string;
     type?: string;

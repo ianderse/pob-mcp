@@ -20,7 +20,7 @@ import {
 export class TradeQueryBuilder {
   private query: TradeQuery = {
     query: {
-      status: { option: 'online' },
+      status: { option: 'available' },
       filters: {},
     },
   };
@@ -111,9 +111,37 @@ export class TradeQueryBuilder {
 
   /**
    * Filter by online status
+   * - 'available': Shows both instant buyout and in-person trade items (recommended)
+   * - 'online': Only shows items from currently online sellers
+   * - 'onlineleague': Only shows items from sellers online in the same league
+   * - 'any': Shows all items regardless of seller status
    */
-  withOnlineStatus(status: 'online' | 'onlineleague' | 'any'): this {
+  withOnlineStatus(status: 'available' | 'online' | 'onlineleague' | 'any'): this {
     this.query.query.status = { option: status };
+    return this;
+  }
+
+  /**
+   * Set sale type filter
+   */
+  withSaleType(saleType: 'priced' | 'unpriced' | 'any' = 'any'): this {
+    if (!this.query.query.filters) {
+      this.query.query.filters = {};
+    }
+    if (!this.query.query.filters.trade_filters) {
+      this.query.query.filters.trade_filters = {};
+    }
+    if (!this.query.query.filters.trade_filters.filters) {
+      this.query.query.filters.trade_filters.filters = {};
+    }
+
+    // Only set sale_type if not 'any' - omitting it allows all types
+    if (saleType !== 'any') {
+      this.query.query.filters.trade_filters.filters.sale_type = {
+        option: saleType,
+      };
+    }
+
     return this;
   }
 
@@ -490,8 +518,13 @@ export class TradeQueryBuilder {
    */
   applyOptions(options: SearchOptions): this {
     if (options.onlineOnly !== false) {
-      this.withOnlineStatus('online');
+      // Use 'available' status to get both instant buyout AND in-person trade items
+      this.withOnlineStatus('available');
     }
+
+    // Note: We intentionally do NOT set sale_type filter here.
+    // By omitting it, we search for ALL items (both priced instant-buyout items AND unpriced negotiable items).
+    // This gives users the full range of available items.
 
     if (options.minPrice !== undefined || options.maxPrice !== undefined) {
       this.withPriceRange(options.minPrice, options.maxPrice, options.priceCurrency);

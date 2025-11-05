@@ -380,7 +380,7 @@ export class ItemRecommendationEngine {
       builder.withStats(stats);
     }
 
-    builder.withOnlineStatus('online');
+    builder.withOnlineStatus('available');
     builder.withSort('price', 'asc');
 
     return builder.build();
@@ -418,7 +418,7 @@ export class ItemRecommendationEngine {
     // Apply budget
     builder.withPriceRange(undefined, budget.maxPricePerItem);
 
-    builder.withOnlineStatus('online');
+    builder.withOnlineStatus('available');
     builder.withSort('price', 'asc');
 
     return builder.build();

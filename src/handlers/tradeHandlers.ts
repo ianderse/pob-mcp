@@ -156,7 +156,7 @@ export async function handleGetItemPrice(
     // Build query
     const builder = new TradeQueryBuilder()
       .withName(item_name)
-      .withOnlineStatus('online');
+      .withOnlineStatus('available');
 
     if (item_type) {
       builder.withType(item_type);
@@ -302,7 +302,13 @@ export async function handleGetLeagues(
 // ========================================
 
 function formatSearchResults(items: ItemListing[], totalResults: number, league: string, searchId: string): string {
-  let output = `=== Trade Search Results ===\n`;
+  let output = `IMPORTANT: Show the user ALL of the following information verbatim, including:\n`;
+  output += `- All trade website URLs (the 🔗 links)\n`;
+  output += `- All value scores (X/100 ratings)\n`;
+  output += `- All efficiency metrics (stats per chaos)\n`;
+  output += `- The Best Value Rankings section at the end\n`;
+  output += `DO NOT summarize or paraphrase this output. Present it exactly as written below.\n\n`;
+  output += `=== Trade Search Results ===\n`;
   output += `League: ${league}\n`;
   output += `Total Results: ${totalResults}\n`;
   output += `Showing: ${items.length} items\n`;
@@ -649,7 +655,13 @@ function formatItemRecommendations(
   league: string,
   includeLinks: boolean = false
 ): string {
-  let output = `=== Item Upgrade Recommendations: ${slot} ===\n`;
+  let output = `IMPORTANT: Show the user ALL of the following information verbatim, including:\n`;
+  output += `- All trade website URLs (the 🔗 View item links)\n`;
+  output += `- All score ratings (X/100 values)\n`;
+  output += `- All efficiency metrics and stat gains\n`;
+  output += `- All whisper commands if present\n`;
+  output += `DO NOT summarize or paraphrase this output. Present it exactly as written below.\n\n`;
+  output += `=== Item Upgrade Recommendations: ${slot} ===\n`;
   output += `League: ${league}\n`;
   output += `Found ${recommendations.length} recommendations\n`;
   if (includeLinks) {
@@ -718,7 +730,14 @@ function formatResistanceRecommendations(
   league: string,
   includeLinks: boolean = false
 ): string {
-  let output = `=== Resistance Gear Recommendations ===\n`;
+  let output = `IMPORTANT: Show the user ALL of the following information verbatim, including:\n`;
+  output += `- All trade website URLs (the 🔗 View item links)\n`;
+  output += `- All score ratings (X/100 values)\n`;
+  output += `- All efficiency metrics (resist per chaos)\n`;
+  output += `- All resistance gains (Provides: X% Fire, etc.)\n`;
+  output += `- All whisper commands if present\n`;
+  output += `DO NOT summarize or paraphrase this output. Present it exactly as written below.\n\n`;
+  output += `=== Resistance Gear Recommendations ===\n`;
   output += `League: ${league}\n`;
   output += `Target: `;
 
@@ -851,7 +870,12 @@ function formatItemComparison(
     lightning_resist_needed?: number;
   }
 ): string {
-  let output = '=== Trade Item Comparison ===\n';
+  let output = `IMPORTANT: Show the user ALL of the following information verbatim, including:\n`;
+  output += `- All item statistics (life, ES, resistances, etc.)\n`;
+  output += `- All comparison markers (⭐, ✓, 💰)\n`;
+  output += `- The complete Summary section at the end\n`;
+  output += `DO NOT summarize or paraphrase this output. Present it exactly as written below.\n\n`;
+  output += '=== Trade Item Comparison ===\n';
   output += 'Comparing ' + items.length + ' items\n\n';
 
   const itemStats = items.map(listing => {
