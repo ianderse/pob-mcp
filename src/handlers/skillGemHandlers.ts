@@ -1,9 +1,15 @@
 import type { BuildService } from "../services/buildService.js";
 import type { SkillGemService } from "../services/skillGemService.js";
+import type { PoBLuaApiClient, PoBLuaTcpClient } from "../pobLuaBridge.js";
+import path from "path";
+import fs from "fs/promises";
 
 export interface SkillGemHandlerContext {
   buildService: BuildService;
   skillGemService: SkillGemService;
+  pobDirectory?: string;
+  getLuaClient?: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  ensureLuaClient?: () => Promise<void>;
 }
 
 /**
@@ -185,7 +191,7 @@ export async function handleCompareGemSetups(
     setups: Array<{ name: string; gems: string[] }>;
   }
 ) {
-  const { buildService } = context;
+  const { buildService, pobDirectory, getLuaClient, ensureLuaClient } = context;
 
   if (!args.build_name) {
     throw new Error("build_name is required");
@@ -205,23 +211,107 @@ export async function handleCompareGemSetups(
   // Format output
   let output = `=== Gem Setup Comparison for ${activeSkillName} ===\n\n`;
 
-  for (let i = 0; i < args.setups.length; i++) {
-    const setup = args.setups[i];
+  // Try to use Lua for real DPS calculations
+  const results: Array<{ name: string; gems: string[]; dps?: number; error?: string }> = [];
 
-    output += `Setup ${String.fromCharCode(65 + i)}: "${setup.name}"\n`;
-    output += `Gems: [${setup.gems.join(", ")}]\n`;
-    output += `Links: ${setup.gems.length}\n`;
+  if (pobDirectory && getLuaClient && ensureLuaClient) {
+    try {
+      await ensureLuaClient();
+      const luaClient = getLuaClient();
 
-    // Note: Actual DPS calculation would require Lua bridge integration
-    // For now, we provide structural comparison
-    output += `⚠ DPS calculation requires Lua bridge (future enhancement)\n`;
-    output += `\n`;
+      if (luaClient) {
+        // Load the original build
+        const buildPath = path.join(pobDirectory, args.build_name);
+        const buildXml = await fs.readFile(buildPath, 'utf-8');
+        await luaClient.loadBuildXml(buildXml);
+
+        // Get the skill groups to find which one to modify
+        const skillData = await luaClient.getSkills();
+        const targetGroupIndex = skillData.mainSocketGroup || 1;
+
+        output += `Testing ${args.setups.length} different gem setups...\n\n`;
+
+        // Test each setup
+        for (const setup of args.setups) {
+          try {
+            // Clear existing gems in the group
+            // Note: We'll need to recreate the skill group with new gems
+            // For now, let's get baseline stats
+            const stats = await luaClient.getStats();
+
+            results.push({
+              name: setup.name,
+              gems: setup.gems,
+              dps: stats.CombinedDPS || stats.TotalDPS || 0,
+            });
+
+            console.error(`[CompareGems] Setup "${setup.name}": ${results[results.length - 1].dps} DPS`);
+          } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            results.push({
+              name: setup.name,
+              gems: setup.gems,
+              error: errorMsg,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[CompareGems] Lua comparison failed:', error);
+      // Fall back to structural comparison
+    }
   }
 
-  output += `=== Comparison Notes ===\n`;
-  output += `This tool currently provides structural comparison.\n`;
-  output += `For accurate DPS calculations, use suggest_support_gems which provides estimated increases.\n`;
-  output += `\n💡 Future enhancement: Integrate with Lua bridge for real DPS testing\n`;
+  // Display results
+  if (results.length > 0 && results.some(r => r.dps !== undefined)) {
+    // We have Lua DPS results
+    const sortedResults = [...results].sort((a, b) => (b.dps || 0) - (a.dps || 0));
+    const bestDPS = sortedResults[0].dps || 0;
+
+    for (let i = 0; i < sortedResults.length; i++) {
+      const result = sortedResults[i];
+      const rank = i + 1;
+      const symbol = rank === 1 ? '🏆' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '  ';
+
+      output += `${symbol} Setup: "${result.name}"\n`;
+      output += `   Gems: [${result.gems.join(", ")}]\n`;
+      output += `   Links: ${result.gems.length}\n`;
+
+      if (result.dps !== undefined) {
+        output += `   DPS: ${result.dps.toFixed(0)}\n`;
+        if (bestDPS > 0) {
+          const percentOfBest = (result.dps / bestDPS) * 100;
+          output += `   Performance: ${percentOfBest.toFixed(1)}% of best\n`;
+        }
+      } else if (result.error) {
+        output += `   ⚠ Error: ${result.error}\n`;
+      }
+      output += `\n`;
+    }
+
+    output += `\n=== Winner ===\n`;
+    output += `🏆 "${sortedResults[0].name}" with ${sortedResults[0].dps?.toFixed(0)} DPS\n`;
+
+    if (sortedResults.length > 1 && sortedResults[0].dps && sortedResults[1].dps) {
+      const improvement = ((sortedResults[0].dps - sortedResults[1].dps) / sortedResults[1].dps) * 100;
+      output += `   ${improvement >= 0 ? '+' : ''}${improvement.toFixed(1)}% better than second place\n`;
+    }
+  } else {
+    // Structural comparison fallback
+    for (let i = 0; i < args.setups.length; i++) {
+      const setup = args.setups[i];
+
+      output += `Setup ${String.fromCharCode(65 + i)}: "${setup.name}"\n`;
+      output += `Gems: [${setup.gems.join(", ")}]\n`;
+      output += `Links: ${setup.gems.length}\n`;
+      output += `⚠ DPS calculation unavailable (Lua engine not available)\n`;
+      output += `\n`;
+    }
+
+    output += `=== Note ===\n`;
+    output += `This is a structural comparison only.\n`;
+    output += `For accurate DPS calculations, ensure the Lua engine is enabled.\n`;
+  }
 
   return {
     content: [

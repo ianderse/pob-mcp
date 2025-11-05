@@ -107,7 +107,7 @@ export class BuildService {
       for (const skill of skills) {
         if (skill.Gem) {
           const gems = Array.isArray(skill.Gem) ? skill.Gem : [skill.Gem];
-          summary += gems.map(g => `${g.name} (${g.level}/${g.quality})`).join(" - ");
+          summary += gems.map(g => `${g.nameSpec || g.name || 'Unknown'} (${g.level}/${g.quality})`).join(" - ");
           summary += "\n";
         }
       }
@@ -409,6 +409,20 @@ export class BuildService {
       return null;
     }
 
+    // Build a map of items by ID
+    const itemMap = new Map<string, string>();
+    if (build.Items.Item) {
+      const items = Array.isArray(build.Items.Item)
+        ? build.Items.Item
+        : [build.Items.Item];
+
+      for (const item of items) {
+        if (item.id && item['#text']) {
+          itemMap.set(item.id, item['#text']);
+        }
+      }
+    }
+
     const slots = Array.isArray(build.Items.ItemSet.Slot)
       ? build.Items.ItemSet.Slot
       : [build.Items.ItemSet.Slot];
@@ -438,12 +452,20 @@ export class BuildService {
 
     // Parse each flask slot
     for (const slot of flaskSlots) {
-      if (!slot.Item || !slot.name) continue;
+      if (!slot.name) continue;
+
+      // Get item text either from inline Item or by looking up itemId
+      let itemText = slot.Item;
+      if (!itemText && slot.itemId) {
+        itemText = itemMap.get(slot.itemId);
+      }
+
+      if (!itemText) continue;
 
       const slotNumber = parseInt(slot.name.replace('Flask ', ''), 10);
       const isActive = slot.active === 'true' || slot.active === true;
 
-      const flask = this.parseFlaskItem(slot.Item, slotNumber, isActive);
+      const flask = this.parseFlaskItem(itemText, slotNumber, isActive);
       if (flask) {
         flasks.push(flask);
 

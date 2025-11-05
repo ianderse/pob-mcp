@@ -934,8 +934,9 @@ export class TreeService {
       // Categorize nodes
       const { keystones, notables, jewels, normal } = this.categorizeNodes(allocatedNodes);
 
-      // Calculate points
-      const points = this.calculatePassivePoints(build, allocatedNodes.length);
+      // Calculate points (exclude ascendancy nodes - they use separate point pool)
+      const nonAscendancyNodes = allocatedNodes.filter(node => !node.ascendancyName);
+      const points = this.calculatePassivePoints(build, nonAscendancyNodes.length);
 
       // Detect archetype
       const { archetype, confidence } = this.detectArchetype(keystones, notables);

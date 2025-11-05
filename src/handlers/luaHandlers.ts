@@ -112,7 +112,7 @@ export async function handleLuaLoadBuild(
   }
 }
 
-export async function handleLuaGetStats(context: LuaHandlerContext, fields?: string[]) {
+export async function handleLuaGetStats(context: LuaHandlerContext, category?: string) {
   try {
     await context.ensureLuaClient();
 
@@ -121,21 +121,80 @@ export async function handleLuaGetStats(context: LuaHandlerContext, fields?: str
       throw new Error('Lua client not initialized');
     }
 
+    // Map category to specific fields
+    let fields: string[] | undefined;
+    if (category === 'offense') {
+      fields = [
+        'TotalDPS', 'CombinedDPS', 'TotalDot', 'TotalDotDPS', 'WithBleedDPS', 'WithIgniteDPS',
+        'WithPoisonDPS', 'IgniteDPS', 'BleedDPS', 'PoisonDPS', 'AverageDamage', 'AverageBurstDamage',
+        'Speed', 'HitChance', 'CritChance', 'CritMultiplier', 'PreEffectiveCritChance',
+        'EffectiveCritChance', 'MainHandAccuracy', 'OffHandAccuracy', 'ManaCost', 'ManaPerSecondCost',
+        'LifeCost', 'LifePerSecondCost', 'ESCost', 'ESPerSecondCost', 'RageCost'
+      ];
+    } else if (category === 'defense') {
+      fields = [
+        'Life', 'LifeRegen', 'LifeRegenRecovery', 'LifeLeechGainRate', 'LifeUnreserved',
+        'Mana', 'ManaRegen', 'ManaRegenRecovery', 'ManaLeechGainRate', 'ManaUnreserved',
+        'EnergyShield', 'EnergyShieldRegen', 'EnergyShieldRegenRecovery', 'EnergyShieldLeechGainRate',
+        'Ward', 'Armour', 'Evasion', 'EvasionChance', 'PhysicalDamageReduction',
+        'BlockChance', 'SpellBlockChance', 'AttackDodgeChance', 'SpellDodgeChance',
+        'FireResist', 'ColdResist', 'LightningResist', 'ChaosResist',
+        'FireResistOverCap', 'ColdResistOverCap', 'LightningResistOverCap', 'ChaosResistOverCap',
+        'TotalEHP', 'PhysicalMaximumHitTaken', 'FireMaximumHitTaken', 'ColdMaximumHitTaken',
+        'LightningMaximumHitTaken', 'ChaosMaximumHitTaken', 'EffectiveSpellSuppressionChance'
+      ];
+    }
+    // If category is 'all' or undefined, get all stats (fields = undefined)
+
     const stats = await luaClient.getStats(fields);
 
     let text = "=== PoB Calculated Stats ===\n\n";
 
     if (stats && typeof stats === 'object') {
       const entries = Object.entries(stats);
-      const maxStats = 50; // Limit to 50 stats to prevent huge responses
 
-      for (let i = 0; i < Math.min(entries.length, maxStats); i++) {
-        const [key, value] = entries[i];
-        text += `${key}: ${value}\n`;
-      }
+      // Group by offense/defense if showing all
+      if (!category || category === 'all') {
+        const offenseKeys = ['DPS', 'Damage', 'Speed', 'Crit', 'Hit', 'Accuracy', 'Cost'];
+        const defenseKeys = ['Life', 'Mana', 'Energy', 'Shield', 'Resist', 'Block', 'Dodge', 'Evasion', 'Armour', 'Ward', 'EHP', 'Maximum', 'Regen', 'Leech', 'Recovery'];
 
-      if (entries.length > maxStats) {
-        text += `\n... and ${entries.length - maxStats} more stats (use 'fields' parameter to get specific stats)\n`;
+        const offense = entries.filter(([key]) => offenseKeys.some(ok => key.includes(ok)));
+        const defense = entries.filter(([key]) => defenseKeys.some(dk => key.includes(dk)));
+        const other = entries.filter(([key]) => !offense.some(([ok]) => ok === key) && !defense.some(([dk]) => dk === key));
+
+        if (offense.length > 0) {
+          text += "**Offense:**\n";
+          for (const [key, value] of offense.slice(0, 20)) {
+            text += `${key}: ${value}\n`;
+          }
+          text += '\n';
+        }
+
+        if (defense.length > 0) {
+          text += "**Defense:**\n";
+          for (const [key, value] of defense.slice(0, 20)) {
+            text += `${key}: ${value}\n`;
+          }
+          text += '\n';
+        }
+
+        if (other.length > 0 && other.length < 10) {
+          text += "**Other:**\n";
+          for (const [key, value] of other) {
+            text += `${key}: ${value}\n`;
+          }
+        }
+      } else {
+        // Just show the requested category
+        const maxStats = 50;
+        for (let i = 0; i < Math.min(entries.length, maxStats); i++) {
+          const [key, value] = entries[i];
+          text += `${key}: ${value}\n`;
+        }
+
+        if (entries.length > maxStats) {
+          text += `\n... and ${entries.length - maxStats} more stats\n`;
+        }
       }
     } else {
       text += "No stats available.\n";

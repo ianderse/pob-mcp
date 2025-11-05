@@ -20,6 +20,9 @@ export interface HandlerContext {
   buildService: BuildService;
   treeService: TreeService;
   validationService: ValidationService;
+  pobDirectory: string;
+  getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  ensureLuaClient: () => Promise<void>;
 }
 
 /**
@@ -77,6 +80,9 @@ export interface ExportContext {
 export interface SkillGemContext {
   buildService: BuildService;
   skillGemService: SkillGemService;
+  pobDirectory: string;
+  getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  ensureLuaClient: () => Promise<void>;
 }
 
 /**
@@ -111,6 +117,9 @@ export class ContextBuilder {
       buildService: this.deps.buildService,
       treeService: this.deps.treeService,
       validationService: this.deps.validationService,
+      pobDirectory: this.deps.pobDirectory,
+      getLuaClient: this.deps.getLuaClient,
+      ensureLuaClient: this.deps.ensureLuaClient,
     };
   }
 
@@ -133,6 +142,9 @@ export class ContextBuilder {
       buildService: this.deps.buildService,
       treeService: this.deps.treeService,
       validationService: this.deps.validationService,
+      pobDirectory: this.deps.pobDirectory,
+      getLuaClient: this.deps.getLuaClient,
+      ensureLuaClient: this.deps.ensureLuaClient,
     };
   }
 
@@ -191,6 +203,9 @@ export class ContextBuilder {
     return {
       buildService: this.deps.buildService,
       skillGemService: this.deps.skillGemService,
+      pobDirectory: this.deps.pobDirectory,
+      getLuaClient: this.deps.getLuaClient,
+      ensureLuaClient: this.deps.ensureLuaClient,
     };
   }
 }

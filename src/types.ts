@@ -58,11 +58,18 @@ export interface PoBBuild {
     SkillSet?: {
       Skill?: Array<{
         enabled?: string;
-        Gem?: Array<{name?: string; level?: string; quality?: string}>;
+        Gem?: Array<{nameSpec?: string; name?: string; level?: string; quality?: string}>;
       }>;
     };
   };
   Items?: {
+    Item?: Array<{
+      id?: string;
+      '#text'?: string; // The actual item text content
+    }> | {
+      id?: string;
+      '#text'?: string;
+    };
     ItemSet?: {
       Slot?: Array<{
         name?: string;

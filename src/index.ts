@@ -450,7 +450,7 @@ class PoBMCPServer {
             );
 
           case "lua_get_stats":
-            return await handleLuaGetStats(luaContext, args?.fields as string[] | undefined);
+            return await handleLuaGetStats(luaContext, args?.category as string | undefined);
 
           case "lua_get_tree":
             return await handleLuaGetTree(luaContext);

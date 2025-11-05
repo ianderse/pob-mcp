@@ -2,11 +2,17 @@ import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
 import type { ValidationService } from "../services/validationService.js";
 import type { TreeAnalysisResult } from "../types.js";
+import type { PoBLuaApiClient, PoBLuaTcpClient } from "../pobLuaBridge.js";
+import path from "path";
+import fs from "fs/promises";
 
 export interface HandlerContext {
   buildService: BuildService;
   treeService: TreeService;
   validationService: ValidationService;
+  pobDirectory: string;
+  getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  ensureLuaClient: () => Promise<void>;
 }
 
 export async function handleListBuilds(context: HandlerContext) {
@@ -25,7 +31,42 @@ export async function handleListBuilds(context: HandlerContext) {
 
 export async function handleAnalyzeBuild(context: HandlerContext, buildName: string) {
   const build = await context.buildService.readBuild(buildName);
+
+  // Try to load build into Lua for live calculations
+  let luaStats: any = null;
+  try {
+    await context.ensureLuaClient();
+    const luaClient = context.getLuaClient();
+
+    if (luaClient) {
+      // Read the build XML file
+      const buildPath = path.join(context.pobDirectory, buildName);
+      const buildXml = await fs.readFile(buildPath, 'utf-8');
+
+      // Load into Lua
+      await luaClient.loadBuildXml(buildXml);
+      console.error('[handleAnalyzeBuild] Build loaded into Lua successfully');
+
+      // Get live stats
+      luaStats = await luaClient.getStats();
+      console.error('[handleAnalyzeBuild] Retrieved live stats from Lua');
+    }
+  } catch (error) {
+    console.error('[handleAnalyzeBuild] Failed to load build into Lua:', error);
+    // Continue with XML-only analysis
+  }
+
   let summary = context.buildService.generateBuildSummary(build);
+
+  // If we have Lua stats, add them
+  if (luaStats) {
+    summary += "\n=== Live Calculated Stats (from Lua) ===\n\n";
+    summary += `Total DPS: ${luaStats.TotalDPS || 'N/A'}\n`;
+    summary += `Combined DPS: ${luaStats.CombinedDPS || 'N/A'}\n`;
+    summary += `Life: ${luaStats.Life || 'N/A'}\n`;
+    summary += `Energy Shield: ${luaStats.EnergyShield || 'N/A'}\n`;
+    summary += `Effective Life Pool: ${luaStats.TotalEHP || 'N/A'}\n\n`;
+  }
 
   // Add configuration analysis
   try {
@@ -199,10 +240,25 @@ function formatTreeAnalysis(analysis: TreeAnalysisResult): string {
     output += `This is not possible in the actual game.\n`;
   }
 
-  // Keystones
-  if (analysis.keystones.length > 0) {
-    output += `\nAllocated Keystones (${analysis.keystones.length}):\n`;
-    for (const keystone of analysis.keystones) {
+  // Ascendancy nodes (separate from regular keystones/notables)
+  const ascendancyNodes = analysis.allocatedNodes.filter(n => n.ascendancyName);
+  if (ascendancyNodes.length > 0) {
+    const ascendancyName = ascendancyNodes[0].ascendancyName;
+    output += `\n=== Ascendancy: ${ascendancyName} (${ascendancyNodes.length} points) ===\n`;
+    for (const node of ascendancyNodes) {
+      output += `- ${node.name}`;
+      if (node.stats && node.stats.length > 0) {
+        output += `: ${node.stats.join('; ')}`;
+      }
+      output += '\n';
+    }
+  }
+
+  // Keystones (regular tree only)
+  const regularKeystones = analysis.keystones.filter(k => !k.ascendancyName);
+  if (regularKeystones.length > 0) {
+    output += `\nAllocated Keystones (${regularKeystones.length}):\n`;
+    for (const keystone of regularKeystones) {
       output += `- ${keystone.name}`;
       if (keystone.stats && keystone.stats.length > 0) {
         output += `: ${keystone.stats.join('; ')}`;
@@ -211,11 +267,12 @@ function formatTreeAnalysis(analysis: TreeAnalysisResult): string {
     }
   }
 
-  // Notable passives
-  if (analysis.notables.length > 0) {
-    output += `\nKey Notable Passives (${analysis.notables.length} total):\n`;
+  // Notable passives (regular tree only)
+  const regularNotables = analysis.notables.filter(n => !n.ascendancyName);
+  if (regularNotables.length > 0) {
+    output += `\nKey Notable Passives (${regularNotables.length} total):\n`;
     // Show first 10 notables
-    const displayNotables = analysis.notables.slice(0, 10);
+    const displayNotables = regularNotables.slice(0, 10);
     for (const notable of displayNotables) {
       output += `- ${notable.name || 'Unnamed'}`;
       if (notable.stats && notable.stats.length > 0) {
@@ -224,8 +281,8 @@ function formatTreeAnalysis(analysis: TreeAnalysisResult): string {
       }
       output += '\n';
     }
-    if (analysis.notables.length > 10) {
-      output += `... and ${analysis.notables.length - 10} more notables\n`;
+    if (regularNotables.length > 10) {
+      output += `... and ${regularNotables.length - 10} more notables\n`;
     }
   }
 
