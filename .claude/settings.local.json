@@ -21,7 +21,10 @@
       "Bash(test:*)",
       "Bash(cat:*)",
       "Bash(ls:*)",
-      "Read(//Users/ianderse/Path of Building/Builds/3.27/**)"
+      "Read(//Users/ianderse/Path of Building/Builds/3.27/**)",
+      "Bash(findstr:*)",
+      "Bash(node -e:*)",
+      "Bash(npm install bottleneck)"
     ],
     "deny": [],
     "ask": []

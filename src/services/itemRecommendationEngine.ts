@@ -69,7 +69,7 @@ export class ItemRecommendationEngine {
 
     // Score and rank items
     const recommendations = items.map((item, index) =>
-      this.scoreItem(item, index, context)
+      this.scoreItem(item, index, context, searchResult.id)
     );
 
     // Sort by score descending
@@ -117,7 +117,7 @@ export class ItemRecommendationEngine {
       };
 
       const slotRecs = items.map((item, index) =>
-        this.scoreResistanceItem(item, index, resistanceGaps, context)
+        this.scoreResistanceItem(item, index, resistanceGaps, context, searchResult.id)
       );
 
       allRecommendations.push(...slotRecs);
@@ -141,7 +141,8 @@ export class ItemRecommendationEngine {
     listing: ItemListing,
     index: number,
     resistanceGaps: ResistanceRequirements,
-    context: UpgradeContext
+    context: UpgradeContext,
+    searchId: string
   ): ItemRecommendation {
     const item = listing.item;
     const price = listing.listing.price?.amount || 0;
@@ -224,6 +225,7 @@ export class ItemRecommendationEngine {
 
     return {
       listing,
+      searchId,
       score,
       rank: index + 1,
       reasons,
@@ -244,7 +246,8 @@ export class ItemRecommendationEngine {
   private scoreItem(
     listing: ItemListing,
     index: number,
-    context: UpgradeContext
+    context: UpgradeContext,
+    searchId: string
   ): ItemRecommendation {
     const item = listing.item;
     const price = listing.listing.price?.amount || 0;
@@ -311,6 +314,7 @@ export class ItemRecommendationEngine {
 
     return {
       listing,
+      searchId,
       score,
       rank: index + 1,
       reasons,

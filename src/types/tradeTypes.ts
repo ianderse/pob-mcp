@@ -465,6 +465,7 @@ export interface CostBenefit {
 
 export interface ItemRecommendation {
   listing: ItemListing;
+  searchId: string; // Trade search ID for generating item URLs
   score: number; // 0-100
   rank: number;
   reasons: string[];

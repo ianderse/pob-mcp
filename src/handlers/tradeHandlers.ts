@@ -20,8 +20,8 @@ function getTradeSearchUrl(league: string, searchId: string): string {
 }
 
 function getTradeItemUrl(league: string, searchId: string, itemId: string): string {
-  // Individual items can be accessed via the search URL
-  return `https://www.pathofexile.com/trade/search/${encodeURIComponent(league)}/${searchId}`;
+  // Individual items can be highlighted in the search results
+  return `https://www.pathofexile.com/trade/search/${encodeURIComponent(league)}/${searchId}#${itemId}`;
 }
 
 /**
@@ -359,6 +359,7 @@ function formatSearchResults(items: ItemListing[], totalResults: number, league:
     output += '\n';
 
     output += `   Whisper: ${listing.listing.whisper}\n`;
+    output += `   🔗 View item: ${getTradeItemUrl(league, searchId, listing.id)}\n`;
     output += '\n';
   }
 
@@ -640,6 +641,7 @@ function formatItemRecommendations(
       output += `   Whisper: ${rec.listing.listing.whisper}\n`;
     }
 
+    output += `   🔗 View item: ${getTradeItemUrl(league, rec.searchId, rec.listing.id)}\n`;
     output += '\n';
   }
 
@@ -717,6 +719,7 @@ function formatResistanceRecommendations(
       output += `   Whisper: ${rec.listing.listing.whisper}\n`;
     }
 
+    output += `   🔗 View item: ${getTradeItemUrl(league, rec.searchId, rec.listing.id)}\n`;
     output += '\n';
   }
 
