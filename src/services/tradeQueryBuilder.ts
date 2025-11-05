@@ -34,10 +34,70 @@ export class TradeQueryBuilder {
   }
 
   /**
-   * Set item type filter (base type)
+   * Set item type filter (base type or category)
    */
   withType(type: string): this {
-    this.query.query.type = type;
+    // Map generic categories to trade API categories
+    const categoryMap: Record<string, string> = {
+      'boots': 'armour.boots',
+      'gloves': 'armour.gloves',
+      'helmet': 'armour.helmet',
+      'body armour': 'armour.chest',
+      'chest': 'armour.chest',
+      'shield': 'armour.shield',
+      'quiver': 'armour.quiver',
+      'ring': 'accessory.ring',
+      'amulet': 'accessory.amulet',
+      'belt': 'accessory.belt',
+      'jewel': 'jewel',
+      'flask': 'flask',
+      'bow': 'weapon.bow',
+      'claw': 'weapon.claw',
+      'dagger': 'weapon.dagger',
+      'wand': 'weapon.wand',
+      'one hand sword': 'weapon.onesword',
+      'two hand sword': 'weapon.twosword',
+      'one hand axe': 'weapon.oneaxe',
+      'two hand axe': 'weapon.twoaxe',
+      'one hand mace': 'weapon.onemace',
+      'two hand mace': 'weapon.twomace',
+      'sceptre': 'weapon.sceptre',
+      'staff': 'weapon.staff',
+      'warstaff': 'weapon.warstaff',
+    };
+
+    const typeLower = type.toLowerCase();
+    const category = categoryMap[typeLower];
+
+    if (category) {
+      // Use category filter for generic types
+      this.withCategory(category);
+    } else {
+      // Use specific base type
+      this.query.query.type = type;
+    }
+
+    return this;
+  }
+
+  /**
+   * Set item category filter
+   */
+  withCategory(category: string): this {
+    if (!this.query.query.filters) {
+      this.query.query.filters = {};
+    }
+    if (!this.query.query.filters.type_filters) {
+      this.query.query.filters.type_filters = {};
+    }
+    if (!this.query.query.filters.type_filters.filters) {
+      this.query.query.filters.type_filters.filters = {};
+    }
+
+    this.query.query.filters.type_filters.filters.category = {
+      option: category,
+    };
+
     return this;
   }
 
