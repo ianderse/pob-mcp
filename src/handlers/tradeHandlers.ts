@@ -4,6 +4,7 @@ import { TradeQueryBuilder } from '../services/tradeQueryBuilder.js';
 import { StatMapper } from '../services/statMapper.js';
 import { ItemRecommendationEngine, UpgradeContext } from '../services/itemRecommendationEngine.js';
 import { ItemListing, SearchOptions, ItemRecommendation, ResistanceRequirements, BudgetConstraints } from '../types/tradeTypes.js';
+import { CostBenefitAnalyzer } from '../services/costBenefitAnalyzer.js';
 
 interface TradeContext {
   tradeClient: TradeApiClient;
@@ -307,23 +308,59 @@ function formatSearchResults(items: ItemListing[], totalResults: number, league:
   output += `Showing: ${items.length} items\n`;
   output += `\n🔗 View full results: ${getTradeSearchUrl(league, searchId)}\n\n`;
 
-  for (let i = 0; i < items.length; i++) {
-    const listing = items[i];
+  // Analyze items for cost/benefit
+  const analyzer = new CostBenefitAnalyzer();
+  const analyses = analyzer.analyzeAndRank(items);
+
+  for (let i = 0; i < analyses.length; i++) {
+    const analysis = analyses[i];
+    const listing = analysis.listing;
     const item = listing.item;
     const price = listing.listing.price;
     const seller = listing.listing.account;
+    const metrics = analysis.metrics;
 
-    output += `${i + 1}. ${item.name || item.typeLine}\n`;
+    // Rank by value, not by search order
+    const valueRank = analysis.rank || (i + 1);
+    const searchRank = items.indexOf(listing) + 1;
+
+    output += `${searchRank}. ${item.name || item.typeLine}`;
+
+    // Show value indicator
+    const tierEmoji = {
+      'excellent': ' 💎',
+      'good': ' ✨',
+      'average': '',
+      'poor': ' ⚠️'
+    }[metrics.valueTier];
+    output += tierEmoji;
+
+    if (metrics.isBudgetPick) {
+      output += ' 💰';
+    }
+
+    output += `\n`;
 
     if (item.name && item.typeLine && item.name !== item.typeLine) {
       output += `   Base: ${item.typeLine}\n`;
     }
 
     if (price) {
-      output += `   Price: ${price.amount} ${price.currency}\n`;
+      output += `   Price: ${price.amount} ${price.currency}`;
+      if (analysis.priceInChaos > 0 && price.currency !== 'chaos') {
+        output += ` (~${analysis.priceInChaos.toFixed(0)} chaos)`;
+      }
+      output += `\n`;
     } else {
       output += `   Price: Not listed\n`;
     }
+
+    // Show value score
+    output += `   Value: ${metrics.valueScore.toFixed(0)}/100 (${metrics.valueTier})`;
+    if (valueRank <= 3) {
+      output += ` - #${valueRank} best value`;
+    }
+    output += `\n`;
 
     output += `   ilvl: ${item.ilvl}`;
 
@@ -341,15 +378,30 @@ function formatSearchResults(items: ItemListing[], totalResults: number, league:
       }
     }
 
-    // Key mods
+    // Show key efficiency metrics
+    const stats = analysis.stats;
+    if (stats.life > 0 || stats.es > 0 || stats.totalResist > 0) {
+      output += `   Efficiency:\n`;
+      if (stats.life > 0) {
+        output += `     • Life: ${metrics.lifePerChaos.toFixed(2)}/chaos (+${stats.life})\n`;
+      }
+      if (stats.es > 0) {
+        output += `     • ES: ${metrics.esPerChaos.toFixed(2)}/chaos (+${stats.es})\n`;
+      }
+      if (stats.totalResist > 0) {
+        output += `     • Resist: ${metrics.totalResistPerChaos.toFixed(2)}/chaos (+${stats.totalResist}%)\n`;
+      }
+    }
+
+    // Key mods (condensed)
     if (item.explicitMods && item.explicitMods.length > 0) {
-      output += `   Mods:\n`;
-      for (const mod of item.explicitMods.slice(0, 3)) {
-        output += `     - ${mod}\n`;
+      output += `   Mods: `;
+      const modSummary = item.explicitMods.slice(0, 2).join(', ');
+      output += modSummary;
+      if (item.explicitMods.length > 2) {
+        output += `, +${item.explicitMods.length - 2} more`;
       }
-      if (item.explicitMods.length > 3) {
-        output += `     ... and ${item.explicitMods.length - 3} more\n`;
-      }
+      output += `\n`;
     }
 
     output += `   Seller: ${seller.name}`;
@@ -363,7 +415,19 @@ function formatSearchResults(items: ItemListing[], totalResults: number, league:
     output += '\n';
   }
 
-  output += `\nNote: Use item IDs to fetch full details or compare items.`;
+  // Show value rankings
+  const topValue = analyses.slice(0, 3);
+  if (topValue.length > 0) {
+    output += `\n💡 Best Value Rankings:\n`;
+    for (let i = 0; i < topValue.length; i++) {
+      const analysis = topValue[i];
+      const item = analysis.listing.item;
+      const searchRank = items.indexOf(analysis.listing) + 1;
+      output += `   ${i + 1}. Item #${searchRank}: ${item.name || item.typeLine} (${analysis.metrics.valueScore.toFixed(0)}/100)\n`;
+    }
+  }
+
+  output += `\nNote: Items ranked by value score (💎=excellent, ✨=good, ⚠️=poor, 💰=budget pick)`;
 
   return output;
 }
