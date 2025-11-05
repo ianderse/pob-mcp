@@ -46,6 +46,9 @@ import { WatchService } from "./services/watchService.js";
 import { ValidationService } from "./services/validationService.js";
 import { BuildExportService } from "./services/buildExportService.js";
 import { SkillGemService } from "./services/skillGemService.js";
+import { TradeApiClient } from "./services/tradeClient.js";
+import { StatMapper } from "./services/statMapper.js";
+import { ItemRecommendationEngine } from "./services/itemRecommendationEngine.js";
 
 // Import types
 import type {
@@ -66,20 +69,9 @@ import { ContextBuilder } from "./utils/contextBuilder.js";
 // Import server modules
 import { ToolGate } from "./server/toolGate.js";
 import { LuaClientManager } from "./server/luaClientManager.js";
-import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getConfigToolSchemas, getValidationToolSchemas, getExportToolSchemas, getSkillGemToolSchemas } from "./server/toolSchemas.js";
-
-// Import handlers
-import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats } from "./handlers/buildHandlers.js";
-import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handleWatchStatus, handleRefreshTreeData } from "./handlers/watchHandlers.js";
-import { handleCompareTrees, handleTestAllocation, handleGetNearbyNodes, handleFindPath, handleAllocateNodes, handlePlanTree } from "./handlers/treeHandlers.js";
-import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaLoadBuild, handleLuaGetStats, handleLuaGetTree, handleLuaSetTree, handleSearchTreeNodes } from "./handlers/luaHandlers.js";
-import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems } from "./handlers/itemSkillHandlers.js";
-import { handleAnalyzeDefenses, handleSuggestOptimalNodes, handleOptimizeTree } from "./handlers/optimizationHandlers.js";
-import { handleAnalyzeItems, handleOptimizeSkillLinks, handleCreateBudgetBuild } from "./handlers/advancedOptimizationHandlers.js";
-import { handleGetConfig, handleSetConfig, handleSetEnemyStats } from "./handlers/configHandlers.js";
-import { handleValidateBuild } from "./handlers/validationHandlers.js";
-import { handleExportBuild, handleSaveTree, handleSnapshotBuild, handleListSnapshots, handleRestoreSnapshot } from "./handlers/exportHandlers.js";
-import { handleAnalyzeSkillLinks, handleSuggestSupportGems, handleCompareGemSetups, handleValidateGemQuality, handleFindOptimalLinks } from "./handlers/skillGemHandlers.js";
+import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getConfigToolSchemas, getValidationToolSchemas, getExportToolSchemas, getSkillGemToolSchemas, getTradeToolSchemas } from "./server/toolSchemas.js";
+import { routeToolCall, type ToolRouterDependencies } from "./server/toolRouter.js";
+import { wrapWithTruncation } from "./server/responseUtils.js";
 
 class PoBMCPServer {
   private server: Server;
@@ -93,6 +85,9 @@ class PoBMCPServer {
   private validationService: ValidationService;
   private exportService: BuildExportService;
   private skillGemService: SkillGemService;
+  private tradeClient: TradeApiClient | null = null;
+  private statMapper: StatMapper | null = null;
+  private recommendationEngine: ItemRecommendationEngine | null = null;
 
   // Context builder
   private contextBuilder: ContextBuilder;
@@ -136,6 +131,22 @@ class PoBMCPServer {
     this.validationService = new ValidationService();
     this.exportService = new BuildExportService(this.pobDirectory);
     this.skillGemService = new SkillGemService();
+
+    // Initialize Trade API client (if enabled)
+    const tradeEnabled = process.env.POE_TRADE_ENABLED === 'true';
+    if (tradeEnabled) {
+      const requestsPerSecond = parseInt(process.env.POE_RATE_LIMIT_PER_SECOND || '4', 10);
+      const cacheTTL = parseInt(process.env.POE_CACHE_TTL || '300', 10);
+      this.tradeClient = new TradeApiClient({
+        requestsPerSecond,
+        cacheTTL,
+      });
+      this.statMapper = new StatMapper();
+      this.recommendationEngine = new ItemRecommendationEngine(this.tradeClient, this.statMapper);
+      console.error('[Trade API] Enabled with rate limit:', requestsPerSecond, 'req/s');
+    } else {
+      console.error('[Trade API] Disabled (set POE_TRADE_ENABLED=true to enable)');
+    }
 
     // Initialize server modules
     this.toolGate = new ToolGate();
@@ -309,6 +320,11 @@ class PoBMCPServer {
       // Add skill gem analysis tools
       tools.push(...getSkillGemToolSchemas());
 
+      // Add Trade API tools if enabled
+      if (this.tradeClient) {
+        tools.push(...getTradeToolSchemas());
+      }
+
       return { tools };
     });
 
@@ -317,418 +333,30 @@ class PoBMCPServer {
       const { name, arguments: args } = request.params;
 
       try {
-        // Check tool gate first
-        this.checkToolGate(name);
+        // Build router dependencies
+        const routerDeps: ToolRouterDependencies = {
+          toolGate: this.toolGate,
+          contextBuilder: this.contextBuilder,
+          tradeClient: this.tradeClient,
+          statMapper: this.statMapper,
+          recommendationEngine: this.recommendationEngine,
+          getLuaClient: () => this.luaClientManager.getClient(),
+          ensureLuaClient: () => this.luaClientManager.ensureClient(),
+        };
 
-        // Create handler contexts using contextBuilder
-        const handlerContext = this.contextBuilder.buildHandlerContext();
-        const watchContext = this.contextBuilder.buildWatchContext();
-        const treeContext = this.contextBuilder.buildTreeContext();
-        const luaContext = this.contextBuilder.buildLuaContext();
-        const itemSkillContext = this.contextBuilder.buildItemSkillContext();
-        const optimizationContext = this.contextBuilder.buildOptimizationContext();
-        const exportContext = this.contextBuilder.buildExportContext();
-        const skillGemContext = this.contextBuilder.buildSkillGemContext();
+        // Route the tool call
+        const result = await routeToolCall(name, args, routerDeps);
 
-        switch (name) {
-          case "continue":
-            this.unlockToolGate();
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: "✅ Tool gate unlocked. You may now call ONE more tool.\n\nRemember: The gate will lock again after the next tool call, so use it wisely and then ask the user what to do next.",
-                },
-              ],
-            };
+        // Apply truncation for specific tools that return large outputs
+        const truncatedTools = ['analyze_build', 'analyze_defenses', 'suggest_optimal_nodes',
+                                'optimize_tree', 'analyze_items', 'optimize_skill_links',
+                                'create_budget_build'];
 
-          case "list_builds":
-            return await handleListBuilds(handlerContext);
-
-          case "analyze_build":
-            if (!args) throw new Error("Missing arguments");
-            return this.wrapWithTruncation(
-              await handleAnalyzeBuild(handlerContext, args.build_name as string)
-            );
-
-          case "compare_builds":
-            if (!args) throw new Error("Missing arguments");
-            return await handleCompareBuilds(
-              handlerContext,
-              args.build1 as string,
-              args.build2 as string
-            );
-
-          case "get_build_stats":
-            if (!args) throw new Error("Missing arguments");
-            return await handleGetBuildStats(handlerContext, args.build_name as string);
-
-          case "start_watching":
-            return handleStartWatching(watchContext);
-
-          case "stop_watching":
-            return await handleStopWatching(watchContext);
-
-          case "get_recent_changes":
-            return handleGetRecentChanges(watchContext, args?.limit as number | undefined);
-
-          case "watch_status":
-            return handleWatchStatus(watchContext);
-
-          case "refresh_tree_data":
-            return await handleRefreshTreeData(watchContext, args?.version as string | undefined);
-
-          // Phase 3 tools
-          case "compare_trees":
-            if (!args) throw new Error("Missing arguments");
-            return await handleCompareTrees(
-              treeContext,
-              args.build1 as string,
-              args.build2 as string
-            );
-
-          case "test_allocation":
-            if (!args) throw new Error("Missing arguments");
-            return await handleTestAllocation(
-              treeContext,
-              args.build_name as string,
-              args.changes as string
-            );
-
-          case "get_nearby_nodes":
-            if (!args) throw new Error("Missing arguments");
-            return await handleGetNearbyNodes(
-              treeContext,
-              args.build_name as string,
-              args.max_distance as number | undefined,
-              args.filter as string | undefined
-            );
-
-          case "find_path_to_node":
-            if (!args) throw new Error("Missing arguments");
-            return await handleFindPath(
-              treeContext,
-              args.build_name as string,
-              args.target_node_id as string,
-              args.show_alternatives as boolean | undefined
-            );
-
-          case "allocate_nodes":
-            if (!args) throw new Error("Missing arguments");
-            return await handleAllocateNodes(
-              treeContext,
-              args.build_name as string,
-              args.node_ids as string[],
-              args.show_full_stats as boolean | undefined
-            );
-
-          case "plan_tree":
-            if (!args) throw new Error("Missing arguments");
-            return await handlePlanTree(
-              treeContext,
-              args.build_name as string | undefined,
-              args.goals as string
-            );
-
-          // Lua bridge tools
-          case "lua_start":
-            return await handleLuaStart(luaContext);
-
-          case "lua_stop":
-            return await handleLuaStop(luaContext);
-
-          case "lua_new_build":
-            return await handleLuaNewBuild(luaContext);
-
-          case "lua_load_build":
-            if (!args) throw new Error("Missing arguments");
-            return await handleLuaLoadBuild(
-              luaContext,
-              args.build_name as string | undefined,
-              args.build_xml as string | undefined,
-              args.name as string | undefined
-            );
-
-          case "lua_get_stats":
-            return await handleLuaGetStats(luaContext, args?.category as string | undefined);
-
-          case "lua_get_tree":
-            return await handleLuaGetTree(luaContext);
-
-          // Phase 9: Configuration Tools
-          case "get_config":
-            const getConfigContext = {
-              getLuaClient: () => this.luaClientManager.getClient(),
-              ensureLuaClient: () => this.luaClientManager.ensureClient(),
-            };
-            return await handleGetConfig(getConfigContext);
-
-          case "set_config":
-            if (!args) throw new Error("Missing arguments");
-            const setConfigContext = {
-              getLuaClient: () => this.luaClientManager.getClient(),
-              ensureLuaClient: () => this.luaClientManager.ensureClient(),
-            };
-            return await handleSetConfig(setConfigContext, {
-              config_name: args.config_name as string,
-              value: args.value as boolean | number | string,
-            });
-
-          case "set_enemy_stats":
-            const setEnemyContext = {
-              getLuaClient: () => this.luaClientManager.getClient(),
-              ensureLuaClient: () => this.luaClientManager.ensureClient(),
-            };
-            return await handleSetEnemyStats(setEnemyContext, {
-              level: args?.level as number | undefined,
-              fire_resist: args?.fire_resist as number | undefined,
-              cold_resist: args?.cold_resist as number | undefined,
-              lightning_resist: args?.lightning_resist as number | undefined,
-              chaos_resist: args?.chaos_resist as number | undefined,
-              armor: args?.armor as number | undefined,
-              evasion: args?.evasion as number | undefined,
-            });
-
-          case "lua_set_tree":
-            if (!args) throw new Error("Missing arguments");
-            return await handleLuaSetTree(luaContext, args);
-
-          case "search_tree_nodes":
-            if (!args) throw new Error("Missing arguments");
-            return await handleSearchTreeNodes(
-              luaContext,
-              args.keyword as string,
-              args.node_type as string | undefined,
-              args.max_results as number | undefined,
-              args.include_allocated as boolean | undefined
-            );
-
-          // Phase 4: Item & Skill tools
-          case "add_item":
-            if (!args) throw new Error("Missing arguments");
-            return await handleAddItem(itemSkillContext, args.item_text as string, args.slot_name as string | undefined, args.no_auto_equip as boolean | undefined);
-
-          case "get_equipped_items":
-            return await handleGetEquippedItems(itemSkillContext);
-
-          case "toggle_flask":
-            if (!args) throw new Error("Missing arguments");
-            return await handleToggleFlask(itemSkillContext, args.flask_number as number, args.active as boolean);
-
-          case "get_skill_setup":
-            return await handleGetSkillSetup(itemSkillContext);
-
-          case "set_main_skill":
-            if (!args) throw new Error("Missing arguments");
-            return await handleSetMainSkill(itemSkillContext, args.socket_group as number, args.active_skill_index as number | undefined, args.skill_part as number | undefined);
-
-          case "create_socket_group":
-            return await handleCreateSocketGroup(itemSkillContext, args?.label as string | undefined, args?.slot as string | undefined, args?.enabled as boolean | undefined, args?.include_in_full_dps as boolean | undefined);
-
-          case "add_gem":
-            if (!args) throw new Error("Missing arguments");
-            return await handleAddGem(itemSkillContext, args.group_index as number, args.gem_name as string, args.level as number | undefined, args.quality as number | undefined, args.quality_id as string | undefined, args.enabled as boolean | undefined);
-
-          case "set_gem_level":
-            if (!args) throw new Error("Missing arguments");
-            return await handleSetGemLevel(itemSkillContext, args.group_index as number, args.gem_index as number, args.level as number);
-
-          case "set_gem_quality":
-            if (!args) throw new Error("Missing arguments");
-            return await handleSetGemQuality(itemSkillContext, args.group_index as number, args.gem_index as number, args.quality as number, args.quality_id as string | undefined);
-
-          case "remove_skill":
-            if (!args) throw new Error("Missing arguments");
-            return await handleRemoveSkill(itemSkillContext, args.group_index as number);
-
-          case "remove_gem":
-            if (!args) throw new Error("Missing arguments");
-            return await handleRemoveGem(itemSkillContext, args.group_index as number, args.gem_index as number);
-
-          case "setup_skill_with_gems":
-            if (!args) throw new Error("Missing arguments");
-            return await handleSetupSkillWithGems(
-              itemSkillContext,
-              args.gems as Array<{name: string; level?: number; quality?: number; quality_id?: string; enabled?: boolean}>,
-              args.label as string | undefined,
-              args.slot as string | undefined,
-              args.enabled as boolean | undefined,
-              args.include_in_full_dps as boolean | undefined
-            );
-
-          case "add_multiple_items":
-            if (!args) throw new Error("Missing arguments");
-            return await handleAddMultipleItems(
-              itemSkillContext,
-              args.items as Array<{item_text: string; slot_name?: string}>
-            );
-
-          // Phase 6: Build Optimization tools
-          case "analyze_defenses":
-            return this.wrapWithTruncation(
-              await handleAnalyzeDefenses(optimizationContext, args?.build_name as string | undefined)
-            );
-
-          case "suggest_optimal_nodes":
-            if (!args) throw new Error("Missing arguments");
-            return this.wrapWithTruncation(
-              await handleSuggestOptimalNodes(
-                optimizationContext,
-                args.build_name as string,
-                args.goal as string,
-                args.max_points as number | undefined,
-                args.max_distance as number | undefined,
-                args.min_efficiency as number | undefined,
-                args.include_keystones as boolean | undefined
-              )
-            );
-
-          case "optimize_tree":
-            if (!args) throw new Error("Missing arguments");
-            return this.wrapWithTruncation(
-              await handleOptimizeTree(
-                optimizationContext,
-                args.build_name as string,
-                args.goal as string,
-                args.max_points as number | undefined,
-                args.max_iterations as number | undefined,
-                args.constraints as OptimizationConstraints | undefined
-              )
-            );
-
-          case "analyze_items":
-            const advancedOptContext = {
-              buildService: this.buildService,
-              getLuaClient: () => this.luaClientManager.getClient(),
-              ensureLuaClient: () => this.luaClientManager.ensureClient(),
-            };
-            return this.wrapWithTruncation(
-              await handleAnalyzeItems(
-                advancedOptContext,
-                args?.build_name as string | undefined
-              )
-            );
-
-          case "optimize_skill_links":
-            const skillLinkContext = {
-              buildService: this.buildService,
-              getLuaClient: () => this.luaClientManager.getClient(),
-              ensureLuaClient: () => this.luaClientManager.ensureClient(),
-            };
-            return this.wrapWithTruncation(
-              await handleOptimizeSkillLinks(
-                skillLinkContext,
-                args?.build_name as string | undefined
-              )
-            );
-
-          case "create_budget_build":
-            if (!args) throw new Error("Missing arguments");
-            const budgetBuildContext = {
-              buildService: this.buildService,
-              getLuaClient: () => this.luaClientManager.getClient(),
-              ensureLuaClient: () => this.luaClientManager.ensureClient(),
-            };
-            return this.wrapWithTruncation(
-              await handleCreateBudgetBuild(
-                budgetBuildContext,
-                {
-                  class_name: args.class_name as string,
-                  ascendancy: args.ascendancy as string | undefined,
-                  main_skill: args.main_skill as string,
-                  budget_level: args.budget_level as 'low' | 'medium' | 'high',
-                  focus: args.focus as 'offense' | 'defense' | 'balanced' | undefined,
-                }
-              )
-            );
-
-          // Phase 7: Build Validation
-          case "validate_build":
-            const validationContext = {
-              buildService: this.buildService,
-              validationService: this.validationService,
-              getLuaClient: () => this.luaClientManager.getClient(),
-              ensureLuaClient: () => this.luaClientManager.ensureClient(),
-            };
-            return await handleValidateBuild(validationContext, {
-              build_name: args?.build_name as string | undefined,
-            });
-
-          // Phase 8: Export and Persistence Tools
-          case "export_build":
-            if (!args) throw new Error("Missing arguments");
-            return await handleExportBuild(exportContext, {
-              build_name: args.build_name as string,
-              output_name: args.output_name as string,
-              output_directory: args.output_directory as string | undefined,
-              overwrite: args.overwrite as boolean | undefined,
-              notes: args.notes as string | undefined,
-            });
-
-          case "save_tree":
-            if (!args) throw new Error("Missing arguments");
-            return await handleSaveTree(exportContext, {
-              build_name: args.build_name as string,
-              nodes: args.nodes as string[],
-              mastery_effects: args.mastery_effects as Record<string, number> | undefined,
-              backup: args.backup as boolean | undefined,
-            });
-
-          case "snapshot_build":
-            if (!args) throw new Error("Missing arguments");
-            return await handleSnapshotBuild(exportContext, {
-              build_name: args.build_name as string,
-              description: args.description as string | undefined,
-              tag: args.tag as string | undefined,
-            });
-
-          case "list_snapshots":
-            if (!args) throw new Error("Missing arguments");
-            return await handleListSnapshots(exportContext, {
-              build_name: args.build_name as string,
-              limit: args.limit as number | undefined,
-              tag_filter: args.tag_filter as string | undefined,
-            });
-
-          case "restore_snapshot":
-            if (!args) throw new Error("Missing arguments");
-            return await handleRestoreSnapshot(exportContext, {
-              build_name: args.build_name as string,
-              snapshot_id: args.snapshot_id as string,
-              backup_current: args.backup_current as boolean | undefined,
-            });
-
-          // Skill Gem Analysis Tools (Phase 11)
-          case "analyze_skill_links":
-            return await handleAnalyzeSkillLinks(skillGemContext, args);
-
-          case "suggest_support_gems":
-            return await handleSuggestSupportGems(skillGemContext, args);
-
-          case "compare_gem_setups":
-            if (!args) throw new Error("Missing arguments");
-            return await handleCompareGemSetups(skillGemContext, {
-              build_name: args.build_name as string,
-              skill_index: args.skill_index as number | undefined,
-              setups: args.setups as Array<{ name: string; gems: string[] }>,
-            });
-
-          case "validate_gem_quality":
-            return await handleValidateGemQuality(skillGemContext, args);
-
-          case "find_optimal_links":
-            if (!args) throw new Error("Missing arguments");
-            return await handleFindOptimalLinks(skillGemContext, {
-              build_name: args.build_name as string,
-              skill_index: args.skill_index as number | undefined,
-              link_count: args.link_count as number,
-              budget: args.budget as "league_start" | "mid_league" | "endgame" | undefined,
-              optimize_for: args.optimize_for as "dps" | "clear_speed" | "bossing" | "defense" | undefined,
-            });
-
-          default:
-            throw new Error(`Unknown tool: ${name}`);
+        if (truncatedTools.includes(name)) {
+          return wrapWithTruncation(result);
         }
+
+        return result;
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         return {
@@ -741,46 +369,6 @@ class PoBMCPServer {
         };
       }
     });
-  }
-
-  private formatTimeAgo(ms: number): string {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-
-    if (seconds < 60) return `${seconds}s ago`;
-    if (minutes < 60) return `${minutes}m ago`;
-    return `${hours}h ago`;
-  }
-
-  /**
-   * Truncate response text if it exceeds a reasonable limit for Claude Desktop.
-   * This prevents timeouts when responses are too large.
-   */
-  private truncateResponse(text: string, maxLength: number = 8000): string {
-    if (text.length <= maxLength) {
-      return text;
-    }
-
-    const truncated = text.substring(0, maxLength);
-    const lastNewline = truncated.lastIndexOf('\n');
-    const safeText = lastNewline > 0 ? truncated.substring(0, lastNewline) : truncated;
-
-    const remaining = text.length - safeText.length;
-    const remainingLines = text.substring(safeText.length).split('\n').length;
-
-    return safeText + `\n\n[Response truncated: ${remaining} characters, ~${remainingLines} lines remaining]\n` +
-           `[Use more specific queries to see detailed information]`;
-  }
-
-  /**
-   * Wrap handler result with truncation for large responses
-   */
-  private wrapWithTruncation(result: { content: Array<{ type: string; text: string }> }, maxLength: number = 8000): typeof result {
-    if (result.content[0] && result.content[0].type === 'text') {
-      result.content[0].text = this.truncateResponse(result.content[0].text, maxLength);
-    }
-    return result;
   }
 
   async run() {

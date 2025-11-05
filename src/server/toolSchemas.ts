@@ -1073,3 +1073,337 @@ export function getExportToolSchemas(): any[] {
     },
   ];
 }
+
+/**
+ * Get Trade API tool schemas (require POE_TRADE_ENABLED=true)
+ */
+export function getTradeToolSchemas(): any[] {
+  return [
+    {
+      name: "search_trade_items",
+      description: "Search the Path of Exile trade site for items with filters. Returns matching items with prices, stats, and seller information. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          league: {
+            type: "string",
+            description: "League to search in (e.g., 'Standard', 'Settlers', 'Hardcore'). Use get_leagues to see available leagues.",
+          },
+          item_name: {
+            type: "string",
+            description: "Specific item name to search for (e.g., 'Headhunter', 'Taste of Hate')",
+          },
+          item_type: {
+            type: "string",
+            description: "Base item type (e.g., 'Corsair Sword', 'Astral Plate')",
+          },
+          min_price: {
+            type: "number",
+            description: "Minimum price in the specified currency",
+          },
+          max_price: {
+            type: "number",
+            description: "Maximum price in the specified currency",
+          },
+          price_currency: {
+            type: "string",
+            description: "Currency for price filter (default: 'chaos'). Options: 'chaos', 'divine', 'exalted'",
+          },
+          online_only: {
+            type: "boolean",
+            description: "Only show items from online sellers (default: true)",
+          },
+          rarity: {
+            type: "string",
+            description: "Item rarity filter",
+            enum: ["normal", "magic", "rare", "unique", "any"],
+          },
+          min_links: {
+            type: "number",
+            description: "Minimum number of linked sockets (e.g., 6 for 6-link)",
+          },
+          stats: {
+            type: "array",
+            description: "Array of stat requirements with Trade API stat IDs",
+            items: {
+              type: "object",
+              properties: {
+                id: {
+                  type: "string",
+                  description: "Trade API stat ID (e.g., 'pseudo.pseudo_total_life')",
+                },
+                min: {
+                  type: "number",
+                  description: "Minimum value for this stat",
+                },
+                max: {
+                  type: "number",
+                  description: "Maximum value for this stat",
+                },
+              },
+              required: ["id"],
+            },
+          },
+          sort: {
+            type: "string",
+            description: "Sort order for results",
+            enum: ["price_asc", "price_desc"],
+          },
+          limit: {
+            type: "number",
+            description: "Maximum number of results to return (default: 10, max: 10 per request)",
+          },
+        },
+        required: ["league"],
+      },
+    },
+    {
+      name: "get_item_price",
+      description: "Get current market price for a specific item. Returns price statistics (min, max, median, average) from recent listings. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          item_name: {
+            type: "string",
+            description: "Name of the item to price check",
+          },
+          league: {
+            type: "string",
+            description: "League to check prices in (default: 'Standard')",
+          },
+          item_type: {
+            type: "string",
+            description: "Base type to narrow down search (optional)",
+          },
+          rarity: {
+            type: "string",
+            description: "Item rarity",
+            enum: ["unique", "rare", "magic", "normal"],
+          },
+        },
+        required: ["item_name"],
+      },
+    },
+    {
+      name: "get_leagues",
+      description: "Get list of available Path of Exile leagues for trade searches. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+    {
+      name: "search_stats",
+      description: "Search for Trade API stat IDs by name using fuzzy matching. Helps discover the correct stat ID to use in item searches. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Stat name to search for (e.g., 'life', 'fire resistance', 'critical strike')",
+          },
+          limit: {
+            type: "number",
+            description: "Maximum number of results to return (default: 10)",
+          },
+        },
+        required: ["query"],
+      },
+    },
+    {
+      name: "find_item_upgrades",
+      description: "Find item upgrades for a specific equipment slot based on build needs. Analyzes current item and suggests better options with cost/benefit analysis. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          slot: {
+            type: "string",
+            description: "Equipment slot to upgrade (e.g., 'Helmet', 'Body Armour', 'Ring 1', 'Weapon 1')",
+          },
+          league: {
+            type: "string",
+            description: "League to search in (e.g., 'Standard', 'Settlers')",
+          },
+          build_needs: {
+            type: "object",
+            description: "Build requirements for upgrades",
+            properties: {
+              life: {
+                type: "number",
+                description: "Life needed from this slot",
+              },
+              es: {
+                type: "number",
+                description: "Energy shield needed",
+              },
+              fire_resist: {
+                type: "number",
+                description: "Fire resistance gap to fill",
+              },
+              cold_resist: {
+                type: "number",
+                description: "Cold resistance gap to fill",
+              },
+              lightning_resist: {
+                type: "number",
+                description: "Lightning resistance gap to fill",
+              },
+              chaos_resist: {
+                type: "number",
+                description: "Chaos resistance gap to fill",
+              },
+              dps: {
+                type: "number",
+                description: "DPS target for weapons",
+              },
+            },
+          },
+          current_item: {
+            type: "object",
+            description: "Stats of the currently equipped item for comparison",
+            properties: {
+              name: {
+                type: "string",
+                description: "Current item name",
+              },
+              life: {
+                type: "number",
+                description: "Current life on item",
+              },
+              es: {
+                type: "number",
+                description: "Current ES on item",
+              },
+              fire_resist: {
+                type: "number",
+              },
+              cold_resist: {
+                type: "number",
+              },
+              lightning_resist: {
+                type: "number",
+              },
+              chaos_resist: {
+                type: "number",
+              },
+            },
+          },
+          max_price: {
+            type: "number",
+            description: "Maximum price per item in specified currency (default: 100)",
+          },
+          currency: {
+            type: "string",
+            description: "Currency for price limit (default: 'chaos')",
+          },
+          limit: {
+            type: "number",
+            description: "Maximum number of recommendations to return (default: 10)",
+          },
+        },
+        required: ["slot", "league"],
+      },
+    },
+    {
+      name: "find_resistance_gear",
+      description: "Find gear to cap elemental resistances. Searches multiple equipment slots and ranks by efficiency (resistance per chaos spent). REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          league: {
+            type: "string",
+            description: "League to search in",
+          },
+          fire_resist_needed: {
+            type: "number",
+            description: "Fire resistance gap to fill (e.g., 30 means you need +30% fire res)",
+          },
+          cold_resist_needed: {
+            type: "number",
+            description: "Cold resistance gap to fill",
+          },
+          lightning_resist_needed: {
+            type: "number",
+            description: "Lightning resistance gap to fill",
+          },
+          chaos_resist_needed: {
+            type: "number",
+            description: "Chaos resistance gap to fill (optional)",
+          },
+          max_price_per_item: {
+            type: "number",
+            description: "Maximum price per item in chaos (default: 50)",
+          },
+          total_budget: {
+            type: "number",
+            description: "Total budget for all resistance fixes (default: 200)",
+          },
+          currency: {
+            type: "string",
+            description: "Currency for prices (default: 'chaos')",
+          },
+          slots: {
+            type: "array",
+            description: "Limit search to specific slots (optional, default searches all accessory slots)",
+            items: {
+              type: "string",
+            },
+          },
+          limit: {
+            type: "number",
+            description: "Maximum number of recommendations (default: 15)",
+          },
+        },
+        required: ["league"],
+      },
+    },
+    {
+      name: "compare_trade_items",
+      description: "Compare multiple trade items side-by-side with stat highlighting. Shows which items have the best values for each stat and which meet build requirements. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          item_ids: {
+            type: "array",
+            description: "Array of item IDs to compare (max 5 items)",
+            items: {
+              type: "string",
+            },
+          },
+          build_context: {
+            type: "object",
+            description: "Optional build requirements to check against",
+            properties: {
+              life_needed: {
+                type: "number",
+                description: "Minimum life needed",
+              },
+              es_needed: {
+                type: "number",
+                description: "Minimum ES needed",
+              },
+              dps_target: {
+                type: "number",
+                description: "Target DPS for weapons",
+              },
+              fire_resist_needed: {
+                type: "number",
+                description: "Fire resistance needed",
+              },
+              cold_resist_needed: {
+                type: "number",
+                description: "Cold resistance needed",
+              },
+              lightning_resist_needed: {
+                type: "number",
+                description: "Lightning resistance needed",
+              },
+            },
+          },
+        },
+        required: ["item_ids"],
+      },
+    },
+  ];
+}

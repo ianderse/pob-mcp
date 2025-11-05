@@ -7,6 +7,8 @@ const mockBuildService = {} as any;
 const mockTreeService = {} as any;
 const mockWatchService = {} as any;
 const mockValidationService = {} as any;
+const mockExportService = {} as any;
+const mockSkillGemService = {} as any;
 const mockLuaClient = {} as any;
 
 const mockDeps: ContextDependencies = {
@@ -14,6 +16,8 @@ const mockDeps: ContextDependencies = {
   treeService: mockTreeService,
   watchService: mockWatchService,
   validationService: mockValidationService,
+  exportService: mockExportService,
+  skillGemService: mockSkillGemService,
   pobDirectory: '/test/pob',
   luaEnabled: true,
   useTcpMode: false,
@@ -91,6 +95,50 @@ describe('ContextBuilder', () => {
       expect(context.getLuaClient()).toBe(mockLuaClient);
       expect(typeof context.ensureLuaClient).toBe('function');
       expect(Object.keys(context)).toHaveLength(5);
+    });
+  });
+
+  describe('buildExportContext', () => {
+    it('should return context with buildService and exportService', () => {
+      const context = builder.buildExportContext();
+
+      expect(context.buildService).toBe(mockBuildService);
+      expect(context.exportService).toBe(mockExportService);
+      expect(context.luaClient).toBe(mockLuaClient);
+      expect(Object.keys(context)).toHaveLength(3);
+    });
+  });
+
+  describe('buildSkillGemContext', () => {
+    it('should return context with buildService and skillGemService', () => {
+      const context = builder.buildSkillGemContext();
+
+      expect(context.buildService).toBe(mockBuildService);
+      expect(context.skillGemService).toBe(mockSkillGemService);
+      expect(Object.keys(context)).toHaveLength(2);
+    });
+  });
+
+  describe('buildAdvancedOptimizationContext', () => {
+    it('should return context with buildService and Lua methods', () => {
+      const context = builder.buildAdvancedOptimizationContext();
+
+      expect(context.buildService).toBe(mockBuildService);
+      expect(context.getLuaClient()).toBe(mockLuaClient);
+      expect(typeof context.ensureLuaClient).toBe('function');
+      expect(Object.keys(context)).toHaveLength(3);
+    });
+  });
+
+  describe('buildValidationContext', () => {
+    it('should return context with buildService, validationService, and Lua methods', () => {
+      const context = builder.buildValidationContext();
+
+      expect(context.buildService).toBe(mockBuildService);
+      expect(context.validationService).toBe(mockValidationService);
+      expect(context.getLuaClient()).toBe(mockLuaClient);
+      expect(typeof context.ensureLuaClient).toBe('function');
+      expect(Object.keys(context)).toHaveLength(4);
     });
   });
 });

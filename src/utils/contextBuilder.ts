@@ -86,6 +86,25 @@ export interface SkillGemContext {
 }
 
 /**
+ * Context for advanced optimization operations (items, skill links, budget builds)
+ */
+export interface AdvancedOptimizationContext {
+  buildService: BuildService;
+  getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  ensureLuaClient: () => Promise<void>;
+}
+
+/**
+ * Context for validation operations
+ */
+export interface ValidationContext {
+  buildService: BuildService;
+  validationService: ValidationService;
+  getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  ensureLuaClient: () => Promise<void>;
+}
+
+/**
  * Dependencies needed to build all context types
  */
 export interface ContextDependencies {
@@ -204,6 +223,29 @@ export class ContextBuilder {
       buildService: this.deps.buildService,
       skillGemService: this.deps.skillGemService,
       pobDirectory: this.deps.pobDirectory,
+      getLuaClient: this.deps.getLuaClient,
+      ensureLuaClient: this.deps.ensureLuaClient,
+    };
+  }
+
+  /**
+   * Build context for advanced optimization operations
+   */
+  buildAdvancedOptimizationContext(): AdvancedOptimizationContext {
+    return {
+      buildService: this.deps.buildService,
+      getLuaClient: this.deps.getLuaClient,
+      ensureLuaClient: this.deps.ensureLuaClient,
+    };
+  }
+
+  /**
+   * Build context for validation operations
+   */
+  buildValidationContext(): ValidationContext {
+    return {
+      buildService: this.deps.buildService,
+      validationService: this.deps.validationService,
       getLuaClient: this.deps.getLuaClient,
       ensureLuaClient: this.deps.ensureLuaClient,
     };
