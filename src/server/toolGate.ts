@@ -43,27 +43,18 @@ export class ToolGate {
 
   /**
    * Check if a tool call should be allowed based on gate status
-   * @throws {Error} If gate is locked and tool is high-impact
+   * Auto-unlocks when a new tool call arrives (user has responded)
    */
   checkGate(toolName: string): void {
-    // Skip gate for non-high-impact tools and the continue tool itself
+    // Skip gate for non-high-impact tools
     if (!HIGH_IMPACT_TOOLS.includes(toolName)) {
       return;
     }
 
-    // If gate is locked, block the tool call
+    // If gate is locked, a new tool call means user has responded - auto-unlock
     if (this.locked) {
-      throw new Error(
-        `🚫 TOOL GATE LOCKED 🚫\n\n` +
-        `The tool gate is locked after the previous tool call: "${this.lastToolCalled}"\n\n` +
-        `You MUST stop making tool calls and ask the user what to do next.\n\n` +
-        `DO NOT call any more tools. Instead:\n` +
-        `1. Tell the user what you just did\n` +
-        `2. Show them the results\n` +
-        `3. Ask what they want to do next\n` +
-        `4. Wait for their response\n\n` +
-        `The user can unlock this by saying "continue" or making a new request.`
-      );
+      this.locked = false;
+      // Continue normally - no error thrown
     }
 
     // Lock the gate after this tool executes

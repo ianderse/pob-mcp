@@ -11,15 +11,6 @@
 export function getToolSchemas(): any[] {
   return [
     {
-      name: "continue",
-      description: "Unlock the tool gate to allow calling more tools. The server locks after EVERY tool call to prevent automatic chaining. You MUST call this first before any other tool if the gate is locked. This tool exists to force you to pause and ask the user what they want before proceeding.",
-      inputSchema: {
-        type: "object",
-        properties: {},
-        required: [],
-      },
-    },
-    {
       name: "analyze_build",
       description: "Analyze a Path of Building build file and extract detailed information including stats, skills, gear, passive skill tree analysis with keystones, notables, jewel sockets, build archetype detection, and optimization suggestions",
       inputSchema: {

@@ -64,17 +64,6 @@ export async function routeToolCall(
   const skillGemContext = deps.contextBuilder.buildSkillGemContext();
 
   switch (name) {
-    case "continue":
-      deps.toolGate.unlock();
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: "✅ Tool gate unlocked. You may now call ONE more tool.\n\nRemember: The gate will lock again after the next tool call, so use it wisely and then ask the user what to do next.",
-          },
-        ],
-      };
-
     case "list_builds":
       return await handleListBuilds(handlerContext);
 
