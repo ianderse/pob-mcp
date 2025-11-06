@@ -149,6 +149,26 @@ export class TradeApiClient {
   }
 
   /**
+   * Get official stat data from PoE trade API
+   * This data changes very infrequently, so we cache it for 1 week
+   */
+  async getStatData(): Promise<StatData> {
+    const cacheKey = 'stats:all';
+    const cached = this.getFromCache<StatData>(cacheKey, 604800000); // 1 week
+    if (cached) {
+      return cached;
+    }
+
+    const url = `${this.baseUrl}/data/stats`;
+    const result = await this.limiter.schedule(() =>
+      this.makeRequest<StatData>('GET', url)
+    );
+
+    this.putInCache(cacheKey, result, 604800000); // Cache for 1 week
+    return result;
+  }
+
+  /**
    * Get current rate limit information
    */
   getRateLimitInfo(): RateLimitInfo | null {

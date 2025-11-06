@@ -48,6 +48,7 @@ import { BuildExportService } from "./services/buildExportService.js";
 import { SkillGemService } from "./services/skillGemService.js";
 import { TradeApiClient } from "./services/tradeClient.js";
 import { StatMapper } from "./services/statMapper.js";
+import { PoeNinjaClient } from "./services/poeNinjaClient.js";
 import { ItemRecommendationEngine } from "./services/itemRecommendationEngine.js";
 
 // Import types
@@ -69,7 +70,7 @@ import { ContextBuilder } from "./utils/contextBuilder.js";
 // Import server modules
 import { ToolGate } from "./server/toolGate.js";
 import { LuaClientManager } from "./server/luaClientManager.js";
-import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getConfigToolSchemas, getValidationToolSchemas, getExportToolSchemas, getSkillGemToolSchemas, getTradeToolSchemas } from "./server/toolSchemas.js";
+import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getConfigToolSchemas, getValidationToolSchemas, getExportToolSchemas, getSkillGemToolSchemas, getTradeToolSchemas, getPoeNinjaToolSchemas } from "./server/toolSchemas.js";
 import { routeToolCall, type ToolRouterDependencies } from "./server/toolRouter.js";
 import { wrapWithTruncation } from "./server/responseUtils.js";
 
@@ -88,6 +89,7 @@ class PoBMCPServer {
   private tradeClient: TradeApiClient | null = null;
   private statMapper: StatMapper | null = null;
   private recommendationEngine: ItemRecommendationEngine | null = null;
+  private ninjaClient: PoeNinjaClient;
 
   // Context builder
   private contextBuilder: ContextBuilder;
@@ -131,6 +133,10 @@ class PoBMCPServer {
     this.validationService = new ValidationService();
     this.exportService = new BuildExportService(this.pobDirectory);
     this.skillGemService = new SkillGemService();
+
+    // Initialize poe.ninja client (always available)
+    this.ninjaClient = new PoeNinjaClient();
+    console.error('[poe.ninja API] Client initialized');
 
     // Initialize Trade API client (if enabled)
     const tradeEnabled = process.env.POE_TRADE_ENABLED === 'true';
@@ -325,6 +331,9 @@ class PoBMCPServer {
         tools.push(...getTradeToolSchemas());
       }
 
+      // Add poe.ninja API tools (always available)
+      tools.push(...getPoeNinjaToolSchemas());
+
       return { tools };
     });
 
@@ -340,6 +349,7 @@ class PoBMCPServer {
           tradeClient: this.tradeClient,
           statMapper: this.statMapper,
           recommendationEngine: this.recommendationEngine,
+          ninjaClient: this.ninjaClient,
           getLuaClient: () => this.luaClientManager.getClient(),
           ensureLuaClient: () => this.luaClientManager.ensureClient(),
         };
@@ -371,7 +381,28 @@ class PoBMCPServer {
     });
   }
 
+  /**
+   * Initialize async components
+   */
+  private async initialize() {
+    // Load official stat data from PoE trade API (if enabled)
+    if (this.tradeClient && this.statMapper) {
+      try {
+        console.error('[StatMapper] Loading stats from PoE trade API...');
+        const statData = await this.tradeClient.getStatData();
+        await this.statMapper.loadFromTradeAPI(statData);
+        console.error('[StatMapper] Successfully loaded official stat data');
+      } catch (error) {
+        console.error('[StatMapper] Failed to load official stats, using static fallback:', error);
+        // Static mappings already loaded in constructor as fallback
+      }
+    }
+  }
+
   async run() {
+    // Initialize async components first
+    await this.initialize();
+
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error("Path of Building MCP Server running on stdio");

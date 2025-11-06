@@ -1078,7 +1078,7 @@ export function getTradeToolSchemas(): any[] {
         properties: {
           league: {
             type: "string",
-            description: "League to search in (e.g., 'Standard', 'Settlers', 'Hardcore'). Use get_leagues to see available leagues.",
+            description: "EXACT league name as specified by user (e.g., 'Standard', 'Settlers', 'Keepers', 'Hardcore'). Use get_leagues to see available leagues. Do not substitute or change the league name.",
           },
           item_name: {
             type: "string",
@@ -1160,7 +1160,7 @@ export function getTradeToolSchemas(): any[] {
           },
           league: {
             type: "string",
-            description: "League to check prices in (default: 'Standard')",
+            description: "EXACT league name as specified by user (default: 'Standard'). Do not substitute or change the league name.",
           },
           item_type: {
             type: "string",
@@ -1214,7 +1214,7 @@ export function getTradeToolSchemas(): any[] {
           },
           league: {
             type: "string",
-            description: "League to search in (e.g., 'Standard', 'Settlers')",
+            description: "EXACT league name as specified by user (e.g., 'Standard', 'Settlers', 'Keepers', 'Hardcore'). Do not substitute or change the league name.",
           },
           build_needs: {
             type: "object",
@@ -1304,7 +1304,7 @@ export function getTradeToolSchemas(): any[] {
         properties: {
           league: {
             type: "string",
-            description: "League to search in",
+            description: "EXACT league name as specified by user. Do not substitute or change the league name.",
           },
           fire_resist_needed: {
             type: "number",
@@ -1394,6 +1394,71 @@ export function getTradeToolSchemas(): any[] {
           },
         },
         required: ["item_ids"],
+      },
+    },
+  ];
+}
+
+/**
+ * Get poe.ninja API tool schemas
+ */
+export function getPoeNinjaToolSchemas(): any[] {
+  return [
+    {
+      name: "get_currency_rates",
+      description: "Get current currency exchange rates from poe.ninja. Returns real-time market prices for all currencies in Chaos Orb equivalent. Updated every 5 minutes from live trading data. IMPORTANT: Use the EXACT league name the user specifies - do not substitute or guess.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          league: {
+            type: "string",
+            description: "EXACT league name as specified by user (e.g., 'Standard', 'Settlers', 'Keepers', 'Hardcore'). Do not substitute or change this value.",
+          },
+        },
+        required: ["league"],
+      },
+    },
+    {
+      name: "find_arbitrage",
+      description: "Find currency arbitrage opportunities - profitable trading loops where you can trade currencies in a circle and end up with more than you started. Uses real-time poe.ninja rates to identify market inefficiencies. Perfect for making passive income through currency trading. IMPORTANT: Use the EXACT league name the user specifies - do not substitute or guess.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          league: {
+            type: "string",
+            description: "EXACT league name as specified by user (e.g., 'Standard', 'Settlers', 'Keepers', 'Hardcore'). Do not substitute or change this value.",
+          },
+          min_profit_percent: {
+            type: "number",
+            description: "Minimum profit percentage to show (default: 1.0). Lower values find more opportunities but with smaller profits.",
+          },
+        },
+        required: ["league"],
+      },
+    },
+    {
+      name: "calculate_trading_profit",
+      description: "Calculate the profit/loss from a specific trading chain. Useful for testing your own trading strategies or validating arbitrage opportunities before executing them. Shows step-by-step conversion rates. IMPORTANT: Use the EXACT league name the user specifies - do not substitute or guess.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          league: {
+            type: "string",
+            description: "EXACT league name as specified by user (e.g., 'Standard', 'Settlers', 'Keepers', 'Hardcore'). Do not substitute or change this value.",
+          },
+          currency_chain: {
+            type: "array",
+            description: "Array of currency names in trading order (e.g., ['Divine Orb', 'Chaos Orb', 'Exalted Orb', 'Divine Orb'])",
+            items: {
+              type: "string",
+            },
+          },
+          start_amount: {
+            type: "number",
+            description: "Amount of first currency to start with (default: 1)",
+          },
+        },
+        required: ["league", "currency_chain"],
       },
     },
   ];

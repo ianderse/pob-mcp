@@ -10,6 +10,7 @@ import type { ContextBuilder } from "../utils/contextBuilder.js";
 import type { TradeApiClient } from "../services/tradeClient.js";
 import type { StatMapper } from "../services/statMapper.js";
 import type { ItemRecommendationEngine } from "../services/itemRecommendationEngine.js";
+import type { PoeNinjaClient } from "../services/poeNinjaClient.js";
 
 // Import handlers
 import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats } from "../handlers/buildHandlers.js";
@@ -24,6 +25,7 @@ import { handleValidateBuild } from "../handlers/validationHandlers.js";
 import { handleExportBuild, handleSaveTree, handleSnapshotBuild, handleListSnapshots, handleRestoreSnapshot } from "../handlers/exportHandlers.js";
 import { handleAnalyzeSkillLinks, handleSuggestSupportGems, handleCompareGemSetups, handleValidateGemQuality, handleFindOptimalLinks } from "../handlers/skillGemHandlers.js";
 import { handleSearchTradeItems, handleGetItemPrice, handleGetLeagues, handleSearchStats, handleFindItemUpgrades, handleFindResistanceGear, handleCompareTradeItems } from "../handlers/tradeHandlers.js";
+import { handleGetCurrencyRates, handleFindArbitrage, handleCalculateTradingProfit } from "../handlers/poeNinjaHandlers.js";
 
 export interface ToolRouterDependencies {
   toolGate: ToolGate;
@@ -31,6 +33,7 @@ export interface ToolRouterDependencies {
   tradeClient: TradeApiClient | null;
   statMapper: StatMapper | null;
   recommendationEngine: ItemRecommendationEngine | null;
+  ninjaClient: PoeNinjaClient;
   getLuaClient: () => any;
   ensureLuaClient: () => Promise<any>;
 }
@@ -502,6 +505,33 @@ export async function routeToolCall(
         recommendationEngine: deps.recommendationEngine || undefined
       };
       return await handleCompareTradeItems(tradeContext, args as any);
+    }
+
+    // ========================================
+    // poe.ninja API Tools
+    // ========================================
+    case "get_currency_rates": {
+      if (!args) throw new Error("Missing arguments");
+      const ninjaContext = {
+        ninjaClient: deps.ninjaClient
+      };
+      return await handleGetCurrencyRates(ninjaContext, args as any);
+    }
+
+    case "find_arbitrage": {
+      if (!args) throw new Error("Missing arguments");
+      const ninjaContext = {
+        ninjaClient: deps.ninjaClient
+      };
+      return await handleFindArbitrage(ninjaContext, args as any);
+    }
+
+    case "calculate_trading_profit": {
+      if (!args) throw new Error("Missing arguments");
+      const ninjaContext = {
+        ninjaClient: deps.ninjaClient
+      };
+      return await handleCalculateTradingProfit(ninjaContext, args as any);
     }
 
     default:
