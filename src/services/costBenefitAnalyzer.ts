@@ -166,17 +166,72 @@ export class CostBenefitAnalyzer {
    * Calculate physical DPS from weapon properties
    */
   private calculateDPS(prop: any, item: any): number {
-    // Simplified DPS calculation
-    // Real implementation would parse damage ranges and APS
-    return 0; // Placeholder
+    let physDPS = 0;
+    let aps = 1.0;
+
+    // Extract attacks per second
+    if (item.properties) {
+      for (const p of item.properties) {
+        if (p.name === 'Attacks per Second') {
+          aps = parseFloat(p.values?.[0]?.[0] || '1.0');
+        } else if (p.name === 'Physical Damage') {
+          // Parse "X-Y" format
+          const damageStr = p.values?.[0]?.[0] || '0-0';
+          const match = damageStr.match(/(\d+)-(\d+)/);
+          if (match) {
+            const min = parseFloat(match[1]);
+            const max = parseFloat(match[2]);
+            const avgDamage = (min + max) / 2;
+            physDPS = avgDamage * aps;
+          }
+        }
+      }
+    }
+
+    return physDPS;
   }
 
   /**
    * Calculate elemental DPS
    */
   private calculateElementalDPS(item: any): number {
-    // Simplified - would sum fire/cold/lightning damage * APS
-    return 0; // Placeholder
+    let eleDPS = 0;
+    let aps = 1.0;
+
+    // Extract attacks per second
+    if (item.properties) {
+      for (const p of item.properties) {
+        if (p.name === 'Attacks per Second') {
+          aps = parseFloat(p.values?.[0]?.[0] || '1.0');
+        } else if (p.name === 'Elemental Damage') {
+          // Parse elemental damage ranges
+          const damageStr = p.values?.[0]?.[0] || '0-0';
+          const match = damageStr.match(/(\d+)-(\d+)/);
+          if (match) {
+            const min = parseFloat(match[1]);
+            const max = parseFloat(match[2]);
+            const avgDamage = (min + max) / 2;
+            eleDPS += avgDamage * aps;
+          }
+        }
+      }
+    }
+
+    // Also check for added elemental damage in explicit mods
+    if (item.explicitMods) {
+      for (const mod of item.explicitMods) {
+        // Match patterns like "Adds 20-30 Fire Damage"
+        const addedMatch = mod.match(/Adds (\d+)-(\d+) (\w+) Damage/);
+        if (addedMatch) {
+          const min = parseFloat(addedMatch[1]);
+          const max = parseFloat(addedMatch[2]);
+          const avgDamage = (min + max) / 2;
+          eleDPS += avgDamage * aps;
+        }
+      }
+    }
+
+    return eleDPS;
   }
 
   /**

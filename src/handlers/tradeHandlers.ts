@@ -5,11 +5,13 @@ import { StatMapper } from '../services/statMapper.js';
 import { ItemRecommendationEngine, UpgradeContext } from '../services/itemRecommendationEngine.js';
 import { ItemListing, SearchOptions, ItemRecommendation, ResistanceRequirements, BudgetConstraints } from '../types/tradeTypes.js';
 import { CostBenefitAnalyzer } from '../services/costBenefitAnalyzer.js';
+import { PoeNinjaClient } from '../services/poeNinjaClient.js';
 
 interface TradeContext {
   tradeClient: TradeApiClient;
   statMapper?: StatMapper;
   recommendationEngine?: ItemRecommendationEngine;
+  ninjaClient?: PoeNinjaClient;
 }
 
 // ========================================
@@ -63,7 +65,7 @@ export async function handleSearchTradeItems(
       min_links,
       stats,
       sort = 'price_asc',
-      limit = 10,
+      limit = 5,
     } = args;
 
     // Build the query
@@ -119,8 +121,8 @@ export async function handleSearchTradeItems(
     const itemIdsToFetch = searchResult.result.slice(0, Math.min(limit, 10));
     const items = await context.tradeClient.fetchItems(itemIdsToFetch, searchResult.id);
 
-    // Format results
-    const output = formatSearchResults(items, searchResult.total, league, searchResult.id);
+    // Format results with real-time currency rates
+    const output = await formatSearchResults(items, searchResult.total, league, searchResult.id, context.ninjaClient);
 
     return {
       content: [
@@ -301,22 +303,73 @@ export async function handleGetLeagues(
 // Helper Functions
 // ========================================
 
-function formatSearchResults(items: ItemListing[], totalResults: number, league: string, searchId: string): string {
-  let output = `IMPORTANT: Show the user ALL of the following information verbatim, including:\n`;
-  output += `- All trade website URLs (the 🔗 links)\n`;
-  output += `- All value scores (X/100 ratings)\n`;
-  output += `- All efficiency metrics (stats per chaos)\n`;
-  output += `- The Best Value Rankings section at the end\n`;
-  output += `DO NOT summarize or paraphrase this output. Present it exactly as written below.\n\n`;
-  output += `=== Trade Search Results ===\n`;
-  output += `League: ${league}\n`;
-  output += `Total Results: ${totalResults}\n`;
-  output += `Showing: ${items.length} items\n`;
-  output += `\n🔗 View full results: ${getTradeSearchUrl(league, searchId)}\n\n`;
+/**
+ * Fetch and map currency rates from poe.ninja
+ * Maps full currency names to short names used by trade API
+ */
+async function getCurrencyRatesMap(ninjaClient: PoeNinjaClient | undefined, league: string): Promise<Map<string, number>> {
+  if (!ninjaClient) {
+    return new Map();
+  }
 
-  // Analyze items for cost/benefit
+  try {
+    const rates = await ninjaClient.getCurrencyExchangeMap(league);
+
+    // Map poe.ninja names to trade API currency names
+    const mappedRates = new Map<string, number>();
+
+    // Common currency mappings
+    const nameMap: Record<string, string[]> = {
+      'Divine Orb': ['divine', 'div'],
+      'Chaos Orb': ['chaos', 'c'],
+      'Exalted Orb': ['exalted', 'exa', 'ex'],
+      'Mirror of Kalandra': ['mirror'],
+      'Orb of Alchemy': ['alchemy', 'alch'],
+      'Orb of Fusing': ['fusing', 'fuse'],
+      'Orb of Regret': ['regret'],
+      'Gemcutter\'s Prism': ['gcp'],
+      'Chromatic Orb': ['chrome', 'chromatic'],
+      'Jeweller\'s Orb': ['jewellers', 'jew'],
+      'Orb of Alteration': ['alt', 'alteration'],
+      'Vaal Orb': ['vaal'],
+      'Cartographer\'s Chisel': ['chisel'],
+      'Blessed Orb': ['blessed'],
+      'Orb of Scouring': ['scouring', 'scour'],
+    };
+
+    // Add mappings
+    for (const [fullName, chaosValue] of rates.entries()) {
+      // Add the full name
+      mappedRates.set(fullName, chaosValue);
+
+      // Add short name mappings
+      for (const [key, aliases] of Object.entries(nameMap)) {
+        if (fullName === key) {
+          for (const alias of aliases) {
+            mappedRates.set(alias, chaosValue);
+          }
+        }
+      }
+    }
+
+    return mappedRates;
+  } catch (error) {
+    console.error('[Trade] Failed to fetch currency rates from poe.ninja:', error);
+    return new Map();
+  }
+}
+
+async function formatSearchResults(items: ItemListing[], totalResults: number, league: string, searchId: string, ninjaClient?: PoeNinjaClient): Promise<string> {
+  let output = `=== Trade Search (${league}) ===\n`;
+  output += `Found: ${totalResults} | Showing: ${items.length}\n`;
+  output += `🔗 ${getTradeSearchUrl(league, searchId)}\n\n`;
+
+  // Fetch real-time currency rates from poe.ninja
+  const currencyRates = await getCurrencyRatesMap(ninjaClient, league);
+
+  // Analyze items for cost/benefit with real rates
   const analyzer = new CostBenefitAnalyzer();
-  const analyses = analyzer.analyzeAndRank(items);
+  const analyses = analyzer.analyzeAndRank(items, currencyRates);
 
   for (let i = 0; i < analyses.length; i++) {
     const analysis = analyses[i];
@@ -384,57 +437,21 @@ function formatSearchResults(items: ItemListing[], totalResults: number, league:
       }
     }
 
-    // Show key efficiency metrics
+    // Show key stats in condensed format
     const stats = analysis.stats;
-    if (stats.life > 0 || stats.es > 0 || stats.totalResist > 0) {
-      output += `   Efficiency:\n`;
-      if (stats.life > 0) {
-        output += `     • Life: ${metrics.lifePerChaos.toFixed(2)}/chaos (+${stats.life})\n`;
-      }
-      if (stats.es > 0) {
-        output += `     • ES: ${metrics.esPerChaos.toFixed(2)}/chaos (+${stats.es})\n`;
-      }
-      if (stats.totalResist > 0) {
-        output += `     • Resist: ${metrics.totalResistPerChaos.toFixed(2)}/chaos (+${stats.totalResist}%)\n`;
-      }
+    const statParts: string[] = [];
+    if (stats.life > 0) statParts.push(`+${stats.life} Life`);
+    if (stats.es > 0) statParts.push(`+${stats.es} ES`);
+    if (stats.totalResist > 0) statParts.push(`+${stats.totalResist}% Res`);
+    if (statParts.length > 0) {
+      output += `   Stats: ${statParts.join(', ')}\n`;
     }
 
-    // Key mods (condensed)
-    if (item.explicitMods && item.explicitMods.length > 0) {
-      output += `   Mods: `;
-      const modSummary = item.explicitMods.slice(0, 2).join(', ');
-      output += modSummary;
-      if (item.explicitMods.length > 2) {
-        output += `, +${item.explicitMods.length - 2} more`;
-      }
-      output += `\n`;
-    }
-
-    output += `   Seller: ${seller.name}`;
-    if (seller.online) {
-      output += ' (Online)';
-    }
-    output += '\n';
-
-    output += `   Whisper: ${listing.listing.whisper}\n`;
-    output += `   🔗 View item: ${getTradeItemUrl(league, searchId, listing.id)}\n`;
-    output += '\n';
+    output += `   ${seller.online ? '🟢' : '🔴'} ${seller.name}\n`;
+    output += `   🔗 ${getTradeItemUrl(league, searchId, listing.id)}\n\n`;
   }
 
-  // Show value rankings
-  const topValue = analyses.slice(0, 3);
-  if (topValue.length > 0) {
-    output += `\n💡 Best Value Rankings:\n`;
-    for (let i = 0; i < topValue.length; i++) {
-      const analysis = topValue[i];
-      const item = analysis.listing.item;
-      const searchRank = items.indexOf(analysis.listing) + 1;
-      output += `   ${i + 1}. Item #${searchRank}: ${item.name || item.typeLine} (${analysis.metrics.valueScore.toFixed(0)}/100)\n`;
-    }
-  }
-
-  output += `\nNote: Items ranked by value score (💎=excellent, ✨=good, ⚠️=poor, 💰=budget pick)`;
-
+  output += `\n💎=excellent ✨=good ⚠️=poor 💰=budget 🟢=online 🔴=offline`;
   return output;
 }
 
@@ -540,7 +557,7 @@ export async function handleFindItemUpgrades(
       current_item,
       max_price = 100,
       currency = 'chaos',
-      limit = 10,
+      limit = 5,
     } = args;
 
     if (!context.recommendationEngine) {
@@ -609,7 +626,7 @@ export async function handleFindResistanceGear(
       total_budget = 200,
       currency = 'chaos',
       slots,
-      limit = 15,
+      limit = 8,
     } = args;
 
     if (!context.recommendationEngine) {
@@ -655,19 +672,8 @@ function formatItemRecommendations(
   league: string,
   includeLinks: boolean = false
 ): string {
-  let output = `IMPORTANT: Show the user ALL of the following information verbatim, including:\n`;
-  output += `- All trade website URLs (the 🔗 View item links)\n`;
-  output += `- All score ratings (X/100 values)\n`;
-  output += `- All efficiency metrics and stat gains\n`;
-  output += `- All whisper commands if present\n`;
-  output += `DO NOT summarize or paraphrase this output. Present it exactly as written below.\n\n`;
-  output += `=== Item Upgrade Recommendations: ${slot} ===\n`;
-  output += `League: ${league}\n`;
-  output += `Found ${recommendations.length} recommendations\n`;
-  if (includeLinks) {
-    output += `\n💡 Tip: Copy whisper commands below to contact sellers in-game\n`;
-  }
-  output += `\n`;
+  let output = `=== ${slot} Upgrades (${league}) ===\n`;
+  output += `${recommendations.length} found\n\n`;
 
   for (const rec of recommendations) {
     const item = rec.listing.item;
@@ -707,18 +713,8 @@ function formatItemRecommendations(
       }
     }
 
-    output += `   Seller: ${rec.listing.listing.account.name}`;
-    if (rec.listing.listing.account.online) {
-      output += ' (Online)';
-    }
-    output += '\n';
-
-    if (includeLinks && rec.listing.listing.whisper) {
-      output += `   Whisper: ${rec.listing.listing.whisper}\n`;
-    }
-
-    output += `   🔗 View item: ${getTradeItemUrl(league, rec.searchId, rec.listing.id)}\n`;
-    output += '\n';
+    output += `   ${rec.listing.listing.account.online ? '🟢' : '🔴'} ${rec.listing.listing.account.name}\n`;
+    output += `   🔗 ${getTradeItemUrl(league, rec.searchId, rec.listing.id)}\n\n`;
   }
 
   return output;
@@ -730,25 +726,15 @@ function formatResistanceRecommendations(
   league: string,
   includeLinks: boolean = false
 ): string {
-  let output = `IMPORTANT: Show the user ALL of the following information verbatim, including:\n`;
-  output += `- All trade website URLs (the 🔗 View item links)\n`;
-  output += `- All score ratings (X/100 values)\n`;
-  output += `- All efficiency metrics (resist per chaos)\n`;
-  output += `- All resistance gains (Provides: X% Fire, etc.)\n`;
-  output += `- All whisper commands if present\n`;
-  output += `DO NOT summarize or paraphrase this output. Present it exactly as written below.\n\n`;
-  output += `=== Resistance Gear Recommendations ===\n`;
-  output += `League: ${league}\n`;
-  output += `Target: `;
-
   const targets = [];
   if (resistanceGaps.fire > 0) targets.push(`${resistanceGaps.fire}% Fire`);
   if (resistanceGaps.cold > 0) targets.push(`${resistanceGaps.cold}% Cold`);
   if (resistanceGaps.lightning > 0) targets.push(`${resistanceGaps.lightning}% Lightning`);
   if (resistanceGaps.chaos && resistanceGaps.chaos > 0) targets.push(`${resistanceGaps.chaos}% Chaos`);
 
-  output += targets.join(', ') + '\n';
-  output += `Found ${recommendations.length} recommendations\n\n`;
+  let output = `=== Resistance Gear (${league}) ===\n`;
+  output += `Need: ${targets.join(', ')}\n`;
+  output += `${recommendations.length} found\n\n`;
 
   for (const rec of recommendations) {
     const item = rec.listing.item;
@@ -792,18 +778,8 @@ function formatResistanceRecommendations(
       }
     }
 
-    output += `   Seller: ${rec.listing.listing.account.name}`;
-    if (rec.listing.listing.account.online) {
-      output += ' (Online)';
-    }
-    output += '\n';
-
-    if (includeLinks && rec.listing.listing.whisper) {
-      output += `   Whisper: ${rec.listing.listing.whisper}\n`;
-    }
-
-    output += `   🔗 View item: ${getTradeItemUrl(league, rec.searchId, rec.listing.id)}\n`;
-    output += '\n';
+    output += `   ${rec.listing.listing.account.online ? '🟢' : '🔴'} ${rec.listing.listing.account.name}\n`;
+    output += `   🔗 ${getTradeItemUrl(league, rec.searchId, rec.listing.id)}\n\n`;
   }
 
   return output;
@@ -870,13 +846,7 @@ function formatItemComparison(
     lightning_resist_needed?: number;
   }
 ): string {
-  let output = `IMPORTANT: Show the user ALL of the following information verbatim, including:\n`;
-  output += `- All item statistics (life, ES, resistances, etc.)\n`;
-  output += `- All comparison markers (⭐, ✓, 💰)\n`;
-  output += `- The complete Summary section at the end\n`;
-  output += `DO NOT summarize or paraphrase this output. Present it exactly as written below.\n\n`;
-  output += '=== Trade Item Comparison ===\n';
-  output += 'Comparing ' + items.length + ' items\n\n';
+  let output = `=== Item Comparison (${items.length}) ===\n\n`;
 
   const itemStats = items.map(listing => {
     const item = listing.item;

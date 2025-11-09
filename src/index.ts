@@ -360,7 +360,9 @@ class PoBMCPServer {
         // Apply truncation for specific tools that return large outputs
         const truncatedTools = ['analyze_build', 'analyze_defenses', 'suggest_optimal_nodes',
                                 'optimize_tree', 'analyze_items', 'optimize_skill_links',
-                                'create_budget_build'];
+                                'create_budget_build', 'search_trade_items', 'find_item_upgrades',
+                                'find_resistance_gear', 'compare_trade_items', 'search_cluster_jewels',
+                                'generate_shopping_list'];
 
         if (truncatedTools.includes(name)) {
           return wrapWithTruncation(result);

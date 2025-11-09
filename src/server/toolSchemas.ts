@@ -1072,7 +1072,7 @@ export function getTradeToolSchemas(): any[] {
   return [
     {
       name: "search_trade_items",
-      description: "Search the Path of Exile trade site for items with filters. Returns matching items with prices, stats, and seller information. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
+      description: "Search the Path of Exile trade site for items with filters. Returns matching items with prices, stats, and seller information. Default limit is 5 items to minimize token usage. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
       inputSchema: {
         type: "object",
         properties: {
@@ -1142,7 +1142,7 @@ export function getTradeToolSchemas(): any[] {
           },
           limit: {
             type: "number",
-            description: "Maximum number of results to return (default: 10, max: 10 per request)",
+            description: "Maximum number of results to return (default: 5 for token efficiency)",
           },
         },
         required: ["league"],
@@ -1394,6 +1394,97 @@ export function getTradeToolSchemas(): any[] {
           },
         },
         required: ["item_ids"],
+      },
+    },
+    {
+      name: "search_cluster_jewels",
+      description: "Search for cluster jewels with specific properties. Cluster jewels are special jewels that can be socketed on the outer rim of the passive tree to add new passive skills. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          league: {
+            type: "string",
+            description: "EXACT league name as specified by user (e.g., 'Standard', 'Settlers', 'Keepers', 'Hardcore'). Do not substitute or change the league name.",
+          },
+          size: {
+            type: "string",
+            description: "Cluster jewel size",
+            enum: ["Large", "Medium", "Small"],
+          },
+          passive_count: {
+            type: "number",
+            description: "Number of passive skills the jewel adds (e.g., 8 for Large, 4-5 for Medium, 2-3 for Small). Determines the jewel socket efficiency.",
+          },
+          enchant: {
+            type: "string",
+            description: "Enchantment text to search for (e.g., 'Damage over Time Multiplier', 'Fire Damage', 'Minion Damage'). This defines what bonuses the small passive skills grant.",
+          },
+          notables: {
+            type: "array",
+            description: "Array of notable passive names to search for (e.g., ['Touch of Cruelty', 'Unholy Grace']). These are the keystone passives allocated by the cluster jewel.",
+            items: {
+              type: "string",
+            },
+          },
+          min_item_level: {
+            type: "number",
+            description: "Minimum item level (affects possible mod tiers)",
+          },
+          max_price: {
+            type: "number",
+            description: "Maximum price in the specified currency",
+          },
+          price_currency: {
+            type: "string",
+            description: "Currency for price filter (default: 'chaos'). Options: 'chaos', 'divine', 'exalted'",
+          },
+          online_only: {
+            type: "boolean",
+            description: "Only show items from online sellers (default: true)",
+          },
+          limit: {
+            type: "number",
+            description: "Maximum number of results to return (default: 10)",
+          },
+        },
+        required: ["league", "size"],
+      },
+    },
+    {
+      name: "analyze_cluster_jewels",
+      description: "Analyze cluster jewels equipped in a Path of Building build. Shows details about each cluster jewel including size, passive count, enchantments, and notables allocated.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Name of the build file (e.g., 'MyBuild.xml')",
+          },
+        },
+        required: ["build_name"],
+      },
+    },
+    {
+      name: "generate_shopping_list",
+      description: "Generate a prioritized shopping list from a PoB build with price estimates. Analyzes equipped items, identifies upgrades, and creates a budget-based shopping plan. Perfect for planning gear progression. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Name of the build file (e.g., 'MyBuild.xml')",
+          },
+          league: {
+            type: "string",
+            description: "EXACT league name as specified by user (e.g., 'Standard', 'Settlers', 'Keepers', 'Hardcore'). Use get_leagues to see available leagues.",
+          },
+          budget: {
+            type: "string",
+            description: "Budget tier for recommendations (default: 'medium')",
+            enum: ["budget", "medium", "endgame"],
+          },
+        },
+        required: ["build_name", "league"],
       },
     },
   ];

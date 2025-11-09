@@ -26,6 +26,8 @@ import { handleExportBuild, handleSaveTree, handleSnapshotBuild, handleListSnaps
 import { handleAnalyzeSkillLinks, handleSuggestSupportGems, handleCompareGemSetups, handleValidateGemQuality, handleFindOptimalLinks } from "../handlers/skillGemHandlers.js";
 import { handleSearchTradeItems, handleGetItemPrice, handleGetLeagues, handleSearchStats, handleFindItemUpgrades, handleFindResistanceGear, handleCompareTradeItems } from "../handlers/tradeHandlers.js";
 import { handleGetCurrencyRates, handleFindArbitrage, handleCalculateTradingProfit } from "../handlers/poeNinjaHandlers.js";
+import { handleSearchClusterJewels, handleAnalyzeClusterJewels } from "../handlers/clusterJewelHandlers.js";
+import { handleGenerateShoppingList } from "../handlers/shoppingListHandlers.js";
 
 export interface ToolRouterDependencies {
   toolGate: ToolGate;
@@ -430,7 +432,11 @@ export async function routeToolCall(
       if (!args || !args.league) {
         throw new Error("Missing required argument: league");
       }
-      const tradeContext = { tradeClient: deps.tradeClient, statMapper: deps.statMapper || undefined };
+      const tradeContext = {
+        tradeClient: deps.tradeClient,
+        statMapper: deps.statMapper || undefined,
+        ninjaClient: deps.ninjaClient
+      };
       return await handleSearchTradeItems(tradeContext, args as any);
     }
 
@@ -438,7 +444,11 @@ export async function routeToolCall(
       if (!deps.tradeClient) {
         throw new Error("Trade API is not enabled. Set POE_TRADE_ENABLED=true to enable.");
       }
-      const tradeContext = { tradeClient: deps.tradeClient, statMapper: deps.statMapper || undefined };
+      const tradeContext = {
+        tradeClient: deps.tradeClient,
+        statMapper: deps.statMapper || undefined,
+        ninjaClient: deps.ninjaClient
+      };
       if (!args) throw new Error("Missing arguments");
       return await handleGetItemPrice(tradeContext, {
         item_name: args.item_name as string,
@@ -452,7 +462,11 @@ export async function routeToolCall(
       if (!deps.tradeClient) {
         throw new Error("Trade API is not enabled. Set POE_TRADE_ENABLED=true to enable.");
       }
-      const tradeContext = { tradeClient: deps.tradeClient, statMapper: deps.statMapper || undefined };
+      const tradeContext = {
+        tradeClient: deps.tradeClient,
+        statMapper: deps.statMapper || undefined,
+        ninjaClient: deps.ninjaClient
+      };
       return await handleGetLeagues(tradeContext);
     }
 
@@ -461,7 +475,11 @@ export async function routeToolCall(
         throw new Error("Trade API is not enabled. Set POE_TRADE_ENABLED=true to enable.");
       }
       if (!args) throw new Error("Missing arguments");
-      const tradeContext = { tradeClient: deps.tradeClient, statMapper: deps.statMapper };
+      const tradeContext = {
+        tradeClient: deps.tradeClient,
+        statMapper: deps.statMapper,
+        ninjaClient: deps.ninjaClient
+      };
       return await handleSearchStats(tradeContext, {
         query: args.query as string,
         limit: args.limit as number | undefined,
@@ -476,7 +494,8 @@ export async function routeToolCall(
       const tradeContext = {
         tradeClient: deps.tradeClient,
         statMapper: deps.statMapper || undefined,
-        recommendationEngine: deps.recommendationEngine
+        recommendationEngine: deps.recommendationEngine,
+        ninjaClient: deps.ninjaClient
       };
       return await handleFindItemUpgrades(tradeContext, args as any);
     }
@@ -489,7 +508,8 @@ export async function routeToolCall(
       const tradeContext = {
         tradeClient: deps.tradeClient,
         statMapper: deps.statMapper || undefined,
-        recommendationEngine: deps.recommendationEngine
+        recommendationEngine: deps.recommendationEngine,
+        ninjaClient: deps.ninjaClient
       };
       return await handleFindResistanceGear(tradeContext, args as any);
     }
@@ -502,9 +522,51 @@ export async function routeToolCall(
       const tradeContext = {
         tradeClient: deps.tradeClient,
         statMapper: deps.statMapper || undefined,
-        recommendationEngine: deps.recommendationEngine || undefined
+        recommendationEngine: deps.recommendationEngine || undefined,
+        ninjaClient: deps.ninjaClient
       };
       return await handleCompareTradeItems(tradeContext, args as any);
+    }
+
+    case "search_cluster_jewels": {
+      if (!deps.tradeClient) {
+        throw new Error("Trade API is not enabled. Set POE_TRADE_ENABLED=true to enable.");
+      }
+      if (!args) throw new Error("Missing arguments");
+      const tradeContext = {
+        tradeClient: deps.tradeClient,
+        statMapper: deps.statMapper || undefined,
+        ninjaClient: deps.ninjaClient
+      };
+      return await handleSearchClusterJewels(tradeContext, args as any);
+    }
+
+    case "analyze_cluster_jewels": {
+      if (!args) throw new Error("Missing arguments");
+      const buildContext = {
+        buildService: deps.contextBuilder.buildHandlerContext().buildService
+      };
+      return await handleAnalyzeClusterJewels(buildContext, {
+        build_name: args.build_name as string
+      });
+    }
+
+    case "generate_shopping_list": {
+      if (!deps.tradeClient) {
+        throw new Error("Trade API is not enabled. Set POE_TRADE_ENABLED=true to enable.");
+      }
+      if (!args) throw new Error("Missing arguments");
+      const shoppingContext = {
+        buildService: deps.contextBuilder.buildHandlerContext().buildService,
+        tradeClient: deps.tradeClient,
+        statMapper: deps.statMapper || undefined,
+        ninjaClient: deps.ninjaClient
+      };
+      return await handleGenerateShoppingList(shoppingContext, {
+        build_name: args.build_name as string,
+        league: args.league as string,
+        budget: args.budget as 'budget' | 'medium' | 'endgame' | undefined
+      });
     }
 
     // ========================================
