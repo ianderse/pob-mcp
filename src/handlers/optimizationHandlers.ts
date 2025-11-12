@@ -45,14 +45,20 @@ export async function handleAnalyzeDefenses(
     // Load the build into the Lua bridge
     const buildPath = path.join(context.pobDirectory, targetBuild);
     const buildXml = await fs.readFile(buildPath, 'utf-8');
+
+    // Parse XML to see active configuration
+    const buildData = await context.buildService.readBuild(targetBuild);
+    const activeSpec = (buildData.Build as any)?.activeSpec || '1';
+
     const loadResult = await luaClient.loadBuildXml(buildXml, 'Defense Analysis');
 
     // Capture debug info if available
     let debugInfo = '';
+    debugInfo += `[INFO] Active spec from XML: ${activeSpec}\n`;
     if (loadResult && typeof loadResult === 'object') {
       const debug = (loadResult as any).debug;
       if (debug) {
-        debugInfo = `\n[DEBUG] Load diagnostics:\n`;
+        debugInfo += `\n[DEBUG] Load diagnostics:\n`;
         debugInfo += `  - Build exists: ${debug.buildExists}\n`;
         debugInfo += `  - Spec exists: ${debug.specExists}\n`;
         debugInfo += `  - Allocated nodes: ${debug.allocatedNodes || 0}\n`;
@@ -72,6 +78,14 @@ export async function handleAnalyzeDefenses(
 
     // Get stats from PoB
     const stats = await luaClient.getStats();
+
+    // Add stat debugging
+    debugInfo += `[DEBUG] Stats from Lua:\n`;
+    debugInfo += `  - Life: ${stats.Life || 0}\n`;
+    debugInfo += `  - Fire Resist: ${stats.FireResist || 0}\n`;
+    debugInfo += `  - Cold Resist: ${stats.ColdResist || 0}\n`;
+    debugInfo += `  - Lightning Resist: ${stats.LightningResist || 0}\n`;
+    debugInfo += `  - Chaos Resist: ${stats.ChaosResist || 0}\n\n`;
 
     // Validate that we have meaningful stats (not empty/default state)
     const life = stats.Life || 0;
