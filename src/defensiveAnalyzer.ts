@@ -90,10 +90,23 @@ export function analyzeDefenses(stats: Record<string, any>): DefensiveAnalysis {
  * Analyze resistance stats
  */
 function analyzeResistances(stats: Record<string, any>): ResistanceAnalysis {
-  const fire = stats.FireResist || 0;
-  const cold = stats.ColdResist || 0;
-  const lightning = stats.LightningResist || 0;
-  const chaos = stats.ChaosResist || 0;
+  // Helper to get stat value - works with both Lua stats object and parsed stats
+  const getStat = (key: string): number => {
+    // Try direct property access (Lua format)
+    if (stats[key] !== undefined) {
+      return parseFloat(stats[key]) || 0;
+    }
+    // Try with "Player" prefix (alternate format)
+    if (stats[`Player${key}`] !== undefined) {
+      return parseFloat(stats[`Player${key}`]) || 0;
+    }
+    return 0;
+  };
+
+  const fire = getStat('FireResist');
+  const cold = getStat('ColdResist');
+  const lightning = getStat('LightningResist');
+  const chaos = getStat('ChaosResist');
 
   const getResistStatus = (value: number) => {
     if (value >= 75) return value > 75 ? 'overcapped' : 'capped';
@@ -119,8 +132,15 @@ function analyzeResistances(stats: Record<string, any>): ResistanceAnalysis {
  * Analyze life pool
  */
 function analyzeLifePool(stats: Record<string, any>): LifePoolAnalysis {
-  const life = stats.Life || 0;
-  const es = stats.EnergyShield || 0;
+  // Helper to get stat value
+  const getStat = (key: string): number => {
+    if (stats[key] !== undefined) return parseFloat(stats[key]) || 0;
+    if (stats[`Player${key}`] !== undefined) return parseFloat(stats[`Player${key}`]) || 0;
+    return 0;
+  };
+
+  const life = getStat('Life');
+  const es = getStat('EnergyShield');
   const total = life + es;
 
   let status: LifePoolAnalysis['status'];
@@ -148,10 +168,17 @@ function analyzeLifePool(stats: Record<string, any>): LifePoolAnalysis {
  * Analyze mitigation
  */
 function analyzeMitigation(stats: Record<string, any>): MitigationAnalysis {
-  const armour = stats.Armour || 0;
-  const evasion = stats.Evasion || 0;
-  const block = stats.BlockChance || 0;
-  const spellBlock = stats.SpellBlockChance || 0;
+  // Helper to get stat value
+  const getStat = (key: string): number => {
+    if (stats[key] !== undefined) return parseFloat(stats[key]) || 0;
+    if (stats[`Player${key}`] !== undefined) return parseFloat(stats[`Player${key}`]) || 0;
+    return 0;
+  };
+
+  const armour = getStat('Armour');
+  const evasion = getStat('Evasion');
+  const block = getStat('BlockChance');
+  const spellBlock = getStat('SpellBlockChance');
 
   const getArmourEffectiveness = (value: number): string => {
     if (value >= 30000) return 'excellent (~40-50% phys reduction)';
@@ -206,10 +233,17 @@ function analyzeMitigation(stats: Record<string, any>): MitigationAnalysis {
  * Analyze sustain
  */
 function analyzeSustain(stats: Record<string, any>): SustainAnalysis {
-  const lifeRegen = stats.LifeRegen || 0;
-  const life = stats.Life || 1;
-  const manaRegen = stats.ManaRegen || 0;
-  const esRecharge = stats.ESRecharge || 0;
+  // Helper to get stat value
+  const getStat = (key: string): number => {
+    if (stats[key] !== undefined) return parseFloat(stats[key]) || 0;
+    if (stats[`Player${key}`] !== undefined) return parseFloat(stats[`Player${key}`]) || 0;
+    return 0;
+  };
+
+  const lifeRegen = getStat('LifeRegen');
+  const life = getStat('Life') || 1; // Avoid division by zero
+  const manaRegen = getStat('ManaRegen');
+  const esRecharge = getStat('ESRecharge');
 
   const lifeRegenPercent = (lifeRegen / life) * 100;
 
