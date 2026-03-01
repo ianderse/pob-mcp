@@ -14,12 +14,8 @@ export async function handleGetConfig(context: ConfigHandlerContext) {
     throw new Error("Lua bridge not active. Use lua_start and lua_load_build first.");
   }
 
-  const client = luaClient as any;
-  const response = await client.sendRequest({
-    action: "get_config",
-  });
-
-  const formatted = formatConfigOutput(response);
+  const config = await luaClient.getConfig();
+  const formatted = formatConfigOutput(config);
 
   return {
     content: [
@@ -43,27 +39,17 @@ export async function handleSetConfig(
     throw new Error("Lua bridge not active. Use lua_start and lua_load_build first.");
   }
 
-  const client = luaClient as any;
-
   // Get current config to show before/after
-  const currentConfig = await client.sendRequest({
-    action: "get_config",
-  });
-
+  const currentConfig = await luaClient.getConfig();
   const oldValue = currentConfig[args.config_name];
 
-  // Set new value
-  const configUpdate: any = {
-    action: "set_config",
-  };
-  configUpdate[args.config_name] = args.value;
-
-  await client.sendRequest(configUpdate);
+  // Set new value - build params object dynamically
+  const params: Record<string, any> = {};
+  params[args.config_name] = args.value;
+  const newConfig = await luaClient.setConfig(params);
 
   // Get updated stats
-  const newStats = await client.sendRequest({
-    action: "get_stats",
-  });
+  const newStats = await luaClient.getStats(['TotalDPS', 'CombinedDPS', 'Life', 'EnergyShield']);
 
   // Format output
   let output = `=== Configuration Updated ===\n\n`;
@@ -109,89 +95,47 @@ export async function handleSetEnemyStats(
     throw new Error("Lua bridge not active. Use lua_start and lua_load_build first.");
   }
 
-  const client = luaClient as any;
+  // Get current DPS before changes
+  const oldStats = await luaClient.getStats(['TotalDPS', 'CombinedDPS', 'Life', 'EnergyShield']);
 
-  // Get current config
-  const currentConfig = await client.sendRequest({
-    action: "get_config",
-  });
-
-  // Get current DPS
-  const oldStats = await client.sendRequest({
-    action: "get_stats",
-  });
-
-  // Build config update
-  const changes: any = {
-    action: "set_config",
-  };
-
+  // Build config update params
+  const params: Record<string, any> = {};
   const changesSummary: Array<{key: string; old: any; new: any}> = [];
 
   if (args.level !== undefined) {
-    changesSummary.push({
-      key: "Enemy Level",
-      old: currentConfig.enemyLevel || 84,
-      new: args.level,
-    });
-    changes.enemyLevel = args.level;
+    changesSummary.push({ key: "Enemy Level", old: 84, new: args.level });
+    params.enemyLevel = args.level;
   }
   if (args.fire_resist !== undefined) {
-    changesSummary.push({
-      key: "Fire Resist",
-      old: currentConfig.enemyFireResist || 40,
-      new: args.fire_resist,
-    });
-    changes.enemyFireResist = args.fire_resist;
+    changesSummary.push({ key: "Fire Resist", old: 40, new: args.fire_resist });
+    params.enemyFireResist = args.fire_resist;
   }
   if (args.cold_resist !== undefined) {
-    changesSummary.push({
-      key: "Cold Resist",
-      old: currentConfig.enemyColdResist || 40,
-      new: args.cold_resist,
-    });
-    changes.enemyColdResist = args.cold_resist;
+    changesSummary.push({ key: "Cold Resist", old: 40, new: args.cold_resist });
+    params.enemyColdResist = args.cold_resist;
   }
   if (args.lightning_resist !== undefined) {
-    changesSummary.push({
-      key: "Lightning Resist",
-      old: currentConfig.enemyLightningResist || 40,
-      new: args.lightning_resist,
-    });
-    changes.enemyLightningResist = args.lightning_resist;
+    changesSummary.push({ key: "Lightning Resist", old: 40, new: args.lightning_resist });
+    params.enemyLightningResist = args.lightning_resist;
   }
   if (args.chaos_resist !== undefined) {
-    changesSummary.push({
-      key: "Chaos Resist",
-      old: currentConfig.enemyChaosResist || 20,
-      new: args.chaos_resist,
-    });
-    changes.enemyChaosResist = args.chaos_resist;
+    changesSummary.push({ key: "Chaos Resist", old: 20, new: args.chaos_resist });
+    params.enemyChaosResist = args.chaos_resist;
   }
   if (args.armor !== undefined) {
-    changesSummary.push({
-      key: "Armor",
-      old: currentConfig.enemyArmour || 0,
-      new: args.armor,
-    });
-    changes.enemyArmour = args.armor;
+    changesSummary.push({ key: "Armor", old: 0, new: args.armor });
+    params.enemyArmour = args.armor;
   }
   if (args.evasion !== undefined) {
-    changesSummary.push({
-      key: "Evasion",
-      old: currentConfig.enemyEvasion || 0,
-      new: args.evasion,
-    });
-    changes.enemyEvasion = args.evasion;
+    changesSummary.push({ key: "Evasion", old: 0, new: args.evasion });
+    params.enemyEvasion = args.evasion;
   }
 
   // Apply changes
-  await client.sendRequest(changes);
+  await luaClient.setConfig(params);
 
   // Get updated stats
-  const newStats = await client.sendRequest({
-    action: "get_stats",
-  });
+  const newStats = await luaClient.getStats(['TotalDPS', 'CombinedDPS', 'Life', 'EnergyShield']);
 
   // Format output
   let output = `=== Enemy Configuration Updated ===\n\n`;
@@ -242,46 +186,17 @@ export async function handleSetEnemyStats(
 function formatConfigOutput(config: any): string {
   let output = "=== Configuration State ===\n\n";
 
-  // Charges
-  output += "=== Charge Usage ===\n";
-  output += `Power Charges: ${config.usePowerCharges ? 'Yes' : 'No'}`;
-  if (config.powerCharges) output += ` (${config.powerCharges} charges)`;
-  output += "\n";
-
-  output += `Frenzy Charges: ${config.useFrenzyCharges ? 'Yes' : 'No'}`;
-  if (config.frenzyCharges) output += ` (${config.frenzyCharges} charges)`;
-  output += "\n";
-
-  output += `Endurance Charges: ${config.useEnduranceCharges ? 'Yes' : 'No'}`;
-  if (config.enduranceCharges) output += ` (${config.enduranceCharges} charges)`;
-  output += "\n";
+  // Build settings
+  output += "=== Build Settings ===\n";
+  output += `Bandit: ${config.bandit || 'None'}\n`;
+  output += `Pantheon Major God: ${config.pantheonMajorGod || 'None'}\n`;
+  output += `Pantheon Minor God: ${config.pantheonMinorGod || 'None'}\n`;
 
   // Enemy settings
   output += "\n=== Enemy Settings ===\n";
   output += `Enemy Level: ${config.enemyLevel || 84}\n`;
-  output += `Fire Resist: ${config.enemyFireResist || 40}%\n`;
-  output += `Cold Resist: ${config.enemyColdResist || 40}%\n`;
-  output += `Lightning Resist: ${config.enemyLightningResist || 40}%\n`;
-  output += `Chaos Resist: ${config.enemyChaosResist || 20}%\n`;
-  output += `Armor: ${formatNumber(config.enemyArmour || 0)}\n`;
-  output += `Evasion: ${formatNumber(config.enemyEvasion || 0)}\n`;
 
-  // Key conditions
-  output += "\n=== Key Conditions ===\n";
-  output += `Enemy is Boss: ${config.enemyIsBoss ? 'Yes' : 'No'}\n`;
-  output += `Enemy is Shocked: ${config.conditionEnemyShocked ? 'Yes' : 'No'}\n`;
-  output += `Enemy is Frozen: ${config.conditionEnemyFrozen ? 'Yes' : 'No'}\n`;
-  output += `Enemy is Bleeding: ${config.conditionEnemyBleeding ? 'Yes' : 'No'}\n`;
-  output += `Enemy is Ignited: ${config.conditionEnemyIgnited ? 'Yes' : 'No'}\n`;
-
-  output += "\n=== Character Conditions ===\n";
-  output += `Have Fortify: ${config.conditionFortify ? 'Yes' : 'No'}\n`;
-  output += `Are Leeching: ${config.conditionLeeching ? 'Yes' : 'No'}\n`;
-  output += `On Full Life: ${config.conditionOnFullLife ? 'Yes' : 'No'}\n`;
-  output += `On Low Life: ${config.conditionOnLowLife ? 'Yes' : 'No'}\n`;
-  output += `Have Onslaught: ${config.buffOnslaught ? 'Yes' : 'No'}\n`;
-
-  output += "\n💡 Use set_config to modify any configuration value\n";
+  output += "\n💡 Use set_config to modify configuration values (bandit, pantheonMajorGod, pantheonMinorGod, enemyLevel)\n";
   output += "💡 Use set_enemy_stats to adjust enemy parameters\n";
 
   return output;

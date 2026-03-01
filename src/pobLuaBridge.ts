@@ -22,7 +22,7 @@ export class PoBLuaApiClient {
   private killed = false;
 
   constructor(options: PoBLuaApiOptions = {}) {
-    const forkSrc = options.cwd || path.join(os.homedir(), "Projects", "pob-api-fork", "src");
+    const forkSrc = options.cwd || path.join(os.homedir(), "Projects", "PathOfBuilding", "src");
     this.options = {
       cwd: forkSrc,
       cmd: options.cmd || "luajit",
@@ -255,7 +255,7 @@ export class PoBLuaApiClient {
       params: { text: itemText, slotName, noAutoEquip },
     });
     if (!res.ok) throw new Error(res.error || "add_item_text failed");
-    return res.result;
+    return res.item;
   }
 
   async setFlaskActive(flaskIndex: number, active: boolean): Promise<void> {
@@ -269,7 +269,7 @@ export class PoBLuaApiClient {
   async getSkills(): Promise<any> {
     const res = await this.send({ action: "get_skills" });
     if (!res.ok) throw new Error(res.error || "get_skills failed");
-    return res.result;
+    return res.skills;
   }
 
   async setMainSelection(params: {
@@ -317,7 +317,7 @@ async setTree(params: {
     return res.config;
   }
 
-  async setConfig(params: { bandit?: string; pantheonMajorGod?: string; pantheonMinorGod?: string; enemyLevel?: number; }): Promise<any> {
+  async setConfig(params: Record<string, any>): Promise<any> {
     const res = await this.send({ action: "set_config", params });
     if (!res.ok) throw new Error(res.error || "set_config failed");
     return res.config;
@@ -543,7 +543,7 @@ export class PoBLuaTcpClient {
     return res.config;
   }
 
-  async setConfig(params: { bandit?: string; pantheonMajorGod?: string; pantheonMinorGod?: string; enemyLevel?: number; }): Promise<any> {
+  async setConfig(params: Record<string, any>): Promise<any> {
     const res = await this.send({ action: "set_config", params });
     if (!res.ok) throw new Error(res.error || "set_config failed");
     return res.config;
@@ -561,7 +561,7 @@ export class PoBLuaTcpClient {
       params: { text: itemText, slotName, noAutoEquip },
     });
     if (!res.ok) throw new Error(res.error || "add_item_text failed");
-    return res.result;
+    return res.item;
   }
 
   async setFlaskActive(flaskIndex: number, active: boolean): Promise<void> {
@@ -575,7 +575,7 @@ export class PoBLuaTcpClient {
   async getSkills(): Promise<any> {
     const res = await this.send({ action: "get_skills" });
     if (!res.ok) throw new Error(res.error || "get_skills failed");
-    return res.result;
+    return res.skills;
   }
 
   async setMainSelection(params: {

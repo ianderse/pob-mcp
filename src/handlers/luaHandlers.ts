@@ -276,24 +276,31 @@ export async function handleLuaSetTree(context: LuaHandlerContext, args: any) {
       throw new Error('Lua client not initialized');
     }
 
-    // Validate required fields
-    if (typeof args.classId !== 'number') {
-      throw new Error('classId must be a number');
-    }
-    if (typeof args.ascendClassId !== 'number') {
-      throw new Error('ascendClassId must be a number');
-    }
     if (!Array.isArray(args.nodes)) {
       throw new Error('nodes must be an array');
     }
 
+    // If classId/ascendClassId not provided, read them from current build to preserve class
+    let classId = args.classId;
+    let ascendClassId = args.ascendClassId;
+    let secondaryAscendClassId = args.secondaryAscendClassId;
+    let treeVersion = args.treeVersion;
+
+    if (classId === undefined || ascendClassId === undefined) {
+      const currentTree = await luaClient.getTree();
+      classId = classId ?? (currentTree?.classId || 0);
+      ascendClassId = ascendClassId ?? (currentTree?.ascendClassId || 0);
+      secondaryAscendClassId = secondaryAscendClassId ?? (currentTree?.secondaryAscendClassId || 0);
+      treeVersion = treeVersion ?? currentTree?.treeVersion;
+    }
+
     const tree = await luaClient.setTree({
-      classId: args.classId,
-      ascendClassId: args.ascendClassId,
-      secondaryAscendClassId: args.secondaryAscendClassId,
+      classId,
+      ascendClassId,
+      secondaryAscendClassId,
       nodes: args.nodes,
       masteryEffects: args.masteryEffects,
-      treeVersion: args.treeVersion,
+      treeVersion,
     });
 
     let text = `✅ Passive tree updated. Allocated ${args.nodes.length} nodes.`;

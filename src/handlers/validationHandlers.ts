@@ -22,26 +22,13 @@ export async function handleValidateBuild(
   let luaStats;
   const buildName = args?.build_name;
 
-  // Try to use Lua bridge for accurate stats
-  if (getLuaClient && ensureLuaClient && buildName) {
+  // Try to use Lua bridge for accurate stats if a build is already loaded
+  if (getLuaClient && buildName) {
     const luaClient = getLuaClient();
 
     if (luaClient) {
       try {
-        // Type guard and call sendRequest
-        const client = luaClient as any;
-
-        // Load the build
-        await client.sendRequest({
-          action: "load_build",
-          build_name: buildName,
-        });
-
-        // Get stats from Lua bridge
-        const statsResponse = await client.sendRequest({
-          action: "get_stats",
-        });
-        luaStats = statsResponse;
+        luaStats = await luaClient.getStats();
       } catch (error) {
         // Lua stats failed, will fall back to XML
         console.error('[Validation] Failed to get Lua stats:', error);

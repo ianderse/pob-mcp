@@ -371,6 +371,11 @@ class PoBMCPServer {
         return result;
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
+        // Log full stack trace for debugging
+        console.error(`[Tool Error] tool=${name} error=${errorMsg}`);
+        if (error instanceof Error && error.stack) {
+          console.error(`[Tool Stack] ${error.stack}`);
+        }
         return {
           content: [
             {

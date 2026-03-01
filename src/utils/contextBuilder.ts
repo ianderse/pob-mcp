@@ -90,6 +90,7 @@ export interface SkillGemContext {
  */
 export interface AdvancedOptimizationContext {
   buildService: BuildService;
+  pobDirectory: string;
   getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
   ensureLuaClient: () => Promise<void>;
 }
@@ -234,6 +235,7 @@ export class ContextBuilder {
   buildAdvancedOptimizationContext(): AdvancedOptimizationContext {
     return {
       buildService: this.deps.buildService,
+      pobDirectory: this.deps.pobDirectory,
       getLuaClient: this.deps.getLuaClient,
       ensureLuaClient: this.deps.ensureLuaClient,
     };

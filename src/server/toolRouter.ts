@@ -222,9 +222,9 @@ export async function routeToolCall(
       if (!args) throw new Error("Missing arguments");
       return await handleSearchTreeNodes(
         luaContext,
-        args.keyword as string,
+        (args.query || args.keyword) as string,
         args.node_type as string | undefined,
-        args.max_results as number | undefined,
+        (args.limit || args.max_results) as number | undefined,
         args.include_allocated as boolean | undefined
       );
 
@@ -298,10 +298,7 @@ export async function routeToolCall(
         optimizationContext,
         args.build_name as string,
         args.goal as string,
-        args.max_points as number | undefined,
-        args.max_distance as number | undefined,
-        args.min_efficiency as number | undefined,
-        args.include_keystones as boolean | undefined
+        (args.points_available || args.max_points) as number | undefined
       );
 
     case "optimize_tree":

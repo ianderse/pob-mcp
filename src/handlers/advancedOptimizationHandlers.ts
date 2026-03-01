@@ -14,6 +14,7 @@ import {
 
 export interface AdvancedOptimizationContext {
   buildService: BuildService;
+  pobDirectory: string;
   getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
   ensureLuaClient: () => Promise<void>;
 }
@@ -34,8 +35,16 @@ export async function handleAnalyzeItems(
     // Try to use Lua client for accurate data if available
     const luaClient = context.getLuaClient();
 
-    if (luaClient && !buildName) {
-      // Use currently loaded build from Lua
+    if (luaClient) {
+      // Load build into Lua if buildName provided, otherwise use currently loaded build
+      if (buildName) {
+        const fs = await import('fs/promises');
+        const path = await import('path');
+        const buildPath = path.join(context.pobDirectory, buildName);
+        const xml = await fs.readFile(buildPath, 'utf-8');
+        await luaClient.loadBuildXml(xml, buildName);
+      }
+
       try {
         const luaItems = await luaClient.getItems();
         items = luaItems.map((item) => ({
@@ -64,20 +73,20 @@ export async function handleAnalyzeItems(
         const classNames = ['Scion', 'Marauder', 'Ranger', 'Witch', 'Duelist', 'Templar', 'Shadow'];
         className = classNames[tree.classId] || 'Unknown';
       } catch (error) {
-        // Fall back to XML if Lua fails
         if (!buildName) {
           throw new Error(
             'No build loaded in Lua client and no build_name provided. Load a build first or provide build_name.'
           );
         }
+        // Fall through to XML parsing below
       }
     }
 
-    // Fall back to XML if no Lua data or buildName was provided
-    if (buildName) {
+    // Fall back to XML if no Lua data
+    if (items.length === 0 && buildName) {
       const build = await context.buildService.readBuild(buildName);
 
-      className = build.Build?.className;
+      className = className || build.Build?.className;
       ascendClassName = build.Build?.ascendClassName;
 
       // Extract items from XML
@@ -101,7 +110,7 @@ export async function handleAnalyzeItems(
       }
 
       // Extract stats from XML
-      if (build.Build?.PlayerStat) {
+      if (!stats && build.Build?.PlayerStat) {
         const statsArray = Array.isArray(build.Build.PlayerStat)
           ? build.Build.PlayerStat
           : [build.Build.PlayerStat];
