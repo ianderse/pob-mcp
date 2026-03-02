@@ -187,7 +187,9 @@ export async function handleLuaGetStats(context: LuaHandlerContext, category?: s
     let text = "=== PoB Calculated Stats ===\n\n";
 
     if (stats && typeof stats === 'object') {
-      const entries = Object.entries(stats);
+      // Filter out zero/null/undefined values to reduce noise
+      const nonZero = (v: unknown) => v != null && v !== 0 && v !== '0';
+      const entries = Object.entries(stats).filter(([, v]) => nonZero(v));
 
       // Group by offense/defense if showing all
       if (!category || category === 'all') {
@@ -200,17 +202,19 @@ export async function handleLuaGetStats(context: LuaHandlerContext, category?: s
 
         if (offense.length > 0) {
           text += "**Offense:**\n";
-          for (const [key, value] of offense.slice(0, 20)) {
+          for (const [key, value] of offense.slice(0, 15)) {
             text += `${key}: ${value}\n`;
           }
+          if (offense.length > 15) text += `  ... +${offense.length - 15} more\n`;
           text += '\n';
         }
 
         if (defense.length > 0) {
           text += "**Defense:**\n";
-          for (const [key, value] of defense.slice(0, 20)) {
+          for (const [key, value] of defense.slice(0, 15)) {
             text += `${key}: ${value}\n`;
           }
+          if (defense.length > 15) text += `  ... +${defense.length - 15} more\n`;
           text += '\n';
         }
 
@@ -221,11 +225,13 @@ export async function handleLuaGetStats(context: LuaHandlerContext, category?: s
           }
         }
       } else {
-        // Just show the requested category
+        // Just show the requested category, skip zeros
         const maxStats = 50;
-        for (let i = 0; i < Math.min(entries.length, maxStats); i++) {
-          const [key, value] = entries[i];
+        let shown = 0;
+        for (const [key, value] of entries) {
+          if (shown >= maxStats) break;
           text += `${key}: ${value}\n`;
+          shown++;
         }
 
         if (entries.length > maxStats) {

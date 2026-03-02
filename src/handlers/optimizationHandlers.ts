@@ -46,52 +46,16 @@ export async function handleAnalyzeDefenses(
     const buildPath = path.join(context.pobDirectory, targetBuild);
     const buildXml = await fs.readFile(buildPath, 'utf-8');
 
-    // Parse XML to see active configuration
-    const buildData = await context.buildService.readBuild(targetBuild);
-    const activeSpec = (buildData.Build as any)?.activeSpec || '1';
-
-    const loadResult = await luaClient.loadBuildXml(buildXml, 'Defense Analysis');
-
-    // Capture debug info if available
-    let debugInfo = '';
-    debugInfo += `[INFO] Active spec from XML: ${activeSpec}\n`;
-    if (loadResult && typeof loadResult === 'object') {
-      const debug = (loadResult as any).debug;
-      if (debug) {
-        debugInfo += `\n[DEBUG] Load diagnostics:\n`;
-        debugInfo += `  - Build exists: ${debug.buildExists}\n`;
-        debugInfo += `  - Spec exists: ${debug.specExists}\n`;
-        debugInfo += `  - Allocated nodes: ${debug.allocatedNodes || 0}\n`;
-        debugInfo += `  - Class ID: ${debug.classId || 'unknown'}\n`;
-        debugInfo += `  - Ascendancy ID: ${debug.ascendClassId || 'unknown'}\n`;
-
-        // Display debug messages if available
-        if (debug.messages && Array.isArray(debug.messages) && debug.messages.length > 0) {
-          debugInfo += `\n[DEBUG] Load messages:\n`;
-          for (const msg of debug.messages) {
-            debugInfo += `  ${msg}\n`;
-          }
-        }
-        debugInfo += '\n';
-      }
-    }
+    await luaClient.loadBuildXml(buildXml, 'Defense Analysis');
 
     // Get stats from PoB
     const stats = await luaClient.getStats();
-
-    // Add stat debugging
-    debugInfo += `[DEBUG] Stats from Lua:\n`;
-    debugInfo += `  - Life: ${stats.Life || 0}\n`;
-    debugInfo += `  - Fire Resist: ${stats.FireResist || 0}\n`;
-    debugInfo += `  - Cold Resist: ${stats.ColdResist || 0}\n`;
-    debugInfo += `  - Lightning Resist: ${stats.LightningResist || 0}\n`;
-    debugInfo += `  - Chaos Resist: ${stats.ChaosResist || 0}\n\n`;
 
     // Validate that we have meaningful stats (not empty/default state)
     const life = stats.Life || 0;
     if (life <= 60) {
       throw new Error(
-        `Build "${targetBuild}" appears to be in default/empty state. The build may not have loaded correctly.${debugInfo}`
+        `Build "${targetBuild}" appears to be in default/empty state. The build may not have loaded correctly.`
       );
     }
 
@@ -100,9 +64,6 @@ export async function handleAnalyzeDefenses(
 
     // Format for output
     let text = `Analyzing: ${targetBuild}\n\n`;
-    if (debugInfo) {
-      text += debugInfo;
-    }
     text += formatDefensiveAnalysis(analysis);
 
     return {
