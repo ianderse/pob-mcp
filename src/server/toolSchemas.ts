@@ -241,6 +241,38 @@ export function getLuaToolSchemas(): any[] {
       },
     },
     {
+      name: "list_specs",
+      description: "List all passive tree specs in the currently loaded build. Each spec can have a different tree allocation, class, and ascendancy.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "select_spec",
+      description: "Switch the active passive tree spec in the currently loaded build. Recalculates all stats with the selected spec.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          index: { type: "number", description: "Spec index (1-based, use list_specs to see available specs)" },
+        },
+        required: ["index"],
+      },
+    },
+    {
+      name: "list_item_sets",
+      description: "List all item sets in the currently loaded build. Each item set can have different gear equipped.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "select_item_set",
+      description: "Switch the active item set in the currently loaded build. Recalculates all stats with the selected item set.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "number", description: "Item set ID (use list_item_sets to see available item sets)" },
+        },
+        required: ["id"],
+      },
+    },
+    {
       name: "set_character_level",
       description: "Set the character level for the currently loaded build. Recalculates all stats.",
       inputSchema: {
@@ -1539,7 +1571,7 @@ export function getBuildGoalsToolSchemas(): any[] {
     },
     {
       name: "get_passive_upgrades",
-      description: "Find the best unallocated notable passives to pick up next, ranked by their actual stat impact. Uses calcWith to simulate each candidate and scores by relative DPS/EHP gain. Requires TCP mode (POB_API_TCP=true) for full simulation; falls back to listing candidates in headless mode.",
+      description: "Find the best unallocated notable passives to pick up next, ranked by their actual stat impact. Uses calcWith to simulate each candidate and scores by relative DPS/EHP gain.",
       inputSchema: {
         type: "object",
         properties: {

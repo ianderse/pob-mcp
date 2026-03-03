@@ -1,7 +1,7 @@
 import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
 import type { TreeAnalysisResult, TreeComparison, PassiveTreeNode, AllocationChange, PassiveTreeData } from "../types.js";
-import type { PoBLuaApiClient, PoBLuaTcpClient } from "../pobLuaBridge.js";
+import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
 
 export interface TreeHandlerContext {
@@ -10,7 +10,7 @@ export interface TreeHandlerContext {
 }
 
 export interface PassiveUpgradesContext {
-  getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }
 
@@ -346,17 +346,6 @@ export async function handleGetPassiveUpgrades(
   }
 
   // Step 4: simulate each candidate with calcWith
-  // Only PoBLuaTcpClient has calcWith — check at runtime
-  const tcpClient = luaClient as any;
-  if (typeof tcpClient.calcWith !== 'function') {
-    return {
-      content: [{
-        type: 'text' as const,
-        text: `=== Passive Upgrades ===\n\ncalcWith requires TCP mode (POB_API_TCP=true). Currently running in headless mode.\n\nFound ${candidates.length} candidate notables:\n${candidates.slice(0, maxResults).map((n: any) => `  - ${n.name} [${n.id}]`).join('\n')}\n`,
-      }],
-    };
-  }
-
   interface ScoredNode {
     node: any;
     dpsDelta: number;
@@ -368,7 +357,7 @@ export async function handleGetPassiveUpgrades(
 
   for (const node of candidates) {
     try {
-      const out = await tcpClient.calcWith({ addNodes: [node.id] });
+      const out = await luaClient.calcWith({ addNodes: [node.id] });
       if (!out) continue;
 
       const outDPS = (out.CombinedDPS as number) || (out.TotalDPS as number) || baseDPS;

@@ -1,4 +1,4 @@
-import type { PoBLuaApiClient, PoBLuaTcpClient } from "../pobLuaBridge.js";
+import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import type { BuildService } from "../services/buildService.js";
 import {
   analyzeEquippedItems,
@@ -15,7 +15,7 @@ import {
 export interface AdvancedOptimizationContext {
   buildService: BuildService;
   pobDirectory: string;
-  getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }
 

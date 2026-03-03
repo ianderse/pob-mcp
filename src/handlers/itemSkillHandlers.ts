@@ -1,7 +1,7 @@
-import type { PoBLuaApiClient, PoBLuaTcpClient } from "../pobLuaBridge.js";
+import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 
 export interface ItemSkillHandlerContext {
-  getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }
 

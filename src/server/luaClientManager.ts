@@ -1,25 +1,23 @@
 /**
  * Lua Client Manager
  *
- * Manages the lifecycle of PoB Lua Bridge clients (stdio or TCP mode)
+ * Manages the lifecycle of the PoB Lua Bridge (stdio headless mode)
  */
 
-import { PoBLuaApiClient, PoBLuaTcpClient } from '../pobLuaBridge.js';
+import { PoBLuaApiClient } from '../pobLuaBridge.js';
 
 export class LuaClientManager {
-  private client: PoBLuaApiClient | PoBLuaTcpClient | null = null;
+  private client: PoBLuaApiClient | null = null;
   private enabled: boolean;
-  private useTcpMode: boolean;
 
-  constructor(enabled: boolean, useTcpMode: boolean) {
+  constructor(enabled: boolean) {
     this.enabled = enabled;
-    this.useTcpMode = useTcpMode;
   }
 
   /**
    * Get the current client instance
    */
-  getClient(): PoBLuaApiClient | PoBLuaTcpClient | null {
+  getClient(): PoBLuaApiClient | null {
     return this.client;
   }
 
@@ -38,24 +36,14 @@ export class LuaClientManager {
     console.error('[Lua Bridge] Initializing client...');
 
     try {
-      if (this.useTcpMode) {
-        const tcpClient = new PoBLuaTcpClient({
-          host: process.env.POB_API_TCP_HOST,
-          port: process.env.POB_API_TCP_PORT ? parseInt(process.env.POB_API_TCP_PORT) : undefined,
-          timeoutMs: process.env.POB_TIMEOUT_MS ? parseInt(process.env.POB_TIMEOUT_MS) : undefined,
-        });
-        await tcpClient.start();
-        this.client = tcpClient;
-      } else {
-        const stdioClient = new PoBLuaApiClient({
-          cwd: process.env.POB_FORK_PATH,
-          cmd: process.env.POB_CMD,
-          args: process.env.POB_ARGS ? [process.env.POB_ARGS] : undefined,
-          timeoutMs: process.env.POB_TIMEOUT_MS ? parseInt(process.env.POB_TIMEOUT_MS) : undefined,
-        });
-        await stdioClient.start();
-        this.client = stdioClient;
-      }
+      const stdioClient = new PoBLuaApiClient({
+        cwd: process.env.POB_FORK_PATH,
+        cmd: process.env.POB_CMD,
+        args: process.env.POB_ARGS ? [process.env.POB_ARGS] : undefined,
+        timeoutMs: process.env.POB_TIMEOUT_MS ? parseInt(process.env.POB_TIMEOUT_MS) : undefined,
+      });
+      await stdioClient.start();
+      this.client = stdioClient;
 
       console.error('[Lua Bridge] Client initialized successfully');
 
@@ -106,12 +94,5 @@ export class LuaClientManager {
    */
   isEnabled(): boolean {
     return this.enabled;
-  }
-
-  /**
-   * Check if using TCP mode
-   */
-  isTcpMode(): boolean {
-    return this.useTcpMode;
   }
 }

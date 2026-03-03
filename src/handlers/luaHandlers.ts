@@ -1,12 +1,11 @@
-import type { PoBLuaApiClient, PoBLuaTcpClient } from "../pobLuaBridge.js";
+import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import fs from "fs/promises";
 import path from "path";
 
 export interface LuaHandlerContext {
   pobDirectory: string;
   luaEnabled: boolean;
-  useTcpMode: boolean;
-  getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
   stopLuaClient: () => Promise<void>;
 }
@@ -19,9 +18,7 @@ export async function handleLuaStart(context: LuaHandlerContext) {
       content: [
         {
           type: "text" as const,
-          text: context.useTcpMode
-            ? `PoB Lua Bridge started successfully in TCP mode.\n\nConnected to PoB GUI at ${process.env.POB_API_TCP_HOST || '127.0.0.1'}:${process.env.POB_API_TCP_PORT || '31337'}`
-            : `PoB Lua Bridge started successfully in headless mode.\n\nThe PoB calculation engine is now ready to load builds and compute stats.`,
+          text: `PoB Lua Bridge started successfully.\n\nThe PoB calculation engine is now ready to load builds and compute stats.`,
         },
       ],
     };
@@ -130,11 +127,36 @@ export async function handleLuaLoadBuild(
 
     await luaClient.loadBuildXml(xml, name);
 
+    // Check for multiple specs / item sets and inform the user
+    let extra = '';
+    try {
+      const [specsResult, itemSetsResult] = await Promise.all([
+        luaClient.listSpecs(),
+        luaClient.listItemSets(),
+      ]);
+      if (specsResult?.specs?.length > 1) {
+        extra += `\n\n📋 This build has ${specsResult.specs.length} passive tree specs:`;
+        for (const s of specsResult.specs) {
+          extra += `\n  ${s.active ? '▶' : ' '} [${s.index}] ${s.title} — ${s.className}/${s.ascendClassName}, ${s.nodeCount} nodes`;
+        }
+        extra += `\n\nUse select_spec to switch specs.`;
+      }
+      if (itemSetsResult?.itemSets?.length > 1) {
+        extra += `\n\n🎒 This build has ${itemSetsResult.itemSets.length} item sets:`;
+        for (const s of itemSetsResult.itemSets) {
+          extra += `\n  ${s.active ? '▶' : ' '} [${s.id}] ${s.title}`;
+        }
+        extra += `\n\nUse select_item_set to switch item sets.`;
+      }
+    } catch {
+      // Non-fatal: spec/item set info is advisory only
+    }
+
     return {
       content: [
         {
           type: "text" as const,
-          text: `✅ Build "${name || 'MCP Build'}" loaded.`,
+          text: `✅ Build "${name || 'MCP Build'}" loaded.${extra}`,
         },
       ],
     };
@@ -569,4 +591,64 @@ export async function handleSearchTreeNodes(
     const errorMsg = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to search nodes: ${errorMsg}`);
   }
+}
+
+export async function handleListSpecs(context: LuaHandlerContext) {
+  await context.ensureLuaClient();
+  const luaClient = context.getLuaClient();
+  if (!luaClient) throw new Error('Lua client not initialized');
+  const result = await luaClient.listSpecs();
+  if (!result?.specs?.length) {
+    return { content: [{ type: "text" as const, text: "No specs found. Load a build first." }] };
+  }
+  let text = `=== Passive Tree Specs (${result.specs.length} total) ===\n\n`;
+  for (const s of result.specs) {
+    text += `${s.active ? '▶' : ' '} [${s.index}] ${s.title}\n`;
+    text += `      Class: ${s.className || 'Unknown'} / ${s.ascendClassName || 'None'}\n`;
+    text += `      Nodes: ${s.nodeCount}  |  Tree: ${s.treeVersion || 'Unknown'}\n`;
+  }
+  text += `\nActive: Spec ${result.activeSpec}. Use select_spec to switch.`;
+  return { content: [{ type: "text" as const, text }] };
+}
+
+export async function handleSelectSpec(context: LuaHandlerContext, index: number) {
+  await context.ensureLuaClient();
+  const luaClient = context.getLuaClient();
+  if (!luaClient) throw new Error('Lua client not initialized');
+  const result = await luaClient.selectSpec(index);
+  const active = result?.specs?.find((s: any) => s.active);
+  let text = `✅ Switched to Spec ${index}`;
+  if (active) text += ` — ${active.title} (${active.className}/${active.ascendClassName}, ${active.nodeCount} nodes)`;
+  text += `.\n\nStats have been recalculated for this spec.`;
+  return { content: [{ type: "text" as const, text }] };
+}
+
+export async function handleListItemSets(context: LuaHandlerContext) {
+  await context.ensureLuaClient();
+  const luaClient = context.getLuaClient();
+  if (!luaClient) throw new Error('Lua client not initialized');
+  const result = await luaClient.listItemSets();
+  if (!result?.itemSets?.length) {
+    return { content: [{ type: "text" as const, text: "No item sets found. Load a build first." }] };
+  }
+  let text = `=== Item Sets (${result.itemSets.length} total) ===\n\n`;
+  for (const s of result.itemSets) {
+    text += `${s.active ? '▶' : ' '} [${s.id}] ${s.title}`;
+    if (s.useSecondWeaponSet) text += ` (swap weapon set)`;
+    text += `\n`;
+  }
+  text += `\nActive: Item Set ${result.activeItemSetId}. Use select_item_set to switch.`;
+  return { content: [{ type: "text" as const, text }] };
+}
+
+export async function handleSelectItemSet(context: LuaHandlerContext, id: number) {
+  await context.ensureLuaClient();
+  const luaClient = context.getLuaClient();
+  if (!luaClient) throw new Error('Lua client not initialized');
+  const result = await luaClient.selectItemSet(id);
+  const active = result?.itemSets?.find((s: any) => s.active);
+  let text = `✅ Switched to Item Set ${id}`;
+  if (active) text += ` — ${active.title}`;
+  text += `.\n\nStats have been recalculated for this item set.`;
+  return { content: [{ type: "text" as const, text }] };
 }

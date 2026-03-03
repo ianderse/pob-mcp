@@ -12,7 +12,6 @@ import path from "path";
 import os from "os";
 import fs from "fs/promises";
 import https from "https";
-import { PoBLuaApiClient, PoBLuaTcpClient } from "./pobLuaBridge.js";
 import { XMLParser } from "fast-xml-parser";
 // Import services
 import { BuildService } from "./services/buildService.js";
@@ -127,8 +126,7 @@ class PoBMCPServer {
     this.toolGate = new ToolGate();
 
     const luaEnabled = process.env.POB_LUA_ENABLED === 'true';
-    const useTcpMode = process.env.POB_API_TCP === 'true';
-    this.luaClientManager = new LuaClientManager(luaEnabled, useTcpMode);
+    this.luaClientManager = new LuaClientManager(luaEnabled);
 
     // Initialize context builder
     this.contextBuilder = new ContextBuilder({
@@ -140,19 +138,13 @@ class PoBMCPServer {
       skillGemService: this.skillGemService,
       pobDirectory: this.pobDirectory,
       luaEnabled: luaEnabled,
-      useTcpMode: useTcpMode,
       getLuaClient: () => this.luaClientManager.getClient(),
       ensureLuaClient: () => this.luaClientManager.ensureClient(),
       stopLuaClient: () => this.luaClientManager.stopClient(),
     });
 
     if (luaEnabled) {
-      console.error('[MCP Server] PoB Lua Bridge enabled');
-      if (useTcpMode) {
-        console.error('[MCP Server] Using TCP mode for GUI integration');
-      } else {
-        console.error('[MCP Server] Using stdio mode for headless integration');
-      }
+      console.error('[MCP Server] PoB Lua Bridge enabled (stdio mode)');
     }
 
     this.setupHandlers();

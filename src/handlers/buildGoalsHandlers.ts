@@ -1,8 +1,8 @@
-import type { PoBLuaApiClient, PoBLuaTcpClient } from "../pobLuaBridge.js";
+import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import type { BuildIssue } from "../types.js";
 
 export interface BuildGoalsHandlerContext {
-  getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }
 

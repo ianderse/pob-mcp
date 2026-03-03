@@ -17,7 +17,7 @@ import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBui
 import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handleWatchStatus, handleRefreshTreeData } from "../handlers/watchHandlers.js";
 import { handleCompareTrees, handleGetNearbyNodes, handleFindPath, handleGetPassiveUpgrades } from "../handlers/treeHandlers.js";
 import { handleGetBuildIssues, formatIssuesResponse } from "../handlers/buildGoalsHandlers.js";
-import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaSaveBuild, handleLuaLoadBuild, handleLuaGetStats, handleLuaGetTree, handleLuaSetTree, handleSearchTreeNodes, handleLuaGetBuildInfo, handleLuaReloadBuild, handleUpdateTreeDelta } from "../handlers/luaHandlers.js";
+import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaSaveBuild, handleLuaLoadBuild, handleLuaGetStats, handleLuaGetTree, handleLuaSetTree, handleSearchTreeNodes, handleLuaGetBuildInfo, handleLuaReloadBuild, handleUpdateTreeDelta, handleListSpecs, handleSelectSpec, handleListItemSets, handleSelectItemSet } from "../handlers/luaHandlers.js";
 import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems } from "../handlers/itemSkillHandlers.js";
 import { handleAnalyzeDefenses, handleSuggestOptimalNodes, handleOptimizeTree } from "../handlers/optimizationHandlers.js";
 import { handleAnalyzeItems, handleOptimizeSkillLinks, handleCreateBudgetBuild } from "../handlers/advancedOptimizationHandlers.js";
@@ -190,6 +190,20 @@ export async function routeToolCall(
         args.add_nodes as string[] | undefined,
         args.remove_nodes as string[] | undefined
       );
+
+    case "list_specs":
+      return await handleListSpecs(luaContext);
+
+    case "select_spec":
+      if (!args?.index) throw new Error("Missing index");
+      return await handleSelectSpec(luaContext, args.index as number);
+
+    case "list_item_sets":
+      return await handleListItemSets(luaContext);
+
+    case "select_item_set":
+      if (!args?.id) throw new Error("Missing id");
+      return await handleSelectItemSet(luaContext, args.id as number);
 
     // Phase 9: Configuration Tools
     case "get_config":

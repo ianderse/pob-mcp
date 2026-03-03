@@ -2,7 +2,7 @@ import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
 import type { ValidationService } from "../services/validationService.js";
 import type { TreeAnalysisResult } from "../types.js";
-import type { PoBLuaApiClient, PoBLuaTcpClient } from "../pobLuaBridge.js";
+import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import path from "path";
 import fs from "fs/promises";
 
@@ -11,7 +11,7 @@ export interface HandlerContext {
   treeService: TreeService;
   validationService: ValidationService;
   pobDirectory: string;
-  getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }
 

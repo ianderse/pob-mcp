@@ -1,4 +1,4 @@
-import type { PoBLuaApiClient, PoBLuaTcpClient } from "../pobLuaBridge.js";
+import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
 import type { OptimizationConstraints } from "../treeOptimizer.js";
@@ -10,7 +10,7 @@ export interface OptimizationHandlerContext {
   buildService: BuildService;
   treeService: TreeService;
   pobDirectory: string;
-  getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }
 

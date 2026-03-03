@@ -1,6 +1,6 @@
 import type { BuildService } from "../services/buildService.js";
 import type { ValidationService } from "../services/validationService.js";
-import type { PoBLuaApiClient, PoBLuaTcpClient } from "../pobLuaBridge.js";
+import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import fs from "fs/promises";
 import path from "path";
 
@@ -8,7 +8,7 @@ export interface ValidationHandlerContext {
   buildService: BuildService;
   validationService: ValidationService;
   pobDirectory?: string;
-  getLuaClient?: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  getLuaClient?: () => PoBLuaApiClient | null;
   ensureLuaClient?: () => Promise<void>;
 }
 

@@ -19,6 +19,8 @@ const HIGH_IMPACT_TOOLS = [
   'lua_new_build',
   'lua_load_build',
   'lua_reload_build',
+  'select_spec',
+  'select_item_set',
   'analyze_defenses',
   'analyze_items',
   'optimize_skill_links',
