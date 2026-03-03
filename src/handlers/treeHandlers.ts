@@ -1,10 +1,17 @@
 import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
 import type { TreeAnalysisResult, TreeComparison, PassiveTreeNode, AllocationChange, PassiveTreeData } from "../types.js";
+import type { PoBLuaApiClient, PoBLuaTcpClient } from "../pobLuaBridge.js";
+import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
 
 export interface TreeHandlerContext {
   buildService: BuildService;
   treeService: TreeService;
+}
+
+export interface PassiveUpgradesContext {
+  getLuaClient: () => PoBLuaApiClient | PoBLuaTcpClient | null;
+  ensureLuaClient: () => Promise<void>;
 }
 
 export async function handleCompareTrees(
@@ -333,6 +340,150 @@ export async function handlePlanTree(
       ],
     };
   }
+}
+
+export async function handleGetPassiveUpgrades(
+  context: PassiveUpgradesContext,
+  focus: 'dps' | 'defence' | 'both' = 'both',
+  maxResults: number = 10
+) {
+  await context.ensureLuaClient();
+  const luaClient = context.getLuaClient();
+  if (!luaClient) throw new Error('Lua bridge not active. Use lua_start and lua_load_build first.');
+
+  // Step 1: get current base stats and issues to determine search keywords
+  const { issues, stats: baseStats } = await handleGetBuildIssues(context);
+
+  const baseDPS = (baseStats.CombinedDPS as number) || (baseStats.TotalDPS as number) || 1;
+  const baseEHP = (baseStats.TotalEHP as number) || (baseStats.Life as number) || 1;
+
+  // Step 2: map focus + issues to search keywords
+  const keywords: string[] = [];
+
+  if (focus === 'dps' || focus === 'both') {
+    keywords.push('damage', 'critical');
+  }
+
+  if (focus === 'defence' || focus === 'both') {
+    keywords.push('life', 'energy shield');
+    // If there are resistance issues, add resistance keywords
+    const hasResistIssue = issues.some(i => i.category === 'resistance' && (i.severity === 'error' || i.severity === 'warning'));
+    if (hasResistIssue) {
+      keywords.push('resistance');
+    }
+  }
+
+  // Step 3: search for notable candidates
+  const seen = new Set<string>();
+  const candidates: any[] = [];
+
+  for (const keyword of keywords.slice(0, 4)) {
+    try {
+      const results = await luaClient.searchNodes({
+        keyword,
+        nodeType: 'notable',
+        maxResults: 15,
+        includeAllocated: false,
+      });
+      if (results && results.nodes) {
+        for (const node of results.nodes) {
+          const id = String(node.id);
+          if (!seen.has(id)) {
+            seen.add(id);
+            candidates.push(node);
+          }
+        }
+      }
+    } catch { /* skip failed searches */ }
+  }
+
+  if (candidates.length === 0) {
+    return {
+      content: [{
+        type: 'text' as const,
+        text: `=== Passive Upgrades (focus: ${focus}) ===\n\nNo unallocated notable candidates found. Make sure a build is loaded.\n`,
+      }],
+    };
+  }
+
+  // Step 4: simulate each candidate with calcWith
+  // Only PoBLuaTcpClient has calcWith — check at runtime
+  const tcpClient = luaClient as any;
+  if (typeof tcpClient.calcWith !== 'function') {
+    return {
+      content: [{
+        type: 'text' as const,
+        text: `=== Passive Upgrades ===\n\ncalcWith requires TCP mode (POB_API_TCP=true). Currently running in headless mode.\n\nFound ${candidates.length} candidate notables:\n${candidates.slice(0, maxResults).map((n: any) => `  - ${n.name} [${n.id}]`).join('\n')}\n`,
+      }],
+    };
+  }
+
+  interface ScoredNode {
+    node: any;
+    dpsDelta: number;
+    ehpDelta: number;
+    score: number;
+  }
+
+  const scored: ScoredNode[] = [];
+
+  for (const node of candidates) {
+    try {
+      const out = await tcpClient.calcWith({ addNodes: [node.id] });
+      if (!out) continue;
+
+      const outDPS = (out.CombinedDPS as number) || (out.TotalDPS as number) || baseDPS;
+      const outEHP = (out.TotalEHP as number) || (out.Life as number) || baseEHP;
+
+      const dpsDelta = outDPS - baseDPS;
+      const ehpDelta = outEHP - baseEHP;
+
+      // Relative score weighted by focus
+      let score: number;
+      if (focus === 'dps') {
+        score = dpsDelta / baseDPS;
+      } else if (focus === 'defence') {
+        score = ehpDelta / baseEHP;
+      } else {
+        score = (dpsDelta / baseDPS) + (ehpDelta / baseEHP);
+      }
+
+      scored.push({ node, dpsDelta, ehpDelta, score });
+    } catch { /* skip nodes that fail calcWith */ }
+  }
+
+  // Step 5: sort and return top N
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored.slice(0, maxResults);
+
+  let text = `=== Passive Upgrades (focus: ${focus}) ===\n\n`;
+  text += `Base DPS: ${Math.round(baseDPS).toLocaleString()}  |  Base EHP: ${Math.round(baseEHP).toLocaleString()}\n`;
+  text += `Evaluated ${candidates.length} candidate notables, showing top ${top.length}:\n\n`;
+
+  for (let i = 0; i < top.length; i++) {
+    const { node, dpsDelta, ehpDelta, score } = top[i];
+    text += `${i + 1}. **${node.name}** [${node.id}]\n`;
+    text += `   Score: ${score.toFixed(4)}`;
+    if (dpsDelta !== 0) text += `  |  DPS Δ: ${dpsDelta > 0 ? '+' : ''}${Math.round(dpsDelta).toLocaleString()}`;
+    if (ehpDelta !== 0) text += `  |  EHP Δ: ${ehpDelta > 0 ? '+' : ''}${Math.round(ehpDelta).toLocaleString()}`;
+    text += '\n';
+    if (node.stats && node.stats.length > 0) {
+      for (const stat of (node.stats as string[]).slice(0, 2)) {
+        text += `   - ${stat}\n`;
+      }
+    }
+    text += '\n';
+  }
+
+  if (top.length === 0) {
+    text += 'No results after simulation. Try a different focus or ensure a build is loaded.\n';
+  } else {
+    text += `\n💡 Use lua_set_tree to allocate the top node and recalculate stats.\n`;
+  }
+
+  return {
+    content: [{ type: 'text' as const, text }],
+  };
 }
 
 // Helper function

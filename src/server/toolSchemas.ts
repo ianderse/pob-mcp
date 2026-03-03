@@ -1523,6 +1523,32 @@ export function getTradeToolSchemas(): any[] {
         required: ["build_name", "league"],
       },
     },
+    {
+      name: "get_build_issues",
+      description: "Analyze the currently loaded build for common issues: uncapped resistances, low health pools, over-reserved mana/life, and incomplete spell suppression. Returns categorized errors, warnings, and info messages. Requires a build to be loaded via lua_load_build.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "get_passive_upgrades",
+      description: "Find the best unallocated notable passives to pick up next, ranked by their actual stat impact. Uses calcWith to simulate each candidate and scores by relative DPS/EHP gain. Requires TCP mode (POB_API_TCP=true) for full simulation; falls back to listing candidates in headless mode.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          focus: {
+            type: "string",
+            description: "What to optimize for (default: 'both')",
+            enum: ["dps", "defence", "both"],
+          },
+          max_results: {
+            type: "number",
+            description: "Maximum number of upgrade suggestions to return (default: 10)",
+          },
+        },
+      },
+    },
   ];
 }
 

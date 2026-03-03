@@ -330,6 +330,16 @@ export interface FlaskAnalysis {
   recommendations: string[];
 }
 
+// Build Goals / Issues
+export type BuildIssueSeverity = 'error' | 'warning' | 'info';
+export type BuildIssueCategory = 'resistance' | 'survivability' | 'reservation' | 'defence';
+
+export interface BuildIssue {
+  severity: BuildIssueSeverity;
+  category: BuildIssueCategory;
+  message: string;
+}
+
 // Snapshot Metadata
 export interface SnapshotMetadata {
   timestamp: string;

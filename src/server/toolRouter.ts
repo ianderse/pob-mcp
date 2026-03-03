@@ -15,7 +15,8 @@ import type { PoeNinjaClient } from "../services/poeNinjaClient.js";
 // Import handlers
 import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats } from "../handlers/buildHandlers.js";
 import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handleWatchStatus, handleRefreshTreeData } from "../handlers/watchHandlers.js";
-import { handleCompareTrees, handleTestAllocation, handleGetNearbyNodes, handleFindPath, handleAllocateNodes, handlePlanTree } from "../handlers/treeHandlers.js";
+import { handleCompareTrees, handleTestAllocation, handleGetNearbyNodes, handleFindPath, handleAllocateNodes, handlePlanTree, handleGetPassiveUpgrades } from "../handlers/treeHandlers.js";
+import { handleGetBuildIssues, formatIssuesResponse } from "../handlers/buildGoalsHandlers.js";
 import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaSaveBuild, handleLuaLoadBuild, handleLuaGetStats, handleLuaGetTree, handleLuaSetTree, handleSearchTreeNodes } from "../handlers/luaHandlers.js";
 import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems } from "../handlers/itemSkillHandlers.js";
 import { handleAnalyzeDefenses, handleSuggestOptimalNodes, handleOptimizeTree } from "../handlers/optimizationHandlers.js";
@@ -622,6 +623,26 @@ export async function routeToolCall(
         ninjaClient: deps.ninjaClient
       };
       return await handleCalculateTradingProfit(ninjaContext, args as any);
+    }
+
+    // Build Goals Tools
+    case "get_build_issues": {
+      const goalsContext = {
+        getLuaClient: deps.getLuaClient,
+        ensureLuaClient: deps.ensureLuaClient,
+      };
+      const { issues, stats } = await handleGetBuildIssues(goalsContext);
+      return formatIssuesResponse(issues, stats);
+    }
+
+    case "get_passive_upgrades": {
+      const upgradesContext = {
+        getLuaClient: deps.getLuaClient,
+        ensureLuaClient: deps.ensureLuaClient,
+      };
+      const focus = (args?.focus as 'dps' | 'defence' | 'both') || 'both';
+      const maxResults = (args?.max_results as number) || 10;
+      return await handleGetPassiveUpgrades(upgradesContext, focus, maxResults);
     }
 
     default:
