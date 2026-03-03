@@ -251,4 +251,15 @@ export class ContextBuilder {
       ensureLuaClient: this.deps.ensureLuaClient,
     };
   }
+
+  /**
+   * Build context for config preset operations
+   */
+  buildConfigPresetContext(): import('../handlers/configHandlers.js').ConfigPresetContext {
+    return {
+      getLuaClient: this.deps.getLuaClient,
+      ensureLuaClient: this.deps.ensureLuaClient,
+      pobDirectory: this.deps.pobDirectory,
+    };
+  }
 }

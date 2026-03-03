@@ -1,8 +1,83 @@
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import fs from 'fs/promises';
+import path from 'path';
 
 export interface ConfigHandlerContext {
   getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
+}
+
+export interface ConfigPresetContext {
+  getLuaClient: () => PoBLuaApiClient | null;
+  ensureLuaClient: () => Promise<void>;
+  pobDirectory: string;
+}
+
+const PRESET_DIR_NAME = '.pob-mcp-presets';
+
+async function getPresetPath(pobDirectory: string, name: string): Promise<string> {
+  const dir = path.join(pobDirectory, PRESET_DIR_NAME);
+  await fs.mkdir(dir, { recursive: true });
+  return path.join(dir, `${name}.json`);
+}
+
+export async function handleSaveConfigPreset(context: ConfigPresetContext, name: string) {
+  await context.ensureLuaClient();
+  const luaClient = context.getLuaClient();
+  if (!luaClient) throw new Error('Lua bridge not active. Use lua_load_build first.');
+
+  const config = await luaClient.getConfig();
+  const filePath = await getPresetPath(context.pobDirectory, name);
+  await fs.writeFile(filePath, JSON.stringify(config, null, 2), 'utf-8');
+
+  return {
+    content: [{
+      type: 'text' as const,
+      text: `✅ Config preset "${name}" saved with ${Object.keys(config).length} settings.\nPath: ${filePath}`,
+    }],
+  };
+}
+
+export async function handleLoadConfigPreset(context: ConfigPresetContext, name: string) {
+  await context.ensureLuaClient();
+  const luaClient = context.getLuaClient();
+  if (!luaClient) throw new Error('Lua bridge not active. Use lua_load_build first.');
+
+  const filePath = await getPresetPath(context.pobDirectory, name);
+  let config: Record<string, any>;
+  try {
+    const raw = await fs.readFile(filePath, 'utf-8');
+    config = JSON.parse(raw);
+  } catch {
+    throw new Error(`Preset "${name}" not found. Use save_config_preset to create it first.`);
+  }
+
+  await luaClient.setConfig(config);
+
+  return {
+    content: [{
+      type: 'text' as const,
+      text: `✅ Config preset "${name}" loaded (${Object.keys(config).length} settings applied).`,
+    }],
+  };
+}
+
+export async function handleListConfigPresets(context: ConfigPresetContext) {
+  const dir = path.join(context.pobDirectory, PRESET_DIR_NAME);
+  let files: string[] = [];
+  try {
+    files = await fs.readdir(dir);
+  } catch { /* dir doesn't exist yet */ }
+  const presets = files.filter(f => f.endsWith('.json')).map(f => f.replace('.json', ''));
+
+  return {
+    content: [{
+      type: 'text' as const,
+      text: presets.length > 0
+        ? `Available config presets:\n${presets.map((p, i) => `${i + 1}. ${p}`).join('\n')}`
+        : 'No config presets saved yet. Use save_config_preset to create one.',
+    }],
+  };
 }
 
 /**
