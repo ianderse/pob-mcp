@@ -419,7 +419,7 @@ export async function handleSuggestMasteries(context: PassiveUpgradesContext) {
   const luaClient = context.getLuaClient();
   if (!luaClient) throw new Error('Lua bridge not active. Use lua_load_build first.');
 
-  const data = await (luaClient as any).getMasteryOptions();
+  const data = await luaClient.getMasteryOptions();
   const masteries: any[] = data?.masteries ?? [];
 
   if (masteries.length === 0) {
