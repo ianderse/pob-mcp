@@ -299,6 +299,46 @@ export function getLuaToolSchemas(): any[] {
       },
     },
     {
+      name: "update_tree_delta",
+      description: "Incrementally add or remove specific passive nodes from the current tree allocation. Safer than lua_set_tree because you only specify the nodes to change, not the entire tree. Use this to add individual nodes without needing to track the full current node list.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          add_nodes: {
+            type: "array",
+            items: { type: "string" },
+            description: "Node IDs to add to the current allocation",
+          },
+          remove_nodes: {
+            type: "array",
+            items: { type: "string" },
+            description: "Node IDs to remove from the current allocation",
+          },
+        },
+      },
+    },
+    {
+      name: "lua_get_build_info",
+      description: "Get metadata about the currently loaded build: name, character level, class, ascendancy, and tree version. Useful to confirm which build is active after lua_load_build or lua_new_build.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "lua_reload_build",
+      description: "Reload the current build from disk, picking up any changes made in PoB GUI or via direct XML editing. If build_name is omitted, reloads the build that is currently loaded (determined via lua_get_build_info).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Name of the build file to reload (e.g., 'MyBuild.xml'). If omitted, reloads the currently loaded build.",
+          },
+        },
+      },
+    },
+    {
       name: "search_tree_nodes",
       description: "Search passive tree for nodes matching specific criteria",
       inputSchema: {

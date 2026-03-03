@@ -362,6 +362,107 @@ export async function handleLuaSetTree(context: LuaHandlerContext, args: any) {
   }
 }
 
+export async function handleLuaGetBuildInfo(context: LuaHandlerContext) {
+  try {
+    await context.ensureLuaClient();
+    const luaClient = context.getLuaClient();
+    if (!luaClient) throw new Error('Lua client not initialized');
+
+    const info = await luaClient.getBuildInfo();
+
+    if (!info) {
+      return {
+        content: [{ type: "text" as const, text: "No build currently loaded. Use lua_load_build or lua_new_build first." }],
+      };
+    }
+
+    let text = "=== Build Info ===\n\n";
+    text += `Name: ${info.name || 'Unnamed'}\n`;
+    text += `Level: ${info.level ?? 'Unknown'}\n`;
+    text += `Class: ${info.className || 'Unknown'}\n`;
+    text += `Ascendancy: ${info.ascendClassName || 'None'}\n`;
+    text += `Tree Version: ${info.treeVersion || 'Unknown'}\n`;
+
+    return {
+      content: [{ type: "text" as const, text }],
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to get build info: ${errorMsg}`);
+  }
+}
+
+export async function handleLuaReloadBuild(context: LuaHandlerContext, buildName?: string) {
+  try {
+    await context.ensureLuaClient();
+    const luaClient = context.getLuaClient();
+    if (!luaClient) throw new Error('Lua client not initialized');
+
+    let targetName: string = buildName ?? '';
+
+    // If no name provided, get it from the currently loaded build
+    if (!targetName) {
+      const info = await luaClient.getBuildInfo();
+      if (!info?.name) {
+        throw new Error('No build is currently loaded and no build_name was provided. Use lua_load_build first.');
+      }
+      targetName = String(info.name);
+    }
+
+    const fileName = targetName.endsWith('.xml') ? targetName : `${targetName}.xml`;
+    const buildPath = path.join(context.pobDirectory, fileName);
+    const xml = await fs.readFile(buildPath, 'utf-8');
+    const name = fileName.replace(/\.xml$/i, '');
+    await luaClient.loadBuildXml(xml, name);
+
+    return {
+      content: [{ type: "text" as const, text: `✅ Build "${fileName}" reloaded from disk.` }],
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to reload build: ${errorMsg}`);
+  }
+}
+
+export async function handleUpdateTreeDelta(context: LuaHandlerContext, addNodes?: string[], removeNodes?: string[]) {
+  try {
+    await context.ensureLuaClient();
+    const luaClient = context.getLuaClient();
+    if (!luaClient) throw new Error('Lua client not initialized');
+
+    if (!addNodes?.length && !removeNodes?.length) {
+      throw new Error('At least one of add_nodes or remove_nodes must be provided.');
+    }
+
+    const params: { addNodes?: number[]; removeNodes?: number[] } = {};
+    if (addNodes?.length)    params.addNodes    = addNodes.map(Number);
+    if (removeNodes?.length) params.removeNodes = removeNodes.map(Number);
+
+    const tree = await luaClient.updateTreeDelta(params);
+
+    const actualCount = Array.isArray(tree?.nodes) ? tree.nodes.length : '?';
+    const addedCount  = addNodes?.length ?? 0;
+    const removedCount = removeNodes?.length ?? 0;
+
+    let text = `✅ Tree delta applied.\n`;
+    if (addedCount)    text += `  Added: ${addedCount} node(s)\n`;
+    if (removedCount)  text += `  Removed: ${removedCount} node(s)\n`;
+    text += `  Total allocated: ${actualCount} nodes\n`;
+
+    const dropped = addedCount - (Array.isArray(tree?.nodes) ? tree.nodes.length - (actualCount as number - addedCount + removedCount) : 0);
+    if (dropped > 0) {
+      text += `\n⚠️  Some added nodes may have been dropped (not connected or invalid IDs).`;
+    }
+
+    return {
+      content: [{ type: "text" as const, text }],
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to apply tree delta: ${errorMsg}`);
+  }
+}
+
 export async function handleSearchTreeNodes(
   context: LuaHandlerContext,
   keyword: string,

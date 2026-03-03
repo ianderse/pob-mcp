@@ -1,4 +1,5 @@
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
+import { EventEmitter } from "events";
 import net from "net";
 import path from "path";
 import os from "os";
@@ -20,6 +21,7 @@ export class PoBLuaApiClient {
   private ready = false;
   private pending: { resolve: (v: Json) => void; reject: (e: Error) => void } | null = null;
   private killed = false;
+  private dataEmitter = new EventEmitter();
 
   constructor(options: PoBLuaApiOptions = {}) {
     const forkSrc = options.cwd || path.join(os.homedir(), "Projects", "PathOfBuilding", "src");
@@ -161,20 +163,40 @@ export class PoBLuaApiClient {
   private onStdout(chunk: string) {
     console.error("[PoB API stdout]", chunk.trim());
     this.buffer += chunk;
+    this.dataEmitter.emit("data");
   }
 
-  private async readLineWithTimeout(timeoutMs?: number): Promise<string> {
-    const deadline = Date.now() + (timeoutMs ?? this.options.timeoutMs!);
-    while (true) {
-      const idx = this.buffer.indexOf("\n");
-      if (idx >= 0) {
-        const line = this.buffer.slice(0, idx);
-        this.buffer = this.buffer.slice(idx + 1);
-        return line;
+  private readLineWithTimeout(timeoutMs?: number): Promise<string> {
+    const ms = timeoutMs ?? this.options.timeoutMs!;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("Timed out waiting for response"));
+      }, ms);
+
+      const tryRead = (): boolean => {
+        const idx = this.buffer.indexOf("\n");
+        if (idx >= 0) {
+          const line = this.buffer.slice(0, idx);
+          this.buffer = this.buffer.slice(idx + 1);
+          cleanup();
+          resolve(line);
+          return true;
+        }
+        return false;
+      };
+
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.dataEmitter.off("data", onData);
+      };
+
+      const onData = () => { tryRead(); };
+
+      if (!tryRead()) {
+        this.dataEmitter.on("data", onData);
       }
-      if (Date.now() > deadline) throw new Error("Timed out waiting for response");
-      await new Promise((r) => setTimeout(r, 10));
-    }
+    });
   }
 
   private async send(obj: Json): Promise<Json> {
@@ -367,6 +389,12 @@ async setTree(params: {
     return res.results;
   }
 
+  async updateTreeDelta(params: { addNodes?: number[]; removeNodes?: number[]; classId?: number; ascendClassId?: number; secondaryAscendClassId?: number; treeVersion?: string; }): Promise<any> {
+    const res = await this.send({ action: "update_tree_delta", params });
+    if (!res.ok) throw new Error(res.error || "update_tree_delta failed");
+    return res.tree;
+  }
+
   async stop(): Promise<void> {
     if (!this.proc) return;
     try {
@@ -390,6 +418,7 @@ export class PoBLuaTcpClient {
   private timeoutMs: number;
   private host: string;
   private port: number;
+  private dataEmitter = new EventEmitter();
 
   constructor(opts: PoBLuaTcpOptions = {}) {
     this.host = opts.host || "127.0.0.1";
@@ -405,7 +434,10 @@ export class PoBLuaTcpClient {
       });
       this.socket = sock;
       sock.setEncoding("utf8");
-      sock.on("data", (chunk: string) => (this.buffer += chunk));
+      sock.on("data", (chunk: string) => {
+        this.buffer += chunk;
+        this.dataEmitter.emit("data");
+      });
       sock.on("error", (err) => reject(err));
       sock.on("close", () => {
         this.socket = null;
@@ -426,18 +458,37 @@ export class PoBLuaTcpClient {
     });
   }
 
-  private async readLineWithTimeout(timeoutMs?: number): Promise<string> {
-    const deadline = Date.now() + (timeoutMs ?? this.timeoutMs);
-    while (true) {
-      const idx = this.buffer.indexOf("\n");
-      if (idx >= 0) {
-        const line = this.buffer.slice(0, idx);
-        this.buffer = this.buffer.slice(idx + 1);
-        return line;
+  private readLineWithTimeout(timeoutMs?: number): Promise<string> {
+    const ms = timeoutMs ?? this.timeoutMs;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("Timed out waiting for response"));
+      }, ms);
+
+      const tryRead = (): boolean => {
+        const idx = this.buffer.indexOf("\n");
+        if (idx >= 0) {
+          const line = this.buffer.slice(0, idx);
+          this.buffer = this.buffer.slice(idx + 1);
+          cleanup();
+          resolve(line);
+          return true;
+        }
+        return false;
+      };
+
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.dataEmitter.off("data", onData);
+      };
+
+      const onData = () => { tryRead(); };
+
+      if (!tryRead()) {
+        this.dataEmitter.on("data", onData);
       }
-      if (Date.now() > deadline) throw new Error("Timed out waiting for response");
-      await new Promise((r) => setTimeout(r, 10));
-    }
+    });
   }
 
   private async send(obj: any): Promise<any> {
