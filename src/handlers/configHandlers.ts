@@ -9,6 +9,7 @@ export interface ConfigHandlerContext {
  * Handle get_config tool call
  */
 export async function handleGetConfig(context: ConfigHandlerContext) {
+  await context.ensureLuaClient();
   const luaClient = context.getLuaClient();
   if (!luaClient) {
     throw new Error("Lua bridge not active. Use lua_start and lua_load_build first.");
@@ -34,6 +35,7 @@ export async function handleSetConfig(
   context: ConfigHandlerContext,
   args: { config_name: string; value: boolean | number | string }
 ) {
+  await context.ensureLuaClient();
   const luaClient = context.getLuaClient();
   if (!luaClient) {
     throw new Error("Lua bridge not active. Use lua_start and lua_load_build first.");
@@ -90,6 +92,7 @@ export async function handleSetEnemyStats(
     evasion?: number;
   }
 ) {
+  await context.ensureLuaClient();
   const luaClient = context.getLuaClient();
   if (!luaClient) {
     throw new Error("Lua bridge not active. Use lua_start and lua_load_build first.");
@@ -184,6 +187,10 @@ export async function handleSetEnemyStats(
  * Format configuration output
  */
 function formatConfigOutput(config: any): string {
+  if (!config || typeof config !== 'object') {
+    return "=== Configuration State ===\n\nNo configuration data available.\n";
+  }
+
   let output = "=== Configuration State ===\n\n";
 
   // Build settings
@@ -194,10 +201,73 @@ function formatConfigOutput(config: any): string {
 
   // Enemy settings
   output += "\n=== Enemy Settings ===\n";
-  output += `Enemy Level: ${config.enemyLevel || 84}\n`;
+  output += `Enemy Level: ${config.enemyLevel ?? 84}\n`;
+  if (config.enemyFireResist != null)      output += `Fire Resist: ${config.enemyFireResist}%\n`;
+  if (config.enemyColdResist != null)      output += `Cold Resist: ${config.enemyColdResist}%\n`;
+  if (config.enemyLightningResist != null) output += `Lightning Resist: ${config.enemyLightningResist}%\n`;
+  if (config.enemyChaosResist != null)     output += `Chaos Resist: ${config.enemyChaosResist}%\n`;
+  if (config.enemyArmour != null)          output += `Armour: ${config.enemyArmour}\n`;
+  if (config.enemyIsBoss != null)          output += `Is Boss: ${config.enemyIsBoss}\n`;
 
-  output += "\n💡 Use set_config to modify configuration values (bandit, pantheonMajorGod, pantheonMinorGod, enemyLevel)\n";
-  output += "💡 Use set_enemy_stats to adjust enemy parameters\n";
+  // Charges
+  const chargeFields = [
+    ['usePowerCharges', 'Power Charges'],
+    ['useFrenzyCharges', 'Frenzy Charges'],
+    ['useEnduranceCharges', 'Endurance Charges'],
+    ['useSiphoningCharges', 'Siphoning Charges'],
+  ] as const;
+  const activeCharges = chargeFields.filter(([key]) => config[key]);
+  if (activeCharges.length > 0) {
+    output += "\n=== Active Charges ===\n";
+    for (const [, label] of activeCharges) {
+      output += `${label}: enabled\n`;
+    }
+  }
+
+  // Active conditions
+  const conditionFields = Object.entries(config).filter(
+    ([key, val]) => key.startsWith('condition') && val === true
+  );
+  if (conditionFields.length > 0) {
+    output += "\n=== Active Conditions ===\n";
+    for (const [key] of conditionFields) {
+      output += `${key.replace('condition', '')}: true\n`;
+    }
+  }
+
+  // Active buffs
+  const buffFields = Object.entries(config).filter(
+    ([key, val]) => key.startsWith('buff') && val === true
+  );
+  if (buffFields.length > 0) {
+    output += "\n=== Active Buffs ===\n";
+    for (const [key] of buffFields) {
+      output += `${key.replace('buff', '')}: true\n`;
+    }
+  }
+
+  // Any remaining non-null, non-false keys not already shown
+  const knownKeys = new Set([
+    'bandit', 'pantheonMajorGod', 'pantheonMinorGod',
+    'enemyLevel', 'enemyFireResist', 'enemyColdResist', 'enemyLightningResist',
+    'enemyChaosResist', 'enemyArmour', 'enemyIsBoss',
+    'usePowerCharges', 'useFrenzyCharges', 'useEnduranceCharges', 'useSiphoningCharges',
+  ]);
+  const extra = Object.entries(config).filter(
+    ([key, val]) =>
+      !knownKeys.has(key) &&
+      !key.startsWith('condition') &&
+      !key.startsWith('buff') &&
+      val != null && val !== false
+  );
+  if (extra.length > 0) {
+    output += "\n=== Other Settings ===\n";
+    for (const [key, val] of extra) {
+      output += `${key}: ${val}\n`;
+    }
+  }
+
+  output += "\n💡 Use set_config to modify values  |  set_enemy_stats to adjust enemy parameters\n";
 
   return output;
 }

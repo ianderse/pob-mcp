@@ -133,43 +133,6 @@ export function getToolSchemas(): any[] {
       },
     },
     {
-      name: "test_allocation",
-      description: "Test allocating specific passive nodes to see their impact on build stats",
-      inputSchema: {
-        type: "object",
-        properties: {
-          build_name: {
-            type: "string",
-            description: "Build to test on",
-          },
-          node_ids: {
-            type: "array",
-            items: { type: "string" },
-            description: "Array of node IDs to test allocating",
-          },
-        },
-        required: ["build_name", "node_ids"],
-      },
-    },
-    {
-      name: "plan_tree",
-      description: "Create a passive tree plan to reach a specific notable or keystone efficiently",
-      inputSchema: {
-        type: "object",
-        properties: {
-          build_name: {
-            type: "string",
-            description: "Build to plan for",
-          },
-          target_node_name: {
-            type: "string",
-            description: "Name of the target notable or keystone",
-          },
-        },
-        required: ["build_name", "target_node_name"],
-      },
-    },
-    {
       name: "get_nearby_nodes",
       description: "Find notable and keystone passives near your current tree allocation",
       inputSchema: {
@@ -205,27 +168,12 @@ export function getToolSchemas(): any[] {
             type: "string",
             description: "ID of the target passive node",
           },
+          show_alternatives: {
+            type: "boolean",
+            description: "Return up to 3 alternative paths instead of just the shortest (default: false)",
+          },
         },
         required: ["build_name", "target_node_id"],
-      },
-    },
-    {
-      name: "allocate_nodes",
-      description: "Allocate specific passive nodes in a build (modifies the build file)",
-      inputSchema: {
-        type: "object",
-        properties: {
-          build_name: {
-            type: "string",
-            description: "Build to modify",
-          },
-          node_ids: {
-            type: "array",
-            items: { type: "string" },
-            description: "Array of node IDs to allocate",
-          },
-        },
-        required: ["build_name", "node_ids"],
       },
     },
   ];

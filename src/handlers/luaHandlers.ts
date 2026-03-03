@@ -202,19 +202,17 @@ export async function handleLuaGetStats(context: LuaHandlerContext, category?: s
 
         if (offense.length > 0) {
           text += "**Offense:**\n";
-          for (const [key, value] of offense.slice(0, 15)) {
+          for (const [key, value] of offense) {
             text += `${key}: ${value}\n`;
           }
-          if (offense.length > 15) text += `  ... +${offense.length - 15} more\n`;
           text += '\n';
         }
 
         if (defense.length > 0) {
           text += "**Defense:**\n";
-          for (const [key, value] of defense.slice(0, 15)) {
+          for (const [key, value] of defense) {
             text += `${key}: ${value}\n`;
           }
-          if (defense.length > 15) text += `  ... +${defense.length - 15} more\n`;
           text += '\n';
         }
 

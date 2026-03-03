@@ -14,31 +14,6 @@ import fs from "fs/promises";
 import https from "https";
 import { PoBLuaApiClient, PoBLuaTcpClient } from "./pobLuaBridge.js";
 import { XMLParser } from "fast-xml-parser";
-import { analyzeDefenses, formatDefensiveAnalysis } from "./defensiveAnalyzer.js";
-import {
-  type NodeScore,
-  type OptimalNodesResult,
-  type BuildGoal,
-  parseGoal,
-  getStatExtractor,
-  getGoalDescription,
-  formatOptimalNodesResult,
-  getNodeType,
-  extractSecondaryBenefits,
-} from "./nodeOptimizer.js";
-import {
-  type OptimizationConstraints,
-  type OptimizationResult,
-  type OptimizationGoal,
-  calculateScore,
-  meetsConstraints,
-  isLowLifeBuild,
-  getGoalDescription as getOptGoalDescription,
-  findRemovableNodes,
-  formatOptimizationResult,
-  parseOptimizationGoal,
-} from "./treeOptimizer.js";
-
 // Import services
 import { BuildService } from "./services/buildService.js";
 import { TreeService } from "./services/treeService.js";
@@ -53,15 +28,9 @@ import { ItemRecommendationEngine } from "./services/itemRecommendationEngine.js
 
 // Import types
 import type {
-  PassiveTreeNode,
   PassiveTreeData,
   PoBBuild,
   TreeAnalysisResult,
-  TreeComparison,
-  AllocationChange,
-  PathOptimization,
-  EfficiencyScore,
-  OptimizationSuggestion,
 } from "./types.js";
 
 // Import utilities

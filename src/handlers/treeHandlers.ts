@@ -75,27 +75,6 @@ export async function handleCompareTrees(
   }
 }
 
-export async function handleTestAllocation(
-  context: TreeHandlerContext,
-  buildName: string,
-  changes: string
-) {
-  try {
-    // This is a complex method that would need significant refactoring
-    // For now, we'll throw an error indicating it needs Lua bridge
-    throw new Error('test_allocation requires Lua bridge integration. Use lua_set_tree instead.');
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Error: ${errorMsg}`,
-        },
-      ],
-    };
-  }
-}
 
 export async function handleGetNearbyNodes(
   context: TreeHandlerContext,
@@ -301,46 +280,6 @@ export async function handleFindPath(
   }
 }
 
-export async function handleAllocateNodes(
-  context: TreeHandlerContext,
-  buildName: string,
-  nodeIds: string[],
-  showFullStats?: boolean
-) {
-  try {
-    throw new Error('allocate_nodes requires Lua bridge integration. Use lua_set_tree instead.');
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Error: ${errorMsg}`,
-        },
-      ],
-    };
-  }
-}
-
-export async function handlePlanTree(
-  context: TreeHandlerContext,
-  buildName: string | undefined,
-  goals: string
-) {
-  try {
-    throw new Error('plan_tree requires Lua bridge integration and advanced AI analysis.');
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Error: ${errorMsg}`,
-        },
-      ],
-    };
-  }
-}
 
 export async function handleGetPassiveUpgrades(
   context: PassiveUpgradesContext,

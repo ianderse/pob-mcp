@@ -5,16 +5,6 @@ import type { OptimizationConstraints } from "../treeOptimizer.js";
 import path from "path";
 import fs from "fs/promises";
 import { analyzeDefenses, formatDefensiveAnalysis } from "../defensiveAnalyzer.js";
-import {
-  parseGoal,
-  formatOptimalNodesResult,
-} from "../nodeOptimizer.js";
-import {
-  parseOptimizationGoal,
-  formatOptimizationResult,
-  calculateScore,
-  isLowLifeBuild,
-} from "../treeOptimizer.js";
 
 export interface OptimizationHandlerContext {
   buildService: BuildService;

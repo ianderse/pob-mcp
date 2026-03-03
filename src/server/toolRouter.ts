@@ -15,7 +15,7 @@ import type { PoeNinjaClient } from "../services/poeNinjaClient.js";
 // Import handlers
 import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats } from "../handlers/buildHandlers.js";
 import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handleWatchStatus, handleRefreshTreeData } from "../handlers/watchHandlers.js";
-import { handleCompareTrees, handleTestAllocation, handleGetNearbyNodes, handleFindPath, handleAllocateNodes, handlePlanTree, handleGetPassiveUpgrades } from "../handlers/treeHandlers.js";
+import { handleCompareTrees, handleGetNearbyNodes, handleFindPath, handleGetPassiveUpgrades } from "../handlers/treeHandlers.js";
 import { handleGetBuildIssues, formatIssuesResponse } from "../handlers/buildGoalsHandlers.js";
 import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaSaveBuild, handleLuaLoadBuild, handleLuaGetStats, handleLuaGetTree, handleLuaSetTree, handleSearchTreeNodes } from "../handlers/luaHandlers.js";
 import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems } from "../handlers/itemSkillHandlers.js";
@@ -113,14 +113,6 @@ export async function routeToolCall(
         args.build2 as string
       );
 
-    case "test_allocation":
-      if (!args) throw new Error("Missing arguments");
-      return await handleTestAllocation(
-        treeContext,
-        args.build_name as string,
-        args.changes as string
-      );
-
     case "get_nearby_nodes":
       if (!args) throw new Error("Missing arguments");
       return await handleGetNearbyNodes(
@@ -137,23 +129,6 @@ export async function routeToolCall(
         args.build_name as string,
         args.target_node_id as string,
         args.show_alternatives as boolean | undefined
-      );
-
-    case "allocate_nodes":
-      if (!args) throw new Error("Missing arguments");
-      return await handleAllocateNodes(
-        treeContext,
-        args.build_name as string,
-        args.node_ids as string[],
-        args.show_full_stats as boolean | undefined
-      );
-
-    case "plan_tree":
-      if (!args) throw new Error("Missing arguments");
-      return await handlePlanTree(
-        treeContext,
-        args.build_name as string | undefined,
-        args.goals as string
       );
 
     // Lua bridge tools
