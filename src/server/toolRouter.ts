@@ -13,7 +13,7 @@ import type { ItemRecommendationEngine } from "../services/itemRecommendationEng
 import type { PoeNinjaClient } from "../services/poeNinjaClient.js";
 
 // Import handlers
-import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats } from "../handlers/buildHandlers.js";
+import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats, handleGetBuildNotes, handleSetBuildNotes } from "../handlers/buildHandlers.js";
 import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handleWatchStatus, handleRefreshTreeData } from "../handlers/watchHandlers.js";
 import { handleCompareTrees, handleGetNearbyNodes, handleFindPath, handleGetPassiveUpgrades, handleSuggestMasteries } from "../handlers/treeHandlers.js";
 import { handleGetBuildIssues, formatIssuesResponse } from "../handlers/buildGoalsHandlers.js";
@@ -653,6 +653,15 @@ export async function routeToolCall(
         getLuaClient: deps.getLuaClient,
         ensureLuaClient: deps.ensureLuaClient,
       });
+
+    case "get_build_notes":
+      if (!args?.build_name) throw new Error("Missing build_name");
+      return await handleGetBuildNotes(deps.contextBuilder.buildHandlerContext(), args.build_name as string);
+
+    case "set_build_notes":
+      if (!args?.build_name) throw new Error("Missing build_name");
+      if (args?.notes == null) throw new Error("Missing notes");
+      return await handleSetBuildNotes(deps.contextBuilder.buildHandlerContext(), args.build_name as string, args.notes as string);
 
     default:
       throw new Error(`Unknown tool: ${name}`);

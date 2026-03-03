@@ -176,6 +176,29 @@ export function getToolSchemas(): any[] {
         required: ["build_name", "target_node_id"],
       },
     },
+    {
+      name: "get_build_notes",
+      description: "Read the notes/documentation from a PoB build file",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: { type: "string", description: "Name of the build file (e.g., 'MyBuild.xml')" },
+        },
+        required: ["build_name"],
+      },
+    },
+    {
+      name: "set_build_notes",
+      description: "Write notes/documentation into a PoB build file (overwrites existing notes)",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: { type: "string", description: "Name of the build file" },
+          notes: { type: "string", description: "Notes content to write (plain text or markdown)" },
+        },
+        required: ["build_name", "notes"],
+      },
+    },
   ];
 }
 

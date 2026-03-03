@@ -222,6 +222,40 @@ export async function handleGetBuildStats(context: HandlerContext, buildName: st
   };
 }
 
+export async function handleGetBuildNotes(context: HandlerContext, buildName: string) {
+  const build = await context.buildService.readBuild(buildName);
+  const notes = build.Notes ?? '';
+  return {
+    content: [{
+      type: 'text' as const,
+      text: notes
+        ? `=== Notes: ${buildName} ===\n\n${notes}`
+        : `No notes found in ${buildName}.`,
+    }],
+  };
+}
+
+export async function handleSetBuildNotes(context: HandlerContext, buildName: string, notes: string) {
+  const buildPath = path.join(context.pobDirectory, buildName);
+  let xml = await fs.readFile(buildPath, 'utf-8');
+
+  if (xml.includes('<Notes>')) {
+    xml = xml.replace(/<Notes>[\s\S]*?<\/Notes>/, `<Notes>${notes}</Notes>`);
+  } else if (xml.includes('<Notes/>')) {
+    xml = xml.replace('<Notes/>', `<Notes>${notes}</Notes>`);
+  } else {
+    xml = xml.replace('</PathOfBuilding>', `  <Notes>${notes}</Notes>\n</PathOfBuilding>`);
+  }
+
+  await fs.writeFile(buildPath, xml, 'utf-8');
+  return {
+    content: [{
+      type: 'text' as const,
+      text: `Notes updated in ${buildName} (${notes.length} characters).`,
+    }],
+  };
+}
+
 function formatTreeAnalysis(analysis: TreeAnalysisResult): string {
   let output = "\n=== Passive Tree ===\n";
 
