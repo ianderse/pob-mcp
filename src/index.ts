@@ -11,7 +11,6 @@ import {
 import path from "path";
 import os from "os";
 import fs from "fs/promises";
-import https from "https";
 import { XMLParser } from "fast-xml-parser";
 // Import services
 import { BuildService } from "./services/buildService.js";
@@ -171,12 +170,14 @@ class PoBMCPServer {
       }
     });
 
-    process.on("SIGINT", async () => {
+    const shutdown = async () => {
       await this.watchService.stopWatching();
       await this.luaClientManager.stopClient();
       await this.server.close();
       process.exit(0);
-    });
+    };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
   }
 
   // Delegate to tool gate module

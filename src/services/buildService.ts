@@ -166,11 +166,12 @@ export class BuildService {
       return null;
     }
 
-    // If Spec is an array (multiple specs), find the active one
+    // If Spec is an array (multiple specs), find the active one.
+    // activeSpec is 1-indexed in PoB XML; convert to 0-indexed for the array.
     if (Array.isArray(specs)) {
-      const activeSpecIndex = parseInt(build.Tree.activeSpec || "0", 10);
-      // activeSpec is 1-indexed in PoB, array is 0-indexed
-      return specs[activeSpecIndex] || specs[specs.length - 1];
+      const activeSpecOneBased = parseInt(build.Tree.activeSpec || "1", 10);
+      const activeSpecIndex = activeSpecOneBased - 1;
+      return specs[activeSpecIndex] ?? specs[specs.length - 1];
     }
 
     // Single spec - return it directly
@@ -609,16 +610,9 @@ export class BuildService {
 
     // Extract mods (lines that don't match metadata patterns)
     const mods: string[] = [];
-    let inImplicits = false;
-    let skipNext = false;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-
-      if (skipNext) {
-        skipNext = false;
-        continue;
-      }
 
       // Skip metadata lines
       if (

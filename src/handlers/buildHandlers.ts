@@ -2,18 +2,10 @@ import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
 import type { ValidationService } from "../services/validationService.js";
 import type { TreeAnalysisResult } from "../types.js";
-import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import type { HandlerContext } from "../utils/contextBuilder.js";
 import path from "path";
 import fs from "fs/promises";
-
-export interface HandlerContext {
-  buildService: BuildService;
-  treeService: TreeService;
-  validationService: ValidationService;
-  pobDirectory: string;
-  getLuaClient: () => PoBLuaApiClient | null;
-  ensureLuaClient: () => Promise<void>;
-}
+export type { HandlerContext } from "../utils/contextBuilder.js";
 
 export async function handleListBuilds(context: HandlerContext) {
   const builds = await context.buildService.listBuilds();

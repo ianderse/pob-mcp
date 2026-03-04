@@ -352,192 +352,65 @@ export class TreeService {
   ): Array<{ node: PassiveTreeNode; nodeId: string; distance: number; pathCost: number }> {
     const results: Array<{ node: PassiveTreeNode; nodeId: string; distance: number; pathCost: number }> = [];
 
-    // Debug info
-    console.error(`[findNearbyNodes] Starting search with ${allocatedNodes.size} allocated nodes, maxDistance=${maxDistance}`);
-    console.error(`[findNearbyNodes] Total nodes in tree: ${treeData.nodes.size}`);
+    // BFS from all allocated nodes simultaneously (multi-source BFS).
+    // This is O(V+E) — correct and optimal for unit-weight graphs, and avoids
+    // the O(V²) linear scan of the previous Dijkstra implementation.
+    // Uses bidirectional edges (both `out` and `in`) for consistency with findShortestPaths.
+    const visited = new Set<string>();
+    const distance = new Map<string, number>();
+    const queue: Array<{ nodeId: string; dist: number }> = [];
 
-    // Use Dijkstra to find reachable nodes with proper distance calculation
-    const distances = new Map<string, number>();
-    const unvisited = new Set<string>();
-
-    // Initialize: allocated nodes have distance 0, all others have infinity
-    let allocatedCount = 0;
-    const sampleAllocatedNodes = Array.from(allocatedNodes).slice(0, 5);
-    const sampleTreeNodes = Array.from(treeData.nodes.keys()).slice(0, 5);
-
-    console.error(`[findNearbyNodes] Sample allocated nodes: ${sampleAllocatedNodes.join(', ')}`);
-    console.error(`[findNearbyNodes] Sample tree nodes: ${sampleTreeNodes.join(', ')}`);
-
-    // Check if allocated nodes exist in tree
-    for (const nodeId of sampleAllocatedNodes) {
-      const exists = treeData.nodes.has(nodeId);
-      console.error(`[findNearbyNodes] Tree has node ${nodeId} (type: ${typeof nodeId}): ${exists}`);
-    }
-
-    // Check sample tree node types
-    for (const nodeId of sampleTreeNodes) {
-      console.error(`[findNearbyNodes] Tree node ${nodeId} has type: ${typeof nodeId}`);
-    }
-
-    for (const [nodeId] of treeData.nodes) {
-      if (allocatedNodes.has(nodeId)) {
-        distances.set(nodeId, 0);
-        allocatedCount++;
-      } else {
-        distances.set(nodeId, Infinity);
-      }
-      unvisited.add(nodeId);
-    }
-
-    console.error(`[findNearbyNodes] Initialized ${allocatedCount} allocated nodes at distance 0 (expected ${allocatedNodes.size})`);
-
-    // Check if any of the allocated nodes are in unvisited
-    let allocatedInUnvisited = 0;
+    // Seed BFS with all currently allocated nodes at distance 0
     for (const nodeId of allocatedNodes) {
-      if (unvisited.has(nodeId)) {
-        allocatedInUnvisited++;
-        if (allocatedInUnvisited <= 3) {
-          console.error(`[findNearbyNodes] Allocated node ${nodeId} IS in unvisited, distance: ${distances.get(nodeId)}`);
-        }
-      } else {
-        if (allocatedInUnvisited <= 3) {
-          console.error(`[findNearbyNodes] Allocated node ${nodeId} NOT in unvisited`);
-        }
+      if (treeData.nodes.has(nodeId)) {
+        visited.add(nodeId);
+        distance.set(nodeId, 0);
+        queue.push({ nodeId, dist: 0 });
       }
     }
-    console.error(`[findNearbyNodes] ${allocatedInUnvisited}/${allocatedNodes.size} allocated nodes are in unvisited set`);
 
-    let nodesExplored = 0;
-    let notablesFound = 0;
-    let nodesWithFiniteDistance = 0;
+    const filterLower = filter?.toLowerCase();
 
-    // Dijkstra's main loop
-    while (unvisited.size > 0) {
-      // Find node with minimum distance
-      let currentNodeId: string | null = null;
-      let minDistance = Infinity;
+    let head = 0;
+    while (head < queue.length) {
+      const { nodeId: currentId, dist } = queue[head++];
 
-      let loopCount = 0;
-      let foundZeroDistance = false;
-      for (const nodeId of unvisited) {
-        const dist = distances.get(nodeId) ?? Infinity;
+      // Prune: don't explore beyond maxDistance
+      if (dist >= maxDistance) continue;
 
-        // Debug first few iterations
-        if (nodesExplored === 0 && loopCount < 10) {
-          console.error(`[findNearbyNodes] Checking unvisited node ${nodeId}, distance: ${dist}`);
-        }
-
-        // Special check for node 40483
-        if (nodesExplored === 0 && nodeId === "40483") {
-          console.error(`[findNearbyNodes] !!! Found node 40483 in iteration! Distance: ${dist}, distances.get: ${distances.get(nodeId)}, distances.has: ${distances.has(nodeId)}`);
-        }
-
-        if (dist === 0) {
-          foundZeroDistance = true;
-        }
-
-        if (dist < minDistance) {
-          minDistance = dist;
-          currentNodeId = nodeId;
-        }
-        loopCount++;
-      }
-
-      // Debug first iteration
-      if (nodesExplored === 0) {
-        console.error(`[findNearbyNodes] Checked ${loopCount} unvisited nodes, found zero distance: ${foundZeroDistance}`);
-        console.error(`[findNearbyNodes] First node to process: ${currentNodeId}, distance: ${minDistance}, unvisited: ${unvisited.size}`);
-      }
-
-      // If we can't find a reachable node, stop
-      if (!currentNodeId || minDistance === Infinity) {
-        console.error(`[findNearbyNodes] Stopping: currentNodeId=${currentNodeId}, minDistance=${minDistance}`);
-        break;
-      }
-
-      // If we've exceeded max distance, we can stop (all remaining nodes are farther)
-      if (minDistance > maxDistance) {
-        console.error(`[findNearbyNodes] Stopping: exceeded maxDistance (${minDistance} > ${maxDistance})`);
-        break;
-      }
-
-      unvisited.delete(currentNodeId);
-      nodesExplored++;
-
-      const currentNode = treeData.nodes.get(currentNodeId);
+      const currentNode = treeData.nodes.get(currentId);
       if (!currentNode) continue;
 
-      // Track nodes with finite distance (reachable)
-      if (minDistance < Infinity) {
-        nodesWithFiniteDistance++;
-      }
+      // Traverse both directions — PoB tree edges are bidirectional
+      const neighbors = [...(currentNode.out || []), ...(currentNode.in || [])];
+      for (const neighborId of neighbors) {
+        if (visited.has(neighborId)) continue;
+        visited.add(neighborId);
 
-      // Debug: Log first few explored nodes
-      if (nodesExplored <= 5) {
-        console.error(`[findNearbyNodes] Exploring node ${currentNodeId} at distance ${minDistance}, neighbors: ${(currentNode.out || []).length}`);
-      }
+        const neighborDist = dist + 1;
+        distance.set(neighborId, neighborDist);
 
-      // If this is an unallocated notable/keystone within range, add to results
-      if ((currentNode.isNotable || currentNode.isKeystone) &&
-          !allocatedNodes.has(currentNodeId) &&
-          minDistance > 0 &&
-          minDistance <= maxDistance) {
+        const neighborNode = treeData.nodes.get(neighborId);
+        if (!neighborNode) continue;
 
-        notablesFound++;
-
-        // Apply filter if specified
-        if (filter) {
-          const statsText = (currentNode.stats || []).join(" ").toLowerCase();
-          const nameText = (currentNode.name || "").toLowerCase();
-          const filterLower = filter.toLowerCase();
-
-          if (!statsText.includes(filterLower) && !nameText.includes(filterLower)) {
-            // Continue exploring from this node even if filtered out
-            for (const neighborId of currentNode.out || []) {
-              if (!unvisited.has(neighborId)) continue;
-              const newDistance = minDistance + 1;
-              const oldDistance = distances.get(neighborId) ?? Infinity;
-              if (newDistance < oldDistance) {
-                distances.set(neighborId, newDistance);
-              }
+        // Collect unallocated notables/keystones within range
+        if ((neighborNode.isNotable || neighborNode.isKeystone) && !allocatedNodes.has(neighborId)) {
+          if (filterLower) {
+            const statsText = (neighborNode.stats || []).join(' ').toLowerCase();
+            const nameText = (neighborNode.name || '').toLowerCase();
+            if (statsText.includes(filterLower) || nameText.includes(filterLower)) {
+              results.push({ node: neighborNode, nodeId: neighborId, distance: neighborDist, pathCost: neighborDist });
             }
-            continue;
+          } else {
+            results.push({ node: neighborNode, nodeId: neighborId, distance: neighborDist, pathCost: neighborDist });
           }
         }
 
-        if (results.length < 5) {
-          console.error(`[findNearbyNodes] Found notable: ${currentNode.name} at distance ${minDistance}`);
-        }
-
-        results.push({
-          node: currentNode,
-          nodeId: currentNodeId,
-          distance: minDistance,
-          pathCost: minDistance, // In Dijkstra, distance = path cost
-        });
-      }
-
-      // Check all neighbors and update distances
-      for (const neighborId of currentNode.out || []) {
-        if (!unvisited.has(neighborId)) continue;
-
-        const newDistance = minDistance + 1;
-        const oldDistance = distances.get(neighborId) ?? Infinity;
-
-        if (newDistance < oldDistance) {
-          distances.set(neighborId, newDistance);
-        }
+        queue.push({ nodeId: neighborId, dist: neighborDist });
       }
     }
 
-    console.error(`[findNearbyNodes] Explored ${nodesExplored} nodes (${nodesWithFiniteDistance} reachable), found ${notablesFound} notables (${results.length} after filter)`);
-
-    // Sort by distance, then by path cost
-    results.sort((a, b) => {
-      if (a.distance !== b.distance) return a.distance - b.distance;
-      return a.pathCost - b.pathCost;
-    });
-
+    results.sort((a, b) => a.distance - b.distance);
     return results;
   }
 
@@ -547,87 +420,51 @@ export class TreeService {
     treeData: PassiveTreeData,
     maxPaths: number = 1
   ): Array<{ nodes: string[]; cost: number }> {
-    // Dijkstra's algorithm to find shortest path(s)
-    interface PathNode {
-      nodeId: string;
-      distance: number;
-      previous: string | null;
-    }
-
-    const distances = new Map<string, number>();
+    // Multi-source BFS from all allocated nodes toward the target.
+    // O(V+E) — correct and optimal for unit-weight graphs.
+    // Bidirectional edges: PoB tree edges are traversable both ways.
+    const visited = new Set<string>();
     const previous = new Map<string, string | null>();
-    const unvisited = new Set<string>();
+    const queue: string[] = [];
 
-    // Initialize: allocated nodes have distance 0, all others have infinity
-    for (const [nodeId] of treeData.nodes) {
-      if (allocatedNodes.has(nodeId)) {
-        distances.set(nodeId, 0);
+    for (const nodeId of allocatedNodes) {
+      if (treeData.nodes.has(nodeId)) {
+        visited.add(nodeId);
         previous.set(nodeId, null);
-      } else {
-        distances.set(nodeId, Infinity);
-        previous.set(nodeId, null);
+        queue.push(nodeId);
       }
-      unvisited.add(nodeId);
     }
 
-    // Dijkstra's main loop
-    while (unvisited.size > 0) {
-      // Find node with minimum distance
-      let currentNodeId: string | null = null;
-      let minDistance = Infinity;
+    let head = 0;
+    let found = false;
 
-      for (const nodeId of unvisited) {
-        const dist = distances.get(nodeId) ?? Infinity;
-        if (dist < minDistance) {
-          minDistance = dist;
-          currentNodeId = nodeId;
-        }
-      }
+    while (head < queue.length) {
+      const currentId = queue[head++];
+      if (currentId === targetNodeId) { found = true; break; }
 
-      // If we can't find a reachable node, or we've reached the target, stop
-      if (!currentNodeId || minDistance === Infinity) break;
-      if (currentNodeId === targetNodeId) break;
-
-      unvisited.delete(currentNodeId);
-
-      const currentNode = treeData.nodes.get(currentNodeId);
+      const currentNode = treeData.nodes.get(currentId);
       if (!currentNode) continue;
 
-      // Check all neighbors (bidirectional — PoB tree edges are traversable both ways)
       const neighbors = [...(currentNode.out || []), ...(currentNode.in || [])];
       for (const neighborId of neighbors) {
-        if (!unvisited.has(neighborId)) continue;
-
-        const newDistance = minDistance + 1;
-        const oldDistance = distances.get(neighborId) ?? Infinity;
-
-        if (newDistance < oldDistance) {
-          distances.set(neighborId, newDistance);
-          previous.set(neighborId, currentNodeId);
-        }
+        if (visited.has(neighborId)) continue;
+        visited.add(neighborId);
+        previous.set(neighborId, currentId);
+        queue.push(neighborId);
       }
     }
 
-    // Check if target is reachable
-    const targetDistance = distances.get(targetNodeId);
-    if (!targetDistance || targetDistance === Infinity) {
-      return [];
-    }
+    if (!found && !visited.has(targetNodeId)) return [];
 
-    // Reconstruct the path
+    // Reconstruct the path from target back to the closest allocated node
     const path: string[] = [];
     let current: string | null = targetNodeId;
-
-    while (current && !allocatedNodes.has(current)) {
+    while (current !== null && !allocatedNodes.has(current)) {
       path.unshift(current);
-      current = previous.get(current) || null;
+      current = previous.get(current) ?? null;
     }
 
-    const result = [{ nodes: path, cost: path.length }];
-
-    // TODO: For multiple paths, we'd need to implement k-shortest paths algorithm
-    // For now, just return the single shortest path
-    return result;
+    return [{ nodes: path, cost: path.length }];
   }
 
   calculatePathingEfficiency(
