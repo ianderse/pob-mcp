@@ -3,3 +3,5 @@ build/
 *.log
 .DS_Store
 .env
+.cursor
+package-lock.json
