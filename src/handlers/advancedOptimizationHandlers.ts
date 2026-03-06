@@ -361,7 +361,7 @@ export async function handleCreateBudgetBuild(
       outputLines.push('  5. [Penetration or More Damage - e.g., Fire Penetration, Elemental Focus]');
     }
     if (budget_level === 'high') {
-      outputLines.push('  6. [Advanced Support - e.g., Awakened gems, Empower]');
+      outputLines.push('  6. [Advanced Support - e.g., Exceptional gems, Empower]');
     }
     outputLines.push('');
 

@@ -1031,9 +1031,9 @@ export function getSkillGemToolSchemas(): any[] {
             type: "number",
             description: "Number of suggestions to return (default: 5)",
           },
-          include_awakened: {
+          include_exceptional: {
             type: "boolean",
-            description: "Include awakened gem recommendations (default: true)",
+            description: "Include Exceptional gem recommendations (default: true)",
           },
           budget: {
             type: "string",
@@ -1078,7 +1078,7 @@ export function getSkillGemToolSchemas(): any[] {
     },
     {
       name: "validate_gem_quality",
-      description: "Check all gems for quality and level improvements. Identifies missing quality, awakened upgrade opportunities, and corruption targets.",
+      description: "Check all gems for quality and level improvements. Identifies missing quality, Exceptional upgrade opportunities, and corruption targets.",
       inputSchema: {
         type: "object",
         properties: {
@@ -1126,7 +1126,7 @@ export function getSkillGemToolSchemas(): any[] {
     },
     {
       name: "gem_upgrade_path",
-      description: "Generate a prioritized gem upgrade shopping list showing which gems to level, quality, and upgrade to awakened versions, ordered by impact and budget",
+      description: "Generate a prioritized gem upgrade shopping list showing which gems to level, quality, and upgrade to Exceptional versions, ordered by impact and budget",
       inputSchema: {
         type: "object",
         properties: {

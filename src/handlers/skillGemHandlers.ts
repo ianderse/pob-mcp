@@ -101,7 +101,7 @@ export async function handleSuggestSupportGems(
     build_name?: string;
     skill_index?: number;
     count?: number;
-    include_awakened?: boolean;
+    include_exceptional?: boolean;
     budget?: "league_start" | "mid_league" | "endgame";
   }
 ) {
@@ -117,7 +117,7 @@ export async function handleSuggestSupportGems(
 
   const suggestions = skillGemService.suggestSupportGems(buildData, skillIndex, {
     count: args.count,
-    includeAwakened: args.include_awakened,
+    includeExceptional: args.include_exceptional,
     budget: args.budget,
   });
 
@@ -232,14 +232,14 @@ export async function handleCompareGemSetups(
     'Multistrike', 'Faster Attacks', 'Faster Casting', 'Spell Echo',
     'Brutality', 'Void Manipulation', 'Swift Affliction', 'Efficacy',
     'Empower', 'Intensify', 'Infused Channelling', 'Close Combat',
-    'Awakened Controlled Destruction', 'Awakened Elemental Focus',
-    'Awakened Void Manipulation', 'Awakened Brutality',
-    'Awakened Swift Affliction', 'Awakened Efficacy',
+    'Exceptional Controlled Destruction', 'Exceptional Elemental Focus',
+    'Exceptional Void Manipulation', 'Exceptional Brutality',
+    'Exceptional Swift Affliction', 'Exceptional Efficacy',
   ]);
   const PENETRATION_GEMS = new Set([
     'Fire Penetration', 'Cold Penetration', 'Lightning Penetration',
     'Combustion', 'Energy Leech', 'Ice Bite',
-    'Awakened Fire Penetration', 'Awakened Cold Penetration', 'Awakened Lightning Penetration',
+    'Exceptional Fire Penetration', 'Exceptional Cold Penetration', 'Exceptional Lightning Penetration',
   ]);
 
   for (let i = 0; i < args.setups.length; i++) {
@@ -305,11 +305,11 @@ export async function handleValidateGemQuality(
     outputLines.push('✓ All gems have quality 20', '');
   }
 
-  if (validation.awakenedUpgrades.length > 0) {
-    outputLines.push('⭐ Awakened Gem Upgrades Available:');
-    for (let i = 0; i < validation.awakenedUpgrades.length; i++) {
-      const upgrade = validation.awakenedUpgrades[i];
-      outputLines.push(`${i + 1}. ${upgrade.gem} → ${upgrade.awakened}`);
+  if (validation.exceptionalUpgrades.length > 0) {
+    outputLines.push('⭐ Exceptional Gem Upgrades Available:');
+    for (let i = 0; i < validation.exceptionalUpgrades.length; i++) {
+      const upgrade = validation.exceptionalUpgrades[i];
+      outputLines.push(`${i + 1}. ${upgrade.gem} → ${upgrade.exceptional}`);
       outputLines.push(`   Est. DPS Gain: ${upgrade.dpsGain}`);
     }
     outputLines.push('');
@@ -330,8 +330,8 @@ export async function handleValidateGemQuality(
     if (highPriority) {
       outputLines.push(`💡 Priority: Quality your ${highPriority.gem} first (highest impact)`);
     }
-  } else if (validation.awakenedUpgrades.length > 0) {
-    outputLines.push('💡 Consider awakened gem upgrades for significant DPS improvements');
+  } else if (validation.exceptionalUpgrades.length > 0) {
+    outputLines.push('💡 Consider Exceptional gem upgrades for significant DPS improvements');
   } else {
     outputLines.push('🎉 Your gems are fully optimized!');
   }
@@ -376,7 +376,7 @@ export async function handleFindOptimalLinks(
   const analysis = skillGemService.analyzeSkillLinks(buildData, skillIndex);
   const suggestions = skillGemService.suggestSupportGems(buildData, skillIndex, {
     count: args.link_count - 1, // Subtract 1 for active skill
-    includeAwakened: args.budget !== "league_start",
+    includeExceptional: args.budget !== "league_start",
     budget: args.budget,
   });
 
@@ -528,17 +528,17 @@ export async function handleGemUpgradePath(
         });
       }
 
-      // Awakened version for supports
+      // Exceptional version for supports
       if (isSupport && isMain && level >= 18 && budgetTier === 'endgame') {
         upgrades.push({
           gemName: name,
           groupLabel: group.label || `Group ${group.index}`,
           currentLevel: level,
           currentQuality: quality,
-          action: `Buy Awakened ${name.replace(' Support', '')} Support`,
+          action: `Buy Exceptional ${name.replace(' Support', '')} Support`,
           priority: 20,
           costEstimate: 'Varies greatly — check poe.ninja prices',
-          reason: 'Awakened supports have higher quality bonuses and occasionally better base effects',
+          reason: 'Exceptional supports have higher quality bonuses and occasionally better base effects',
         });
       }
     }

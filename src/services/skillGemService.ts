@@ -9,7 +9,7 @@ export interface GemData {
     added_damage?: { min: number; max: number };
   };
   quality_bonus?: string;
-  awakened?: {
+  exceptional?: {
     base_gem: string;
     max_level: number;
     bonus_at_5: string;
@@ -125,12 +125,12 @@ export class SkillGemService {
     skillIndex: number = 0,
     options: {
       count?: number;
-      includeAwakened?: boolean;
+      includeExceptional?: boolean;
       budget?: "league_start" | "mid_league" | "endgame";
     } = {}
   ): GemSuggestion[] {
     const count = options.count || 5;
-    const includeAwakened = options.includeAwakened !== false;
+    const includeExceptional = options.includeExceptional !== false;
     const budget = options.budget || "endgame";
 
     const analysis = this.analyzeSkillLinks(build, skillIndex);
@@ -154,8 +154,8 @@ export class SkillGemService {
       // Skip if already using
       if (currentSupports.includes(rec.gem)) continue;
 
-      // Skip awakened if not included
-      if (!includeAwakened && gemData.awakened) continue;
+      // Skip exceptional if not included
+      if (!includeExceptional && gemData.exceptional) continue;
 
       // Budget filter
       if (budget === "league_start" && gemData.cost_tier === "very_rare") continue;
@@ -176,19 +176,19 @@ export class SkillGemService {
       });
     }
 
-    // Check awakened upgrades for current supports
+    // Check Exceptional upgrades for current supports
     for (const support of analysis.supports) {
       const gemData = this.gemDatabase.get(support.name);
-      if (gemData?.awakened && includeAwakened) {
-        const awakenedName = `Awakened ${support.name}`;
-        const awakenedData = this.gemDatabase.get(awakenedName);
-        if (awakenedData) {
+      if (gemData?.exceptional && includeExceptional) {
+        const exceptionalName = `Exceptional ${support.name}`;
+        const exceptionalData = this.gemDatabase.get(exceptionalName);
+        if (exceptionalData) {
           suggestions.push({
-            gem: awakenedName,
+            gem: exceptionalName,
             replaces: support.name,
-            dpsIncrease: 8, // Awakened gems typically ~8-12% increase
-            reasoning: `Awakened version provides higher multiplier and bonus at level 5`,
-            cost: this.estimateCost(awakenedData, budget),
+            dpsIncrease: 8, // Exceptional gems typically ~8-12% increase
+            reasoning: `Exceptional version provides higher multiplier and bonus at level 5`,
+            cost: this.estimateCost(exceptionalData, budget),
             priority: 5,
           });
         }
@@ -212,14 +212,14 @@ export class SkillGemService {
     options: { includeCorrupted?: boolean } = {}
   ): {
     needsQuality: Array<{ gem: string; current: string; recommended: string; impact: string }>;
-    awakenedUpgrades: Array<{ gem: string; awakened: string; dpsGain: string }>;
+    exceptionalUpgrades: Array<{ gem: string; exceptional: string; dpsGain: string }>;
     corruptionTargets?: Array<{ gem: string; target: string; risk: string }>;
   } {
     const skills = this.extractSkills(build);
     const allGems = skills.flatMap((s) => s.gems);
 
     const needsQuality: Array<{ gem: string; current: string; recommended: string; impact: string }> = [];
-    const awakenedUpgrades: Array<{ gem: string; awakened: string; dpsGain: string }> = [];
+    const exceptionalUpgrades: Array<{ gem: string; exceptional: string; dpsGain: string }> = [];
     const corruptionTargets: Array<{ gem: string; target: string; risk: string }> = [];
 
     for (const gem of allGems) {
@@ -238,13 +238,13 @@ export class SkillGemService {
         });
       }
 
-      // Check awakened upgrades
+      // Check Exceptional upgrades
       const gemData = this.gemDatabase.get(name);
-      if (gemData?.awakened) {
-        const awakenedName = `Awakened ${name}`;
-        awakenedUpgrades.push({
+      if (gemData?.exceptional) {
+        const exceptionalName = `Exceptional ${name}`;
+        exceptionalUpgrades.push({
           gem: name,
-          awakened: awakenedName,
+          exceptional: exceptionalName,
           dpsGain: "~8-12%",
         });
       }
@@ -261,7 +261,7 @@ export class SkillGemService {
 
     return {
       needsQuality,
-      awakenedUpgrades,
+      exceptionalUpgrades,
       corruptionTargets: options.includeCorrupted ? corruptionTargets : undefined,
     };
   }
@@ -372,10 +372,10 @@ export class SkillGemService {
       issues.push(`Low quality (${quality}/20)`);
     }
 
-    // Check if awakened version exists
+    // Check if Exceptional version exists
     const gemData = this.gemDatabase.get(name);
-    if (gemData?.awakened && !name.startsWith("Awakened")) {
-      recommendations.push(`Consider Awakened ${name}`);
+    if (gemData?.exceptional && !name.startsWith("Exceptional")) {
+      recommendations.push(`Consider Exceptional ${name}`);
     }
 
     // Determine rating
@@ -509,14 +509,14 @@ export class SkillGemService {
         synergies: ["Attack", "Elemental", "Fire", "Cold", "Lightning"],
         anti_synergies: ["Spell"],
         cost_tier: "common",
-        awakened: {
+        exceptional: {
           base_gem: "Elemental Damage with Attacks Support",
           max_level: 5,
           bonus_at_5: "+1% to all Elemental Resistances per 1% Quality",
         },
       },
       {
-        name: "Awakened Elemental Damage with Attacks Support",
+        name: "Exceptional Elemental Damage with Attacks Support",
         type: "support",
         tags: ["Attack", "Support"],
         synergies: ["Attack", "Elemental", "Fire", "Cold", "Lightning"],
@@ -529,14 +529,14 @@ export class SkillGemService {
         tags: ["Lightning", "Support"],
         synergies: ["Attack", "Lightning", "Minion"],
         cost_tier: "common",
-        awakened: {
+        exceptional: {
           base_gem: "Added Lightning Damage Support",
           max_level: 5,
           bonus_at_5: "Supported Skills deal 10% increased Lightning Damage",
         },
       },
       {
-        name: "Awakened Added Lightning Damage Support",
+        name: "Exceptional Added Lightning Damage Support",
         type: "support",
         tags: ["Lightning", "Support"],
         synergies: ["Attack", "Lightning", "Minion"],
@@ -548,14 +548,14 @@ export class SkillGemService {
         tags: ["Lightning", "Support"],
         synergies: ["Lightning", "Elemental", "Minion"],
         cost_tier: "common",
-        awakened: {
+        exceptional: {
           base_gem: "Lightning Penetration Support",
           max_level: 5,
           bonus_at_5: "Penetrate 6% Lightning Resistance",
         },
       },
       {
-        name: "Awakened Lightning Penetration Support",
+        name: "Exceptional Lightning Penetration Support",
         type: "support",
         tags: ["Lightning", "Support"],
         synergies: ["Lightning", "Elemental", "Minion"],
@@ -602,7 +602,7 @@ export class SkillGemService {
         cost_tier: "common",
       },
       {
-        name: "Awakened Trinity Support",
+        name: "Exceptional Trinity Support",
         type: "support",
         tags: ["Support"],
         synergies: ["Fire", "Cold", "Lightning", "Elemental", "Attack", "Spell"],
@@ -670,14 +670,14 @@ export class SkillGemService {
         tags: ["Minion", "Support"],
         synergies: ["Minion"],
         cost_tier: "common",
-        awakened: {
+        exceptional: {
           base_gem: "Minion Damage Support",
           max_level: 5,
           bonus_at_5: "Supported Skills deal 10% increased Minion Damage",
         },
       },
       {
-        name: "Awakened Minion Damage Support",
+        name: "Exceptional Minion Damage Support",
         type: "support",
         tags: ["Minion", "Support"],
         synergies: ["Minion"],
@@ -913,7 +913,7 @@ export class SkillGemService {
             reasoning: "Added lightning for elemental minions",
           },
           {
-            gem: "Awakened Minion Damage Support",
+            gem: "Exceptional Minion Damage Support",
             priority: 8,
             reasoning: "Upgraded minion damage for endgame",
           },

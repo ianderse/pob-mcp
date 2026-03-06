@@ -558,7 +558,7 @@ export class ValidationService {
             suggestions: [
               'Add Fire/Cold/Lightning Penetration Support to main skill',
               'Combustion Support reduces enemy fire resistance on ignite',
-              'Awakened versions provide even more penetration',
+              'Exceptional versions provide even more penetration',
             ],
             location: 'Skills',
           });

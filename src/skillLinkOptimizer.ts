@@ -76,7 +76,7 @@ const SUPPORT_RECOMMENDATIONS: Record<string, string[]> = {
     'Controlled Destruction Support',
     'Concentrated Effect Support',
     'Elemental Focus Support',
-    'Awakened Spell Cascade Support',
+    'Exceptional Spell Cascade Support',
   ],
 
   // DOT (damage over time)
@@ -100,7 +100,7 @@ const SUPPORT_RECOMMENDATIONS: Record<string, string[]> = {
   // Projectile
   'projectile': [
     'Greater Multiple Projectiles Support',
-    'Awakened Fork Support',
+    'Exceptional Fork Support',
     'Chain Support',
     'Pierce Support',
     'Barrage Support',
@@ -148,16 +148,16 @@ const MORE_MULTIPLIER_GEMS = new Set([
   'hypothermia support',
   'trap and mine damage support',
   'multiple totems support',
-  'awakened controlled destruction support',
-  'awakened elemental focus support',
-  'awakened spell echo support',
-  'awakened brutality support',
-  'awakened swift affliction support',
-  'awakened deadly ailments support',
-  'awakened void manipulation support',
-  'awakened minion damage support',
-  'awakened added fire damage support',
-  'awakened melee physical damage support',
+  'Exceptional controlled destruction support',
+  'Exceptional elemental focus support',
+  'Exceptional spell echo support',
+  'Exceptional brutality support',
+  'Exceptional swift affliction support',
+  'Exceptional deadly ailments support',
+  'Exceptional void manipulation support',
+  'Exceptional minion damage support',
+  'Exceptional added fire damage support',
+  'Exceptional melee physical damage support',
 ]);
 
 /**
@@ -174,10 +174,10 @@ const PENETRATION_GEMS = new Set([
   'hypothermia support', // cold exposure
   'storm brand',         // lightning exposure via some interactions
   'void manipulation support',
-  'awakened fire penetration support',
-  'awakened cold penetration support',
-  'awakened lightning penetration support',
-  'awakened void manipulation support',
+  'Exceptional fire penetration support',
+  'Exceptional cold penetration support',
+  'Exceptional lightning penetration support',
+  'Exceptional void manipulation support',
 ]);
 
 /**
@@ -185,15 +185,15 @@ const PENETRATION_GEMS = new Set([
  */
 const CLEAR_SPEED_GEMS = new Set([
   'greater multiple projectiles support',
-  'awakened greater multiple projectiles support',
+  'Exceptional greater multiple projectiles support',
   'chain support',
   'fork support',
-  'awakened fork support',
+  'Exceptional fork support',
   'pierce support',
   'volley support',
   'lesser multiple projectiles support',
   'spell cascade support',
-  'awakened spell cascade support',
+  'Exceptional spell cascade support',
   'reap support',
 ]);
 
@@ -202,11 +202,11 @@ const CLEAR_SPEED_GEMS = new Set([
  */
 const BOSSING_GEMS = new Set([
   'concentrated effect support',
-  'awakened concentrated effect support',
+  'Exceptional concentrated effect support',
   'barrage support',
-  'awakened added fire damage support',
-  'awakened deadly ailments support',
-  'awakened vile toxins support',
+  'Exceptional added fire damage support',
+  'Exceptional deadly ailments support',
+  'Exceptional vile toxins support',
   'empower support',
 ]);
 
