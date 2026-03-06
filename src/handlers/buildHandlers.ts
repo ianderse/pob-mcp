@@ -229,11 +229,129 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
 
 export async function handleCompareBuilds(context: HandlerContext, build1Name: string, build2Name: string) {
   return wrapHandler('compare builds', async () => {
+
+  // Load a build into Lua, auto-select its endgame spec (most nodes) and last item set
+  const loadEndgame = async (luaClient: any, buildName: string) => {
+    const buildPath = path.join(context.pobDirectory, buildName);
+    const buildXml = await fs.readFile(buildPath, 'utf-8');
+    const displayName = buildName.replace(/\.xml$/i, '').split(/[/\\]/).pop() ?? buildName;
+    await luaClient.loadBuildXml(buildXml, displayName);
+
+    let selectedSpec: any = null;
+    let selectedItemSet: any = null;
+
+    // Pick spec with most nodes (best endgame heuristic)
+    try {
+      const specsResult = await luaClient.listSpecs();
+      if (specsResult?.specs?.length > 0) {
+        const best = specsResult.specs.reduce((a: any, b: any) =>
+          (b.nodeCount ?? 0) > (a.nodeCount ?? 0) ? b : a, specsResult.specs[0]);
+        selectedSpec = best;
+        if (!best.active) await luaClient.selectSpec(best.index);
+      }
+    } catch { /* ignore */ }
+
+    // Pick last item set (highest id — typically endgame)
+    try {
+      const itemSetsResult = await luaClient.listItemSets();
+      if (itemSetsResult?.itemSets?.length > 0) {
+        const last = itemSetsResult.itemSets[itemSetsResult.itemSets.length - 1];
+        selectedItemSet = last;
+        if (!last.active) await luaClient.selectItemSet(last.id);
+      }
+    } catch { /* ignore */ }
+
+    const stats = await luaClient.getStats();
+    return { stats, selectedSpec, selectedItemSet, displayName };
+  };
+
+  // Try Lua-based live comparison
+  let luaOk = false;
+  let r1: any = null;
+  let r2: any = null;
+  try {
+    await context.ensureLuaClient();
+    const luaClient = context.getLuaClient();
+    if (luaClient) {
+      r1 = await loadEndgame(luaClient, build1Name);
+      r2 = await loadEndgame(luaClient, build2Name);
+      luaOk = true;
+    }
+  } catch { /* fall through to XML */ }
+
+  if (luaOk && r1 && r2) {
+    const fmtNum = (n: any) =>
+      n != null && !isNaN(Number(n)) && Number(n) !== 0
+        ? Math.round(Number(n)).toLocaleString()
+        : 'N/A';
+
+    const row = (label: string, v1: any, v2: any, higherIsBetter = true) => {
+      const n1 = Number(v1 || 0);
+      const n2 = Number(v2 || 0);
+      const winner = n1 === n2 ? '  ='
+        : (n1 > n2) === higherIsBetter ? '  ▲1' : '  ▲2';
+      return `  ${label.padEnd(22)}${fmtNum(v1).padStart(12)}  vs  ${fmtNum(v2).padStart(12)}${winner}`;
+    };
+
+    const s1 = r1.stats;
+    const s2 = r2.stats;
+
+    const lines: string[] = [
+      '=== Build Comparison (Live Stats) ===',
+      '',
+      `Build 1: ${r1.displayName}`,
+      r1.selectedSpec
+        ? `  Spec:     "${r1.selectedSpec.title}" (${r1.selectedSpec.nodeCount} nodes, most-nodes heuristic)`
+        : '  Spec:     N/A',
+      r1.selectedItemSet
+        ? `  Item Set: "${r1.selectedItemSet.title}" (last item set heuristic)`
+        : '  Item Set: N/A',
+      '',
+      `Build 2: ${r2.displayName}`,
+      r2.selectedSpec
+        ? `  Spec:     "${r2.selectedSpec.title}" (${r2.selectedSpec.nodeCount} nodes, most-nodes heuristic)`
+        : '  Spec:     N/A',
+      r2.selectedItemSet
+        ? `  Item Set: "${r2.selectedItemSet.title}" (last item set heuristic)`
+        : '  Item Set: N/A',
+      '',
+      `${'Stat'.padEnd(24)}${'Build 1'.padStart(12)}       ${'Build 2'.padStart(12)}`,
+      '-'.repeat(60),
+    ];
+
+    // Defenses
+    lines.push(row('Life', s1.Life, s2.Life));
+    lines.push(row('Energy Shield', s1.EnergyShield, s2.EnergyShield));
+    lines.push(row('Total EHP', s1.TotalEHP, s2.TotalEHP));
+    lines.push(row('Mana', s1.Mana, s2.Mana));
+    lines.push('');
+
+    // Offense
+    const dps1 = s1.CombinedDPS || s1.TotalDPS || s1.MinionTotalDPS;
+    const dps2 = s2.CombinedDPS || s2.TotalDPS || s2.MinionTotalDPS;
+    lines.push(row('DPS (combined)', dps1, dps2));
+    lines.push(row('Crit Chance %', s1.CritChance, s2.CritChance));
+    lines.push(row('Crit Multi %', s1.CritMultiplier, s2.CritMultiplier));
+    lines.push('');
+
+    // Resists
+    lines.push(row('Fire Resist %', s1.FireResist, s2.FireResist));
+    lines.push(row('Cold Resist %', s1.ColdResist, s2.ColdResist));
+    lines.push(row('Lightning Res %', s1.LightningResist, s2.LightningResist));
+    lines.push(row('Chaos Resist %', s1.ChaosResist, s2.ChaosResist));
+    lines.push('');
+
+    lines.push(`Note: "${r2.displayName}" is now active in the Lua bridge.`);
+
+    return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+  }
+
+  // XML fallback (no Lua available)
   const build1 = await context.buildService.readBuild(build1Name);
   const build2 = await context.buildService.readBuild(build2Name);
 
   const compLines: string[] = [
-    '=== Build Comparison ===',
+    '=== Build Comparison (XML / saved stats) ===',
     '',
     `Build 1: ${build1Name}`,
     `Build 2: ${build2Name}`,
@@ -246,30 +364,17 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
 
   const stats1 = build1.Build?.PlayerStat;
   const stats2 = build2.Build?.PlayerStat;
-
   if (stats1 && stats2) {
-    const statsArray1 = Array.isArray(stats1) ? stats1 : [stats1];
-    const statsArray2 = Array.isArray(stats2) ? stats2 : [stats2];
-
-    const statMap1 = new Map(statsArray1.map(s => [s.stat, s.value]));
-    const statMap2 = new Map(statsArray2.map(s => [s.stat, s.value]));
-
-    for (const [stat, value1] of statMap1) {
-      const value2 = statMap2.get(stat);
-      if (value2) {
-        compLines.push(`${stat}: ${value1} vs ${value2}`);
-      }
+    const arr1 = Array.isArray(stats1) ? stats1 : [stats1];
+    const arr2 = Array.isArray(stats2) ? stats2 : [stats2];
+    const map2 = new Map(arr2.map(s => [s.stat, s.value]));
+    for (const { stat, value } of arr1) {
+      const v2 = map2.get(stat);
+      if (v2) compLines.push(`${stat}: ${value} vs ${v2}`);
     }
   }
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: compLines.join('\n'),
-      },
-    ],
-  };
+  return { content: [{ type: 'text' as const, text: compLines.join('\n') }] };
   });
 }
 
