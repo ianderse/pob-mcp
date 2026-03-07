@@ -84,7 +84,7 @@ export function inferBuildArchetype(
 /**
  * Analyze a single item slot
  */
-export function analyzeItemSlot(
+function analyzeItemSlot(
   slot: string,
   item: { name: string; baseName?: string; rarity?: string } | null,
   buildArchetype: string,
@@ -220,7 +220,7 @@ export function analyzeItemSlot(
 /**
  * Check resistance caps
  */
-export function checkResistances(stats: BuildStats): {
+function checkResistances(stats: BuildStats): {
   capped: boolean;
   missing: string[];
   recommendations: string[];

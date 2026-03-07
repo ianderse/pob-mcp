@@ -51,19 +51,3 @@ export function wrapWithTruncation(
   }
   return result;
 }
-
-/**
- * Format time difference in human-readable format
- *
- * @param ms - Milliseconds elapsed
- * @returns Human-readable time string (e.g., "5m ago", "2h ago")
- */
-export function formatTimeAgo(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-
-  if (seconds < 60) return `${seconds}s ago`;
-  if (minutes < 60) return `${minutes}m ago`;
-  return `${hours}h ago`;
-}
