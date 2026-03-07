@@ -78,7 +78,7 @@ An MCP (Model Context Protocol) server that enables Claude to analyze, modify, a
 ## Installation
 
 ```bash
-cd pob-mcp-server
+cd pob-mcp
 npm install
 npm run build
 ```
@@ -133,11 +133,7 @@ npm run build
 | `POB_FORK_PATH` | `~/Projects/PathOfBuilding/src` | Path to PathOfBuilding/src |
 | `POB_CMD` | `luajit` | LuaJIT binary path |
 | `POB_TIMEOUT_MS` | `10000` | Lua request timeout (ms) |
-| `POB_API_TCP` | `false` | Use TCP instead of stdio |
-| `POB_API_TCP_HOST` | `127.0.0.1` | TCP host (when TCP mode) |
-| `POB_API_TCP_PORT` | `31337` | TCP port (when TCP mode) |
 | `POE_TRADE_ENABLED` | `false` | Enable Trade API tools |
-| `POE_TRADE_LEAGUE` | — | Default league for trade queries |
 
 ### Setting Up the Lua Bridge
 
@@ -174,7 +170,7 @@ ls /path/to/PathOfBuilding/src/HeadlessWrapper.lua
 
 ## Available Tools
 
-The server registers **71 tools** across 10 categories.
+The server registers **91 tools** across 10 categories.
 
 ### XML-Based Tools (Always Available)
 
@@ -184,6 +180,8 @@ The server registers **71 tools** across 10 categories.
 | `analyze_build` | Full build summary: class, stats, skills, items, tree |
 | `compare_builds` | Side-by-side build comparison |
 | `get_build_stats` | Extract raw stats from build XML |
+| `get_build_notes` | Get build notes from XML |
+| `set_build_notes` | Set build notes in XML |
 | `start_watching` | Monitor builds directory for changes |
 | `stop_watching` | Stop file monitoring |
 | `watch_status` | Show watching status and cache info |
@@ -195,11 +193,10 @@ The server registers **71 tools** across 10 categories.
 | Tool | Description |
 |---|---|
 | `compare_trees` | Show node differences between two builds |
-| `test_allocation` | Preview stat changes from allocating specific nodes |
-| `plan_tree` | Plan a path to a specific notable or keystone |
 | `get_nearby_nodes` | Find notables/keystones reachable from current allocation |
 | `find_path_to_node` | Shortest path to a target node ID |
-| `allocate_nodes` | Allocate node IDs directly into a build file |
+| `get_passive_upgrades` | Suggest passive tree upgrades |
+| `suggest_masteries` | Suggest mastery choices for allocated clusters |
 
 ### Lua Bridge — Core (Require `POB_LUA_ENABLED=true`)
 
@@ -210,11 +207,22 @@ The server registers **71 tools** across 10 categories.
 | `lua_new_build` | Create a blank build for a given class/ascendancy |
 | `lua_load_build` | Load a build file into the engine |
 | `lua_save_build` | Save the current in-memory build to a `.xml` file |
+| `lua_reload_build` | Reload the current build from disk |
+| `lua_get_build_info` | Get current build metadata (class, level, etc.) |
 | `set_character_level` | Set level and recalculate all stats |
 | `lua_get_stats` | Get calculated stats (`category`: `offense`/`defense`/`all`) |
 | `lua_get_tree` | View passive tree: class, ascendancy, all allocated node IDs |
 | `lua_set_tree` | Replace passive tree allocation (preserves class if omitted) |
+| `update_tree_delta` | Add/remove individual nodes without replacing entire tree |
 | `search_tree_nodes` | Search passive tree by name or stat text |
+| `list_specs` | List all tree specs in the current build |
+| `select_spec` | Switch active tree spec |
+| `create_spec` | Create a new tree spec |
+| `delete_spec` | Delete a tree spec |
+| `rename_spec` | Rename a tree spec |
+| `list_item_sets` | List all item sets in the current build |
+| `select_item_set` | Switch active item set |
+| `plan_leveling` | Generate a leveling plan for a build |
 
 **`lua_set_tree` class IDs**: 0=Scion, 1=Marauder, 2=Ranger, 3=Witch, 4=Duelist, 5=Templar, 6=Shadow
 
@@ -252,6 +260,9 @@ The server registers **71 tools** across 10 categories.
 | `analyze_items` | Slot-by-slot item analysis with upgrade priorities |
 | `optimize_skill_links` | Audit supports: "more" multipliers, penetration, anti-synergies |
 | `create_budget_build` | Generate a starter build plan for a class/skill/budget |
+| `get_build_issues` | Get prioritized list of build problems and suggestions |
+| `check_boss_readiness` | Evaluate readiness for specific boss encounters |
+| `suggest_watchers_eye` | Suggest Watcher's Eye mods for the build's auras |
 
 **`suggest_optimal_nodes` goals**: `damage`, `defense`, `life`, `es`, `resist`, `speed`
 
@@ -269,6 +280,9 @@ A build with all 3 layers is considered exceptional.
 | `get_config` | View bandit, pantheon, and enemy settings |
 | `set_config` | Toggle charges, buffs, conditions (e.g. `usePowerCharges`, `enemyIsBoss`) |
 | `set_enemy_stats` | Set enemy level, resistances, armour, evasion for DPS scenarios |
+| `save_config_preset` | Save current config as a named preset |
+| `load_config_preset` | Load a saved config preset |
+| `list_config_presets` | List all saved config presets |
 
 ### Build Validation
 
@@ -287,6 +301,7 @@ Returns critical issues, warnings, and info with actionable suggestions and an o
 | `validate_gem_quality` | Find gems needing quality, awakened upgrades, or corruption |
 | `compare_gem_setups` | Side-by-side structural comparison of gem configurations |
 | `find_optimal_links` | Auto-generate best support combo for a 4/5/6-link and budget |
+| `gem_upgrade_path` | Show upgrade path for a gem (awakened, quality variants) |
 
 **Budget tiers**: `league_start`, `mid_league`, `endgame`
 
@@ -299,6 +314,7 @@ Returns critical issues, warnings, and info with actionable suggestions and an o
 | `snapshot_build` | Create a versioned snapshot with description and tag |
 | `list_snapshots` | List all snapshots for a build |
 | `restore_snapshot` | Restore from a snapshot (auto-backs up current state) |
+| `export_build_summary` | Export a human-readable build summary |
 
 Snapshots are stored in `POB_DIRECTORY/.pob-mcp/snapshots/`.
 
@@ -326,7 +342,7 @@ Rates are updated every 5 minutes from poe.ninja. Pass the **exact** league name
 | `find_resistance_gear` | Find affordable gear to cap specific resistances |
 | `compare_trade_items` | Compare multiple trade listings side by side |
 | `search_cluster_jewels` | Search for cluster jewels by notable |
-| `analyze_cluster_jewels` | Evaluate cluster jewel setups |
+| `analyze_build_cluster_jewels` | Evaluate cluster jewel setups for a build |
 | `generate_shopping_list` | Generate a prioritized shopping list from build analysis |
 
 ---

@@ -15,11 +15,9 @@ POB_CMD="luajit"                                    # LuaJIT command
 POB_TIMEOUT_MS="10000"                              # Request timeout (10s)
 ```
 
-### TCP Mode (Optional)
+### Trade API (Optional)
 ```bash
-POB_API_TCP="true"                                  # Use TCP instead of stdio
-POB_API_TCP_HOST="127.0.0.1"                       # TCP host
-POB_API_TCP_PORT="31337"                           # TCP port
+POE_TRADE_ENABLED="true"                           # Enable Trade API tools
 ```
 
 ## Tool Quick Reference
@@ -37,7 +35,6 @@ POB_API_TCP_PORT="31337"                           # TCP port
 | `watch_status` | Check watch status | "Watch status" |
 | `get_recent_changes` | Show recent changes | "What changed recently?" |
 | `refresh_tree_data` | Refresh cached tree data | "Refresh tree data" |
-| `get_build_xml` | Get raw XML | "Get XML for MyBuild.xml" |
 
 ### Lua Bridge Tools (When Enabled)
 
@@ -173,15 +170,15 @@ POB_API_TCP_PORT="31337"                           # TCP port
 
 #### Ranger (2)
 - 0: None
-- 1: Deadeye
-- 2: Raider
+- 1: Raider
+- 2: Deadeye
 - 3: Pathfinder
 
 #### Witch (3)
 - 0: None
-- 1: Necromancer
+- 1: Occultist
 - 2: Elementalist
-- 3: Occultist
+- 3: Necromancer
 
 #### Duelist (4)
 - 0: None
@@ -437,7 +434,7 @@ Use these when asking for build planning help:
 ## Version Information
 
 - **Current Version**: Phase 4 Complete
-- **Total Tools**: 22 (8 XML + 6 Lua Bridge + 3 Phase 3 + 5 Phase 4)
+- **Total Tools**: 91
 - **MCP SDK**: @modelcontextprotocol/sdk
 - **Node.js**: 14+ required
 - **LuaJIT**: 2.0+ required (for bridge)

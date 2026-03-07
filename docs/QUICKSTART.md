@@ -44,17 +44,18 @@ Try these prompts:
 ## Project Structure
 
 ```
-pob-mcp-server/
+pob-mcp/
 ├── src/
-│   ├── index.ts          # Main MCP server code
-│   └── test.ts           # Test script
-├── build/                # Compiled JavaScript (after npm run build)
-├── example-build.xml     # Example PoB build for testing
-├── package.json          # Dependencies
-├── tsconfig.json         # TypeScript config
-├── README.md             # Full documentation
-├── TRANSFER_GUIDE.md     # How to get builds from PC
-└── claude_desktop_config.example.json  # Config template
+│   ├── index.ts              # Main MCP server entry point
+│   ├── server/               # MCP server, tool routing, schemas
+│   ├── handlers/             # Tool handler implementations
+│   ├── services/             # Business logic services
+│   └── types/                # TypeScript type definitions
+├── tests/                    # Test suites
+├── build/                    # Compiled JavaScript (after npm run build)
+├── package.json              # Dependencies
+├── tsconfig.json             # TypeScript config
+└── README.md                 # Full documentation
 ```
 
 ## Development
@@ -65,9 +66,6 @@ npm install
 
 # Build
 npm run build
-
-# Test parsing
-npx tsx src/test.ts
 
 # Watch mode for development
 npm run dev
