@@ -1,11 +1,12 @@
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
-import type { OptimizationConstraints } from "../treeOptimizer.js";
+import type { OptimizationConstraints } from "../types/optimization.js";
 import path from "path";
 import fs from "fs/promises";
 import { analyzeDefenses, formatDefensiveAnalysis } from "../defensiveAnalyzer.js";
 import { wrapHandler } from "../utils/errorHandling.js";
+import { sanitizeBuildName } from "../utils/pathSanitizer.js";
 
 export interface OptimizationHandlerContext {
   buildService: BuildService;
@@ -32,7 +33,7 @@ export async function handleAnalyzeDefenses(
     }
 
     // Load the build into the Lua bridge
-    const buildPath = path.join(context.pobDirectory, buildName);
+    const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
     const buildXml = await fs.readFile(buildPath, 'utf-8');
 
     await luaClient.loadBuildXml(buildXml, 'Defense Analysis');
@@ -79,7 +80,7 @@ export async function handleSuggestOptimalNodes(
     // Load build from disk if buildName refers to an existing file, otherwise
     // assume a build is already loaded in the Lua bridge (in-memory workflow)
     if (buildName) {
-      const buildPath = path.join(context.pobDirectory, buildName);
+      const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
       try {
         const buildXml = await fs.readFile(buildPath, 'utf-8');
         await luaClient.loadBuildXml(buildXml, buildName);
@@ -244,7 +245,7 @@ export async function handleOptimizeTree(
 
     // Load build from disk if it exists, otherwise use the currently loaded Lua build
     if (buildName) {
-      const buildPath = path.join(context.pobDirectory, buildName);
+      const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
       try {
         const buildXml = await fs.readFile(buildPath, 'utf-8');
         await luaClient.loadBuildXml(buildXml, buildName);
