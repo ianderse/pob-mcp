@@ -2,6 +2,7 @@ import { XMLBuilder } from "fast-xml-parser";
 import fs from "fs/promises";
 import path from "path";
 import type { PoBBuild, SnapshotMetadata } from "../types.js";
+import { sanitizeBuildName } from "../utils/pathSanitizer.js";
 
 export interface ExportOptions {
   outputName: string;
@@ -90,7 +91,7 @@ export class BuildExportService {
    * Update only the passive tree in an existing build file
    */
   async saveTree(buildService: any, options: SaveTreeOptions): Promise<{ message: string; backupPath?: string }> {
-    const buildPath = path.join(this.pobDirectory, options.buildName);
+    const buildPath = sanitizeBuildName(options.buildName, this.pobDirectory);
 
     // Create backup if requested
     let backupPath: string | undefined;
@@ -152,7 +153,7 @@ export class BuildExportService {
     options: SnapshotOptions
   ): Promise<{ snapshotId: string; snapshotPath: string }> {
     // Create snapshot directory for this build
-    const buildSnapshotDir = path.join(this.snapshotDirectory, options.buildName);
+    const buildSnapshotDir = sanitizeBuildName(options.buildName, this.snapshotDirectory);
     await fs.mkdir(buildSnapshotDir, { recursive: true });
 
     // Generate snapshot ID (timestamp-based)
@@ -165,7 +166,7 @@ export class BuildExportService {
     const snapshotPath = path.join(buildSnapshotDir, snapshotFileName);
 
     // Read and copy build
-    const buildPath = path.join(this.pobDirectory, options.buildName);
+    const buildPath = sanitizeBuildName(options.buildName, this.pobDirectory);
     const buildContent = await fs.readFile(buildPath, 'utf-8');
     await fs.writeFile(snapshotPath, buildContent, 'utf-8');
 
@@ -206,7 +207,7 @@ export class BuildExportService {
     total: number;
     diskSpace: number;
   }> {
-    const buildSnapshotDir = path.join(this.snapshotDirectory, buildName);
+    const buildSnapshotDir = sanitizeBuildName(buildName, this.snapshotDirectory);
 
     // Check if snapshot directory exists
     try {
@@ -276,7 +277,7 @@ export class BuildExportService {
    */
   async restoreSnapshot(options: RestoreOptions): Promise<{ message: string; backupId?: string }> {
     // Find snapshot by ID or tag
-    const buildSnapshotDir = path.join(this.snapshotDirectory, options.buildName);
+    const buildSnapshotDir = sanitizeBuildName(options.buildName, this.snapshotDirectory);
 
     // List snapshots and find matching one
     const { snapshots } = await this.listSnapshots(options.buildName);
@@ -300,13 +301,13 @@ export class BuildExportService {
       backupId = timestamp.toISOString().replace(/[:.]/g, '-').split('.')[0];
 
       const backupPath = path.join(buildSnapshotDir, `${backupId}_before-restore.xml`);
-      const buildPath = path.join(this.pobDirectory, options.buildName);
+      const buildPath = sanitizeBuildName(options.buildName, this.pobDirectory);
       const currentContent = await fs.readFile(buildPath, 'utf-8');
       await fs.writeFile(backupPath, currentContent, 'utf-8');
     }
 
     // Restore from snapshot
-    const buildPath = path.join(this.pobDirectory, options.buildName);
+    const buildPath = sanitizeBuildName(options.buildName, this.pobDirectory);
     const snapshotContent = await fs.readFile(snapshot.filePath, 'utf-8');
     await fs.writeFile(buildPath, snapshotContent, 'utf-8');
 
@@ -381,8 +382,8 @@ export class BuildExportService {
    * Create a timestamped backup of a build
    */
   private async createBackup(buildName: string): Promise<string> {
-    const buildPath = path.join(this.pobDirectory, buildName);
-    const buildSnapshotDir = path.join(this.snapshotDirectory, buildName);
+    const buildPath = sanitizeBuildName(buildName, this.pobDirectory);
+    const buildSnapshotDir = sanitizeBuildName(buildName, this.snapshotDirectory);
     await fs.mkdir(buildSnapshotDir, { recursive: true });
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('.')[0];

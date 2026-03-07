@@ -6,6 +6,7 @@ import type { HandlerContext } from "../utils/contextBuilder.js";
 import path from "path";
 import fs from "fs/promises";
 import { wrapHandler } from "../utils/errorHandling.js";
+import { sanitizeBuildName } from "../utils/pathSanitizer.js";
 export type { HandlerContext } from "../utils/contextBuilder.js";
 
 export async function handleListBuilds(context: HandlerContext) {
@@ -52,7 +53,7 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
       } catch { /* no build loaded yet — safe to load */ }
 
       if (shouldLoad) {
-        const buildPath = path.join(context.pobDirectory, buildName);
+        const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
         const buildXml = await fs.readFile(buildPath, 'utf-8');
         await luaClient.loadBuildXml(buildXml);
         luaStats = await luaClient.getStats();
@@ -265,7 +266,7 @@ export async function handleGetBuildNotes(context: HandlerContext, buildName: st
 
 export async function handleSetBuildNotes(context: HandlerContext, buildName: string, notes: string) {
   return wrapHandler('set build notes', async () => {
-    const buildPath = path.join(context.pobDirectory, buildName);
+    const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
     let xml = await fs.readFile(buildPath, 'utf-8');
 
     // XML-escape the notes content so special characters don't corrupt the build file
