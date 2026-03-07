@@ -4,6 +4,7 @@ import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import fs from "fs/promises";
 import path from "path";
 import { wrapHandler } from "../utils/errorHandling.js";
+import { sanitizeBuildName } from "../utils/pathSanitizer.js";
 
 export interface ValidationHandlerContext {
   buildService: BuildService;
@@ -51,7 +52,7 @@ export async function handleValidateBuild(
 
           if (shouldLoad) {
             try {
-              const buildPath = path.join(context.pobDirectory, buildName);
+              const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
               const buildXml = await fs.readFile(buildPath, 'utf-8');
               await luaClient.loadBuildXml(buildXml, buildName);
             } catch {

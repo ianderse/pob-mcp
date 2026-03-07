@@ -2,6 +2,7 @@ import { XMLParser } from "fast-xml-parser";
 import fs from "fs/promises";
 import path from "path";
 import type { PoBBuild, CachedBuild, ParsedConfiguration, ConfigInput, ConfigSet, Flask, FlaskAnalysis, Jewel, JewelAnalysis } from "../types.js";
+import { sanitizeBuildName } from "../utils/pathSanitizer.js";
 
 const CACHE_TTL_MS = 60_000;  // 60 seconds
 const CACHE_MAX_SIZE = 20;
@@ -61,7 +62,7 @@ export class BuildService {
     }
 
     // Cache miss or expired — read from file
-    const buildPath = path.join(this.pobDirectory, buildName);
+    const buildPath = sanitizeBuildName(buildName, this.pobDirectory);
     const content = await fs.readFile(buildPath, "utf-8");
     const parsed = this.parser.parse(content);
     const buildData = parsed.PathOfBuilding;

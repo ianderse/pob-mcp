@@ -2,6 +2,7 @@ import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import fs from 'fs/promises';
 import path from 'path';
 import { wrapHandler } from "../utils/errorHandling.js";
+import { sanitizeBuildName } from "../utils/pathSanitizer.js";
 
 export interface ConfigHandlerContext {
   getLuaClient: () => PoBLuaApiClient | null;
@@ -19,7 +20,7 @@ const PRESET_DIR_NAME = '.pob-mcp-presets';
 async function getPresetPath(pobDirectory: string, name: string): Promise<string> {
   const dir = path.join(pobDirectory, PRESET_DIR_NAME);
   await fs.mkdir(dir, { recursive: true });
-  return path.join(dir, `${name}.json`);
+  return sanitizeBuildName(`${name}.json`, dir);
 }
 
 export async function handleSaveConfigPreset(context: ConfigPresetContext, name: string) {
