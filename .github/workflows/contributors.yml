@@ -8,6 +8,8 @@ on:
 jobs:
   contributors:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: akhilmhdh/contributors-readme-action@v2.3.10
