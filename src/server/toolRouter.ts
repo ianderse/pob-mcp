@@ -4,7 +4,7 @@
  * Routes MCP tool calls to their corresponding handlers with proper context.
  */
 
-import type { OptimizationConstraints } from "../treeOptimizer.js";
+import type { OptimizationConstraints } from "../types/optimization.js";
 import type { ToolGate } from "./toolGate.js";
 import type { ContextBuilder } from "../utils/contextBuilder.js";
 import type { TradeApiClient } from "../services/tradeClient.js";
