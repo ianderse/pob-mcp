@@ -1619,6 +1619,43 @@ export function getBuildGoalsToolSchemas(): any[] {
         required: ["boss"],
       },
     },
+    {
+      name: "suggest_crafting",
+      description: "Recommend the best crafting method for an item. Provide a gear slot and optionally a base type and desired mods. If a build is loaded, auto-detects the equipped base and build gaps.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          slot: {
+            type: "string",
+            description: "Gear slot: helmet, chest, gloves, boots, weapon, offhand, ring, amulet, belt",
+            enum: ["helmet", "chest", "gloves", "boots", "weapon", "offhand", "ring", "amulet", "belt"],
+          },
+          base: {
+            type: "string",
+            description: "Base item type (e.g. 'Hubris Circlet'). Auto-detected from equipped item if a build is loaded.",
+          },
+          desired_mods: {
+            type: "array",
+            items: { type: "string" },
+            description: "List of desired mod descriptions (e.g. ['maximum life', 'cold resistance', 'spell damage'])",
+          },
+          budget: {
+            type: "string",
+            enum: ["low", "medium", "high"],
+            description: "Crafting budget: low (<50c), medium (50-500c), high (500c+)",
+          },
+          ilvl: {
+            type: "number",
+            description: "Item level — determines which mod tiers are reachable. 84+ for top tiers on most bases.",
+          },
+          league: {
+            type: "string",
+            description: "League name for currency prices (default: Standard)",
+          },
+        },
+        required: ["slot"],
+      },
+    },
   ];
 }
 

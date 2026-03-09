@@ -32,6 +32,7 @@ import { handleGenerateShoppingList } from "../handlers/shoppingListHandlers.js"
 import { handlePlanLeveling } from "../handlers/levelingHandlers.js";
 import { handleCheckBossReadiness } from "../handlers/bossReadinessHandlers.js";
 import { handleSuggestWatchersEye } from "../handlers/jewelAdvisorHandlers.js";
+import { handleSuggestCrafting } from "../handlers/craftingAdvisorHandler.js";
 
 export interface ToolRouterDependencies {
   toolGate: ToolGate;
@@ -725,6 +726,14 @@ export async function routeToolCall(
         deps.contextBuilder.buildSkillGemContext(),
         args || {}
       );
+
+    case "suggest_crafting": {
+      const craftingContext = {
+        getLuaClient: deps.getLuaClient,
+        ninjaClient: deps.ninjaClient,
+      };
+      return await handleSuggestCrafting(craftingContext, args as any);
+    }
 
     default:
       throw new Error(`Unknown tool: ${name}`);
