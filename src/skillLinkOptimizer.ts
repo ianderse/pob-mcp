@@ -213,7 +213,7 @@ const BOSSING_GEMS = new Set([
 /**
  * Detect skill type from gem name
  */
-export function detectSkillType(gemName: string): string[] {
+function detectSkillType(gemName: string): string[] {
   const name = gemName.toLowerCase();
   const types: string[] = [];
 
@@ -280,14 +280,14 @@ export function detectSkillType(gemName: string): string[] {
 /**
  * Check if a gem is a support gem
  */
-export function isSupportGem(gemName: string): boolean {
+function isSupportGem(gemName: string): boolean {
   return gemName.toLowerCase().includes('support');
 }
 
 /**
  * Analyze a single skill group
  */
-export function analyzeSkillGroup(
+function analyzeSkillGroup(
   group: SkillGroup,
   buildArchetype: string
 ): SkillGroupAnalysis {
