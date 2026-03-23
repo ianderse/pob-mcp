@@ -231,7 +231,10 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
 export async function handleCompareBuilds(context: HandlerContext, build1Name: string, build2Name: string) {
   return wrapHandler('compare builds', async () => {
 
-  // Load a build into Lua, auto-select its endgame spec (most nodes) and last item set
+  // Load a build into Lua using its saved active spec and item set.
+  // We deliberately do NOT override spec/item set with heuristics — using the
+  // saved state matches what the user sees in PoB and avoids reporting wrong stats
+  // (e.g. resistances from a different gear set than the one the user expects).
   const loadEndgame = async (luaClient: any, buildName: string) => {
     const buildPath = path.join(context.pobDirectory, buildName);
     const buildXml = await fs.readFile(buildPath, 'utf-8');
@@ -241,24 +244,18 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
     let selectedSpec: any = null;
     let selectedItemSet: any = null;
 
-    // Pick spec with most nodes (best endgame heuristic)
+    // Report which spec/item set is active (informational only — no override)
     try {
       const specsResult = await luaClient.listSpecs();
       if (specsResult?.specs?.length > 0) {
-        const best = specsResult.specs.reduce((a: any, b: any) =>
-          (b.nodeCount ?? 0) > (a.nodeCount ?? 0) ? b : a, specsResult.specs[0]);
-        selectedSpec = best;
-        if (!best.active) await luaClient.selectSpec(best.index);
+        selectedSpec = specsResult.specs.find((s: any) => s.active) ?? specsResult.specs[0];
       }
     } catch { /* ignore */ }
 
-    // Pick last item set (highest id — typically endgame)
     try {
       const itemSetsResult = await luaClient.listItemSets();
       if (itemSetsResult?.itemSets?.length > 0) {
-        const last = itemSetsResult.itemSets[itemSetsResult.itemSets.length - 1];
-        selectedItemSet = last;
-        if (!last.active) await luaClient.selectItemSet(last.id);
+        selectedItemSet = itemSetsResult.itemSets.find((s: any) => s.active) ?? itemSetsResult.itemSets[0];
       }
     } catch { /* ignore */ }
 
@@ -302,18 +299,18 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
       '',
       `Build 1: ${r1.displayName}`,
       r1.selectedSpec
-        ? `  Spec:     "${r1.selectedSpec.title}" (${r1.selectedSpec.nodeCount} nodes, most-nodes heuristic)`
+        ? `  Spec:     "${r1.selectedSpec.title}" (${r1.selectedSpec.nodeCount} nodes, saved active)`
         : '  Spec:     N/A',
       r1.selectedItemSet
-        ? `  Item Set: "${r1.selectedItemSet.title}" (last item set heuristic)`
+        ? `  Item Set: "${r1.selectedItemSet.title}" (saved active)`
         : '  Item Set: N/A',
       '',
       `Build 2: ${r2.displayName}`,
       r2.selectedSpec
-        ? `  Spec:     "${r2.selectedSpec.title}" (${r2.selectedSpec.nodeCount} nodes, most-nodes heuristic)`
+        ? `  Spec:     "${r2.selectedSpec.title}" (${r2.selectedSpec.nodeCount} nodes, saved active)`
         : '  Spec:     N/A',
       r2.selectedItemSet
-        ? `  Item Set: "${r2.selectedItemSet.title}" (last item set heuristic)`
+        ? `  Item Set: "${r2.selectedItemSet.title}" (saved active)`
         : '  Item Set: N/A',
       '',
       `${'Stat'.padEnd(24)}${'Build 1'.padStart(12)}       ${'Build 2'.padStart(12)}`,
