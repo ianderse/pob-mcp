@@ -485,6 +485,63 @@ export async function handleRemoveGem(
   });
 }
 
+export async function handleSetSocketGroupEnabled(
+  context: ItemSkillHandlerContext,
+  groupIndex: number,
+  enabled: boolean
+) {
+  return wrapHandler('set socket group enabled', async () => {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized. Use lua_start first.');
+    }
+
+    if (groupIndex < 1) {
+      throw new Error('group_index must be >= 1');
+    }
+
+    const result = await luaClient.setSocketGroupEnabled({ groupIndex, enabled });
+
+    const label = result?.label ? ` (${result.label})` : '';
+    const state = enabled ? 'enabled' : 'disabled';
+    const text = `✅ Group ${groupIndex}${label} ${state}.`;
+
+    return {
+      content: [{ type: "text" as const, text }],
+    };
+  });
+}
+
+export async function handleSetGemEnabled(
+  context: ItemSkillHandlerContext,
+  groupIndex: number,
+  gemIndex: number,
+  enabled: boolean
+) {
+  return wrapHandler('set gem enabled', async () => {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized. Use lua_start first.');
+    }
+
+    if (groupIndex < 1) throw new Error('group_index must be >= 1');
+    if (gemIndex < 1) throw new Error('gem_index must be >= 1');
+
+    await luaClient.setGemEnabled({ groupIndex, gemIndex, enabled });
+
+    const state = enabled ? 'enabled' : 'disabled';
+    const text = `✅ Gem ${gemIndex} in group ${groupIndex} ${state}.`;
+
+    return {
+      content: [{ type: "text" as const, text }],
+    };
+  });
+}
+
 export async function handleSetupSkillWithGems(
   context: ItemSkillHandlerContext,
   gems: Array<{

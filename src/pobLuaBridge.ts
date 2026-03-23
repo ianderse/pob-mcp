@@ -400,6 +400,17 @@ async setTree(params: {
     if (!res.ok) throw new Error(res.error || "remove_gem failed");
   }
 
+  async setSocketGroupEnabled(params: { groupIndex: number; enabled: boolean }): Promise<{ groupIndex: number; label: string; enabled: boolean }> {
+    const res = await this.send({ action: "set_socket_group_enabled", params });
+    if (!res.ok) throw new Error(res.error || "set_socket_group_enabled failed");
+    return res.result as { groupIndex: number; label: string; enabled: boolean };
+  }
+
+  async setGemEnabled(params: { groupIndex: number; gemIndex: number; enabled: boolean }): Promise<void> {
+    const res = await this.send({ action: "set_gem_enabled", params });
+    if (!res.ok) throw new Error(res.error || "set_gem_enabled failed");
+  }
+
   async searchNodes(params: { keyword: string; nodeType?: string; maxResults?: number; includeAllocated?: boolean }): Promise<any> {
     const res = await this.send({ action: "search_nodes", params });
     if (!res.ok) throw new Error(res.error || "search_nodes failed");

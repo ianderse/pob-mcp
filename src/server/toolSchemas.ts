@@ -674,6 +674,46 @@ export function getLuaToolSchemas(): any[] {
       },
     },
     {
+      name: "toggle_socket_group",
+      description: "Enable or disable an entire socket group (e.g. turn off a mana reservation aura to test its effect on stats)",
+      inputSchema: {
+        type: "object",
+        properties: {
+          group_index: {
+            type: "number",
+            description: "Socket group index (1-based)",
+          },
+          enabled: {
+            type: "boolean",
+            description: "true to enable the group, false to disable it",
+          },
+        },
+        required: ["group_index", "enabled"],
+      },
+    },
+    {
+      name: "toggle_gem",
+      description: "Enable or disable a specific gem within a socket group",
+      inputSchema: {
+        type: "object",
+        properties: {
+          group_index: {
+            type: "number",
+            description: "Socket group index (1-based)",
+          },
+          gem_index: {
+            type: "number",
+            description: "Gem index within group (1-based)",
+          },
+          enabled: {
+            type: "boolean",
+            description: "true to enable the gem, false to disable it",
+          },
+        },
+        required: ["group_index", "gem_index", "enabled"],
+      },
+    },
+    {
       name: "setup_skill_with_gems",
       description: "Setup a complete skill with multiple support gems in one operation. Does NOT auto-set as main skill for DPS. Call set_main_skill with the returned group_index afterward if this should be the primary DPS skill.",
       inputSchema: {
