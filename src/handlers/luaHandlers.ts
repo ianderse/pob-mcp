@@ -162,7 +162,7 @@ export async function handleLuaLoadBuild(
     try {
       const info = await luaClient.getBuildInfo().catch(() => null);
       if (info) {
-        summaryLines.push(`**${info.name || name}** | Level ${info.level} ${info.class}${info.ascendancy ? ` (${info.ascendancy})` : ''}`);
+        summaryLines.push(`**${info.name || name}** | Level ${info.level} ${info.className ?? ''}${info.ascendClassName ? ` (${info.ascendClassName})` : ''}`);
       }
 
       const s = await luaClient.getStats(['Life', 'TotalDPS', 'CombinedDPS', 'MinionTotalDPS',
@@ -683,7 +683,7 @@ export async function handleListSpecs(context: LuaHandlerContext) {
   if (!luaClient) throw new Error('Lua client not initialized');
   const result = await luaClient.listSpecs();
   if (!result?.specs?.length) {
-    return { content: [{ type: "text" as const, text: "No specs found. Load a build first." }] };
+    return { content: [{ type: "text" as const, text: `No specs found. Load a build first.` }] };
   }
   const textLines: string[] = [`=== Passive Tree Specs (${result.specs.length} total) ===`, ''];
   for (const s of result.specs) {
