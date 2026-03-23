@@ -744,6 +744,29 @@ export function getLuaToolSchemas(): any[] {
         },
       },
     },
+    {
+      name: "find_item_upgrades",
+      description: "Generate a shopping spec for a gear slot — describes what item type, base, and mods to look for based on the build's current gaps (resistances, life, ES, DPS). Works with a loaded build in the Lua bridge. No trade API required.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          slot: {
+            type: "string",
+            description: "Gear slot to get a shopping spec for (e.g., 'Helmet', 'Body Armour', 'Boots', 'Gloves', 'Belt', 'Amulet', 'Ring 1', 'Ring 2', 'Weapon 1', 'Weapon 2')",
+          },
+          build_name: {
+            type: "string",
+            description: "Build file to analyze (optional if a build is loaded via lua_load_build)",
+          },
+          priority: {
+            type: "string",
+            description: "What to optimize for: 'dps', 'defense', 'resistance', or 'balanced' (default: 'balanced')",
+            enum: ["dps", "defense", "resistance", "balanced"],
+          },
+        },
+        required: ["slot"],
+      },
+    },
   ];
 }
 
@@ -1406,64 +1429,6 @@ export function getTradeToolSchemas(): any[] {
           },
         },
         required: ["query"],
-      },
-    },
-    {
-      name: "find_item_upgrades",
-      description: "Find potential upgrade items for a specific gear slot using poe.ninja price data. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          build_name: {
-            type: "string",
-            description: "Build to find upgrades for",
-          },
-          slot: {
-            type: "string",
-            description: "Gear slot to find upgrades for (e.g., 'Helmet', 'Body Armour')",
-          },
-          league: {
-            type: "string",
-            description: "EXACT league name as specified by user",
-          },
-          budget: {
-            type: "number",
-            description: "Maximum budget in Chaos Orbs",
-          },
-          priority: {
-            type: "string",
-            description: "Upgrade priority: 'dps', 'defense', 'resistance', 'balanced' (default: 'balanced')",
-            enum: ["dps", "defense", "resistance", "balanced"],
-          },
-        },
-        required: ["build_name", "slot", "league"],
-      },
-    },
-    {
-      name: "find_resistance_gear",
-      description: "Find affordable gear with resistance stats to help cap resistances. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          build_name: {
-            type: "string",
-            description: "Build to analyze resistances for",
-          },
-          league: {
-            type: "string",
-            description: "EXACT league name as specified by user",
-          },
-          budget: {
-            type: "number",
-            description: "Maximum budget per item in Chaos Orbs",
-          },
-          slot_priority: {
-            type: "array",
-            items: { type: "string" },
-            description: "Gear slots to prioritize (optional, defaults to all slots)",
-          },
-        },
-        required: ["build_name", "league"],
       },
     },
     {

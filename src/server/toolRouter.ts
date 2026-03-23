@@ -33,6 +33,7 @@ import { handlePlanLeveling } from "../handlers/levelingHandlers.js";
 import { handleCheckBossReadiness } from "../handlers/bossReadinessHandlers.js";
 import { handleSuggestWatchersEye } from "../handlers/jewelAdvisorHandlers.js";
 import { handleSuggestCrafting } from "../handlers/craftingAdvisorHandler.js";
+import { handleFindItemUpgrades as handleFindItemUpgradesNew } from "../handlers/itemShoppingHandler.js";
 
 export interface ToolRouterDependencies {
   toolGate: ToolGate;
@@ -552,17 +553,11 @@ export async function routeToolCall(
     }
 
     case "find_item_upgrades": {
-      if (!deps.tradeClient || !deps.recommendationEngine) {
-        throw new Error("Trade API is not enabled. Set POE_TRADE_ENABLED=true to enable.");
-      }
       if (!args) throw new Error("Missing arguments");
-      const tradeContext = {
-        tradeClient: deps.tradeClient,
-        statMapper: deps.statMapper || undefined,
-        recommendationEngine: deps.recommendationEngine,
-        ninjaClient: deps.ninjaClient
-      };
-      return await handleFindItemUpgrades(tradeContext, args as any);
+      return await handleFindItemUpgradesNew(
+        { getLuaClient: deps.getLuaClient },
+        args as any
+      );
     }
 
     case "find_resistance_gear": {
