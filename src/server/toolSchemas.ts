@@ -485,7 +485,7 @@ export function getLuaToolSchemas(): any[] {
     },
     {
       name: "get_equipped_items",
-      description: "Get all currently equipped items (empty slots are omitted). Returns name, base, rarity for each equipped item. Use when you need to evaluate gear choices. For item mods/affixes, note that raw mod lines are not currently exposed.",
+      description: "Get all currently equipped items (empty slots are omitted). Returns name, base, rarity, and all mod lines (implicit, explicit, crafted, enchant) for each equipped item. Use when you need to evaluate gear choices or read specific affixes.",
       inputSchema: {
         type: "object",
         properties: {},
