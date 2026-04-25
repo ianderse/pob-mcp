@@ -429,6 +429,28 @@ async setTree(params: {
     return res.output;
   }
 
+  async evaluateAnointCandidates(params: { slot: string; focus?: 'dps' | 'defence' | 'both'; limit?: number }): Promise<{
+    candidates: Array<{ nodeId: number; name: string; dpsDelta: number; ehpDelta: number; score: number; recipe?: string[] }>;
+    base: { CombinedDPS: number; TotalEHP: number };
+    evaluated: number;
+    skipped: number;
+    slot: string;
+    baseType: string;
+    focus: string;
+  }> {
+    const res = await this.send({ action: "evaluate_anoint_candidates", params });
+    if (!res.ok) throw new Error(res.error || "evaluate_anoint_candidates failed");
+    return {
+      candidates: (res.candidates as Array<{ nodeId: number; name: string; dpsDelta: number; ehpDelta: number; score: number; recipe?: string[] }>) || [],
+      base: (res.base as { CombinedDPS: number; TotalEHP: number }) || { CombinedDPS: 0, TotalEHP: 0 },
+      evaluated: Number(res.evaluated) || 0,
+      skipped: Number(res.skipped) || 0,
+      slot: String(res.slot ?? ''),
+      baseType: String(res.baseType ?? ''),
+      focus: String(res.focus ?? 'both'),
+    };
+  }
+
   async getMasteryOptions(): Promise<any> {
     const res = await this.send({ action: "get_mastery_options" });
     if (!res.ok) throw new Error(res.error || "get_mastery_options failed");

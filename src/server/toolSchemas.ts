@@ -1595,6 +1595,29 @@ export function getBuildGoalsToolSchemas(): any[] {
       },
     },
     {
+      name: "find_best_anointment",
+      description: "Rank the best anointable notables for the loaded build by simulating the impact of each anoint via PoB's MiscCalculator (non-destructive, same engine the GUI uses to sort anoints in the item picker). Iterates ALL anointable notables across the tree (~400) — not a keyword-filtered subset. Requires an anointable item equipped in the target slot: any Amulet, or a Cord Belt for the Belt slot.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          slot: {
+            type: "string",
+            description: "Slot of the anointable item: 'Amulet' or 'Belt' (Belt only works if a Cord Belt is equipped).",
+          },
+          focus: {
+            type: "string",
+            description: "What to optimize for (default: 'both'). 'dps' = pure DPS impact, 'defence' = pure EHP impact, 'both' = combined (DPS weight 1.0, EHP weight 0.5 — matches PoB's TradeQueryGenerator defaults).",
+            enum: ["dps", "defence", "both"],
+          },
+          max_results: {
+            type: "number",
+            description: "Maximum number of anoint candidates to return (default: 10).",
+          },
+        },
+        required: ["slot"],
+      },
+    },
+    {
       name: "analyze_build_cluster_jewels",
       description: "Analyze the cluster jewels currently equipped in the build, evaluate which notables synergize with the build archetype, and flag wasted notables",
       inputSchema: {

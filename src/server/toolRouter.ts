@@ -16,6 +16,7 @@ import type { PoeNinjaClient } from "../services/poeNinjaClient.js";
 import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats, handleGetBuildNotes, handleSetBuildNotes } from "../handlers/buildHandlers.js";
 import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handleWatchStatus, handleRefreshTreeData } from "../handlers/watchHandlers.js";
 import { handleCompareTrees, handleGetNearbyNodes, handleFindPath, handleGetPassiveUpgrades, handleSuggestMasteries } from "../handlers/treeHandlers.js";
+import { handleFindBestAnointment } from "../handlers/anointHandlers.js";
 import { handleGetBuildIssues, formatIssuesResponse } from "../handlers/buildGoalsHandlers.js";
 import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaSaveBuild, handleLuaLoadBuild, handleLuaGetStats, handleLuaGetTree, handleLuaSetTree, handleSearchTreeNodes, handleLuaGetBuildInfo, handleLuaReloadBuild, handleUpdateTreeDelta, handleCreateSpec, handleListSpecs, handleSelectSpec, handleDeleteSpec, handleRenameSpec, handleListItemSets, handleSelectItemSet } from "../handlers/luaHandlers.js";
 import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems, handleSetSocketGroupEnabled, handleSetGemEnabled } from "../handlers/itemSkillHandlers.js";
@@ -682,6 +683,21 @@ export async function routeToolCall(
       const focus = (args?.focus as 'dps' | 'defence' | 'both') || 'both';
       const maxResults = (args?.max_results as number) || 10;
       return await handleGetPassiveUpgrades(upgradesContext, focus, maxResults);
+    }
+
+    case "find_best_anointment": {
+      if (!args || typeof args.slot !== 'string') {
+        throw new Error('find_best_anointment requires a "slot" argument');
+      }
+      const anointContext = {
+        getLuaClient: deps.getLuaClient,
+        ensureLuaClient: deps.ensureLuaClient,
+      };
+      return await handleFindBestAnointment(anointContext, {
+        slot: args.slot as string,
+        focus: args.focus as 'dps' | 'defence' | 'both' | undefined,
+        max_results: args.max_results as number | undefined,
+      });
     }
 
     case "analyze_build_cluster_jewels":
