@@ -27,6 +27,20 @@ function getTradeItemUrl(league: string, searchId: string, itemId: string): stri
   return `https://www.pathofexile.com/trade/search/${encodeURIComponent(league)}/${searchId}#${itemId}`;
 }
 
+// The MCP schema exposes `mods` with `stat_id` while the handler internally
+// uses `stats` with `id` (the PoE trade API shape). Accept both and normalize
+// so neither convention silently drops filters.
+export function toStatFilters(
+  stats?: Array<{ id: string; min?: number; max?: number }>,
+  mods?: Array<{ stat_id: string; min?: number; max?: number }>
+): Array<{ id: string; min?: number; max?: number }> {
+  if (stats && stats.length > 0) return stats;
+  if (mods && mods.length > 0) {
+    return mods.map((mod) => ({ id: mod.stat_id, min: mod.min, max: mod.max }));
+  }
+  return [];
+}
+
 /**
  * Search the Path of Exile trade site for items
  */
@@ -41,8 +55,10 @@ export async function handleSearchTradeItems(
     price_currency?: string;
     online_only?: boolean;
     rarity?: 'normal' | 'magic' | 'rare' | 'unique' | 'any';
+    item_rarity?: 'normal' | 'magic' | 'rare' | 'unique' | 'any';
     min_links?: number;
     stats?: Array<{ id: string; min?: number; max?: number }>;
+    mods?: Array<{ stat_id: string; min?: number; max?: number }>;
     sort?: 'price_asc' | 'price_desc';
     limit?: number;
   }
@@ -62,8 +78,10 @@ export async function handleSearchTradeItems(
       price_currency = 'chaos',
       online_only = true,
       rarity,
+      item_rarity,
       min_links,
       stats,
+      mods,
       sort = 'price_asc',
       limit = 5,
     } = args;
@@ -79,16 +97,18 @@ export async function handleSearchTradeItems(
       builder.withType(item_type);
     }
 
-    if (rarity) {
-      builder.withRarity(rarity);
+    const effectiveRarity = rarity ?? item_rarity;
+    if (effectiveRarity) {
+      builder.withRarity(effectiveRarity);
     }
 
     if (min_links) {
       builder.withLinks(min_links);
     }
 
-    if (stats && stats.length > 0) {
-      builder.withStats(stats);
+    const statFilters = toStatFilters(stats, mods);
+    if (statFilters.length > 0) {
+      builder.withStats(statFilters);
     }
 
     builder.applyOptions({
