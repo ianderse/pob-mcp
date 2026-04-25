@@ -25,7 +25,7 @@ import { handleGetConfig, handleSetConfig, handleSetEnemyStats, handleSaveConfig
 import { handleValidateBuild } from "../handlers/validationHandlers.js";
 import { handleExportBuild, handleSaveTree, handleSnapshotBuild, handleListSnapshots, handleRestoreSnapshot, handleExportBuildSummary } from "../handlers/exportHandlers.js";
 import { handleAnalyzeSkillLinks, handleSuggestSupportGems, handleCompareGemSetups, handleValidateGemQuality, handleFindOptimalLinks, handleGemUpgradePath } from "../handlers/skillGemHandlers.js";
-import { handleSearchTradeItems, handleGetItemPrice, handleGetLeagues, handleSearchStats, handleFindItemUpgrades, handleFindResistanceGear, handleCompareTradeItems } from "../handlers/tradeHandlers.js";
+import { handleSearchTradeItems, handleGetItemPrice, handleGetLeagues, handleSearchStats, handleFindItemUpgrades, handleFindResistanceGear, handleCompareTradeItems, handleFindWeightedTradeItems } from "../handlers/tradeHandlers.js";
 import { handleGetCurrencyRates, handleFindArbitrage, handleCalculateTradingProfit } from "../handlers/poeNinjaHandlers.js";
 import { handleSearchClusterJewels, handleAnalyzeClusterJewels, handleAnalyzeBuildClusterJewels } from "../handlers/clusterJewelHandlers.js";
 import { handleGenerateShoppingList } from "../handlers/shoppingListHandlers.js";
@@ -512,6 +512,23 @@ export async function routeToolCall(
         ninjaClient: deps.ninjaClient
       };
       return await handleSearchTradeItems(tradeContext, args as any);
+    }
+
+    case "find_weighted_trade_items": {
+      if (!deps.tradeClient) {
+        throw new Error("Trade API is not enabled. Set POE_TRADE_ENABLED=true to enable.");
+      }
+      if (!args || !args.league || !args.slot) {
+        throw new Error("Missing required arguments: league and slot");
+      }
+      const tradeContext = {
+        tradeClient: deps.tradeClient,
+        statMapper: deps.statMapper || undefined,
+        ninjaClient: deps.ninjaClient,
+        getLuaClient: deps.getLuaClient,
+        ensureLuaClient: deps.ensureLuaClient,
+      };
+      return await handleFindWeightedTradeItems(tradeContext, args as any);
     }
 
     case "get_item_price": {

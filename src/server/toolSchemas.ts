@@ -1419,6 +1419,32 @@ export function getTradeToolSchemas(): any[] {
       },
     },
     {
+      name: "find_weighted_trade_items",
+      description: "Find best-in-slot trade items for the LOADED PoB build using PoB's TradeQueryGenerator weighted-search engine. Ranks items by real DPS/eHP impact for THIS build (not generic heuristics). Requires a build to be loaded via lua_load_build / lua_import_character first. REQUIRES: POE_TRADE_ENABLED=true and POB_LUA_ENABLED=true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          league: {
+            type: "string",
+            description: "EXACT league name as specified by user (e.g., 'Standard', 'Settlers'). Use get_leagues to see available leagues.",
+          },
+          slot: {
+            type: "string",
+            description: "Equipment slot to search BIS for. Examples: 'Belt', 'Helmet', 'Body Armour', 'Gloves', 'Boots', 'Amulet', 'Ring 1', 'Ring 2', 'Weapon 1', 'Weapon 2', 'Helmet Abyssal Socket #1'. Must match PoB's slot naming.",
+          },
+          options: {
+            type: "object",
+            description: "Pass-through options forwarded to PoB's TradeQueryGenerator:StartQuery. Optional fields: statWeights (overrides build's default sort list), influence1/influence2 (1=None), jewelType ('Any'|'Base'|'Abyss'), includeMirrored, includeCorrupted, includeScourge, includeEldritch, includeSynthesis, maxPrice, maxPriceType, maxLevel, sockets, links, special{itemName} (e.g. 'Megalomaniac'). When omitted, uses the loaded build's defaults.",
+          },
+          limit: {
+            type: "number",
+            description: "Maximum results to fetch full details for (default: 5, max: 10). Total search match count is always returned.",
+          },
+        },
+        required: ["league", "slot"],
+      },
+    },
+    {
       name: "get_item_price",
       description: "Quick price check for a specific item by name. Returns current market price and recent sales. REQUIRES: POE_TRADE_ENABLED environment variable set to true. IMPORTANT: Use the EXACT league name the user specifies.",
       inputSchema: {

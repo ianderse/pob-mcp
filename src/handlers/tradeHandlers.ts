@@ -3,15 +3,21 @@ import { TradeApiClient } from '../services/tradeClient.js';
 import { TradeQueryBuilder } from '../services/tradeQueryBuilder.js';
 import { StatMapper } from '../services/statMapper.js';
 import { ItemRecommendationEngine, UpgradeContext } from '../services/itemRecommendationEngine.js';
-import { ItemListing, SearchOptions, ItemRecommendation, ResistanceRequirements, BudgetConstraints } from '../types/tradeTypes.js';
+import { ItemListing, SearchOptions, ItemRecommendation, ResistanceRequirements, BudgetConstraints, TradeQuery } from '../types/tradeTypes.js';
 import { CostBenefitAnalyzer } from '../services/costBenefitAnalyzer.js';
 import { PoeNinjaClient } from '../services/poeNinjaClient.js';
+import type { PoBLuaApiClient } from '../pobLuaBridge.js';
 
 interface TradeContext {
   tradeClient: TradeApiClient;
   statMapper?: StatMapper;
   recommendationEngine?: ItemRecommendationEngine;
   ninjaClient?: PoeNinjaClient;
+}
+
+interface WeightedTradeContext extends TradeContext {
+  getLuaClient: () => PoBLuaApiClient | null;
+  ensureLuaClient: () => Promise<void>;
 }
 
 // ========================================
@@ -1012,4 +1018,83 @@ function extractResistValue(item: any, element: string): number {
   }
 
   return total;
+}
+
+/**
+ * Find best-in-slot trade items for the loaded PoB build using PoB's
+ * TradeQueryGenerator weighted-search engine. Generates a query JSON keyed by
+ * real DPS/eHP impact for the build, then executes it against the PoE trade API.
+ */
+export async function handleFindWeightedTradeItems(
+  context: WeightedTradeContext,
+  args: {
+    league: string;
+    slot: string;
+    options?: Record<string, unknown>;
+    limit?: number;
+  }
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  return wrapHandler('find weighted trade items', async () => {
+    const { league, slot, options, limit = 5 } = args;
+    if (!league) throw new Error('league is required');
+    if (!slot) throw new Error('slot is required (e.g. "Belt", "Ring 1", "Body Armour")');
+
+    await context.ensureLuaClient();
+    const luaClient = context.getLuaClient();
+    if (!luaClient) throw new Error('Lua client not initialized — load a build first');
+
+    const { query: pobQuery, warning } = await luaClient.generateWeightedTradeQuery(slot, options);
+    if (!pobQuery || typeof pobQuery !== 'object') {
+      throw new Error(`PoB returned no query JSON${warning ? ` (${warning})` : ''}`);
+    }
+
+    // PoB's query carries fields beyond the typed TradeQuery shape (engine, statgroup sort).
+    // The trade API accepts them, so we forward as-is via an unknown cast.
+    const searchResult = await context.tradeClient.searchItems(league, pobQuery as unknown as TradeQuery);
+
+    if (!searchResult.result || searchResult.result.length === 0) {
+      const empty =
+        `=== Weighted BIS Search (${league}, slot: ${slot}) ===\n` +
+        `No items found.\n` +
+        (warning ? `Warning: ${warning}\n` : '') +
+        `Query had ${(pobQuery as any)?.query?.stats?.[0]?.filters?.length ?? '?'} weighted mods.\n`;
+      return { content: [{ type: 'text', text: empty }] };
+    }
+
+    const cap = Math.min(limit, 10);
+    const itemIds = searchResult.result.slice(0, cap);
+    const items = await context.tradeClient.fetchItems(itemIds, searchResult.id);
+
+    let output = `=== Weighted BIS Search (${league}, slot: ${slot}) ===\n`;
+    output += `Total matches: ${searchResult.total} | Showing: ${items.length}\n`;
+    output += `🔗 ${getTradeSearchUrl(league, searchResult.id)}\n`;
+    if (warning) output += `Warning: ${warning}\n`;
+    output += `\n`;
+
+    items.forEach((listing, i) => {
+      const item = listing.item;
+      const price = listing.listing.price;
+      const seller = listing.listing.account?.name ?? 'unknown';
+      output += `${i + 1}. ${item.name || item.typeLine}`;
+      if (item.name && item.typeLine && item.name !== item.typeLine) {
+        output += ` (${item.typeLine})`;
+      }
+      output += `\n`;
+      if (price) output += `   Price: ${price.amount} ${price.currency}\n`;
+      output += `   Seller: ${seller}\n`;
+      const mods = [
+        ...(item.explicitMods || []),
+        ...(item.implicitMods || []),
+        ...(item.craftedMods || []),
+      ];
+      if (mods.length > 0) {
+        output += `   Mods:\n`;
+        for (const m of mods.slice(0, 8)) output += `     - ${m}\n`;
+        if (mods.length > 8) output += `     … (${mods.length - 8} more)\n`;
+      }
+      output += `\n`;
+    });
+
+    return { content: [{ type: 'text', text: output }] };
+  });
 }

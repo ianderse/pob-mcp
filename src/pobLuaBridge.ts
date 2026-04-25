@@ -477,6 +477,34 @@ async setTree(params: {
     return res.result;
   }
 
+  /**
+   * Generate a weighted trade query JSON via PoB's TradeQueryGenerator.
+   * options is a pass-through to StartQuery (statWeights, influence1/2, jewelType,
+   * includeMirrored/Corrupted/Scourge/Eldritch/Synthesis, maxPrice, maxLevel,
+   * sockets, links, special{itemName}, ...). Caller may omit it to use build defaults.
+   */
+  async generateWeightedTradeQuery(
+    slot: string,
+    options?: Record<string, unknown>,
+  ): Promise<{ query: unknown; warning?: string }> {
+    const res = await this.send({
+      action: "generate_weighted_trade_query",
+      params: { slot, options: options || {} },
+    });
+    if (!res.ok) throw new Error(res.error || "generate_weighted_trade_query failed");
+    const queryRaw = res.query;
+    let parsed: unknown = queryRaw;
+    if (typeof queryRaw === "string") {
+      try {
+        parsed = JSON.parse(queryRaw);
+      } catch {
+        // Leave as raw string if Lua returned malformed JSON; caller can decide what to do.
+        parsed = queryRaw;
+      }
+    }
+    return { query: parsed, warning: typeof res.warning === "string" ? res.warning : undefined };
+  }
+
   async stop(): Promise<void> {
     if (!this.proc) return;
     try {

@@ -206,13 +206,18 @@ export class TradeApiClient {
     url: string,
     body?: any
   ): Promise<T> {
-    const options: RequestInit = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'pob-mcp-server/1.0',
-      },
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'pob-mcp-server/1.0',
     };
+    // The PoE trade API rejects type:"weight" stat groups for anonymous callers
+    // ("Query is too complex"). Mirrors the pattern in poeCharacterApi.ts.
+    const sessionId = process.env.POE_SESSION_ID;
+    if (sessionId) {
+      headers['Cookie'] = `POESESSID=${sessionId}`;
+    }
+
+    const options: RequestInit = { method, headers };
 
     if (body) {
       options.body = JSON.stringify(body);
