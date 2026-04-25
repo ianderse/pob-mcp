@@ -155,9 +155,11 @@ sudo apt-get install luajit
 ```bash
 git clone https://github.com/ianderse/PathOfBuilding.git
 cd PathOfBuilding
-git checkout api-stdio
+git checkout dev
 ```
 Note the full path to the `src/` directory — that's your `POB_FORK_PATH`.
+
+> **Note**: the JSON-RPC API now lives on the `dev` branch (the head of upstream PR [PathOfBuildingCommunity/PathOfBuilding#9505](https://github.com/PathOfBuildingCommunity/PathOfBuilding/pull/9505)), kept in sync with `PathOfBuildingCommunity/dev`. The older `api-stdio` branch is stale and missing recent tree-version data — using it will crash on `lua_load_build` for current-league builds.
 
 #### 3. Verify
 ```bash
