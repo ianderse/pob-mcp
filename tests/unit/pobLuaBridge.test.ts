@@ -248,6 +248,59 @@ describe('PoBLuaApiClient', () => {
     });
   });
 
+  describe('character import helpers', () => {
+    beforeEach(async () => {
+      await client.start();
+      mockProcess = mockSpawn.getLastProcess()!;
+    });
+
+    it('returns the passive tree import payload without the JSON-RPC envelope', async () => {
+      mockProcess.registerResponse('import_passive_tree', {
+        ok: true,
+        status: '^2Passive tree and jewels successfully imported.',
+        level: 92,
+        className: 'Shadow',
+        ascendClassName: 'Saboteur',
+      });
+
+      const result = await client.importPassiveTree({
+        json: '{"hashes":[]}',
+        char_data: { name: 'Hero', level: 92, class: 'Saboteur', league: 'Standard' },
+      });
+
+      expect(result).toEqual({
+        status: '^2Passive tree and jewels successfully imported.',
+        level: 92,
+        className: 'Shadow',
+        ascendClassName: 'Saboteur',
+      });
+      expect(result).not.toHaveProperty('ok');
+    });
+
+    it('returns the items/skills import payload without the JSON-RPC envelope', async () => {
+      mockProcess.registerResponse('import_items_skills', {
+        ok: true,
+        status: '^2Items and skills successfully imported.',
+        level: 92,
+        character: { name: 'Hero', level: 92, class: 'Saboteur', league: 'Standard' },
+      });
+
+      const result = await client.importItemsSkills({
+        json: '{"items":[]}',
+        clear_items: true,
+        clear_skills: true,
+        ignore_weapon_swap: false,
+      });
+
+      expect(result).toEqual({
+        status: '^2Items and skills successfully imported.',
+        level: 92,
+        character: { name: 'Hero', level: 92, class: 'Saboteur', league: 'Standard' },
+      });
+      expect(result).not.toHaveProperty('ok');
+    });
+  });
+
   describe('Phase 4: Item Methods', () => {
     beforeEach(async () => {
       await client.start();

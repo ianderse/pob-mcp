@@ -134,6 +134,7 @@ npm run build
 | `POB_CMD` | `luajit` | LuaJIT binary path |
 | `POB_TIMEOUT_MS` | `10000` | Lua request timeout (ms) |
 | `POE_TRADE_ENABLED` | `false` | Enable Trade API tools |
+| `POE_SESSION_ID` | (none) | POESESSID cookie value, used for fetching private PoE profiles via `lua_import_character` / `lua_list_characters`. **Sensitive** — treat like a password; do not commit or share. |
 
 ### Setting Up the Lua Bridge
 
@@ -166,11 +167,29 @@ ls /path/to/PathOfBuilding/src/HeadlessWrapper.lua
 
 #### 4. Update Claude Desktop config and restart Claude Desktop
 
+### Importing a Live Character from PoE
+
+You can import any of your live characters directly from the official Path of Exile API into the loaded build — tree, jewels, items, and skill gems are pulled from the game and applied:
+
+```
+1. lua_start
+2. lua_list_characters (account_name: "YourName#1234")
+3. lua_new_build  (or lua_load_build for an existing template)
+4. lua_import_character (account_name: "YourName#1234", character_name: "MyChar")
+5. lua_save_build (build_name: "MyChar.xml")
+```
+
+`lua_import_character` returns a before/after diff so you can see exactly what changed (stats, items per slot, skill groups, tree node count). The active spec, items, and gems are **replaced**; build notes, configuration, other specs, and other item sets are **preserved**.
+
+**Weapon swap behavior**: by default, the import places the in-game active weapons in the primary slots and forces PoB's calc engine to use those primary slots (so PoB stats match what you actually wear in game). If you maintain a custom swap configuration in PoB (e.g. leveling weapons stored in the swap slots) and want it preserved, pass `ignore_weapon_swap: true` — that skips the swap-slot import AND leaves your existing weapon-set toggle untouched.
+
+For **private profiles** (the PoE default), set `POE_SESSION_ID` to your `POESESSID` cookie value (32 hex chars from `pathofexile.com` cookies). Treat it like a password — never commit it. Public profiles do not need this.
+
 ---
 
 ## Available Tools
 
-The server registers **91 tools** across 10 categories.
+The server registers **93 tools** across 10 categories.
 
 ### XML-Based Tools (Always Available)
 
@@ -223,6 +242,8 @@ The server registers **91 tools** across 10 categories.
 | `list_item_sets` | List all item sets in the current build |
 | `select_item_set` | Switch active item set |
 | `plan_leveling` | Generate a leveling plan for a build |
+| `lua_list_characters` | List characters on a PoE account via the official API (sorted by last login) |
+| `lua_import_character` | Import a live character (tree/jewels/items/gems) into the loaded build with a before/after diff |
 
 **`lua_set_tree` class IDs**: 0=Scion, 1=Marauder, 2=Ranger, 3=Witch, 4=Duelist, 5=Templar, 6=Shadow
 
