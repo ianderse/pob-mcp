@@ -160,19 +160,17 @@ export async function routeToolCall(
       );
 
     case "lua_list_characters":
-      if (!args?.account_name) throw new Error("Missing account_name");
       return await handleListCharacters(
         luaContext,
-        args.account_name as string,
-        args.realm as string | undefined
+        args?.account_name as string | undefined,
+        args?.realm as string | undefined
       );
 
     case "lua_import_character":
-      if (!args?.account_name) throw new Error("Missing account_name");
       if (!args?.character_name) throw new Error("Missing character_name");
       return await handleImportCharacter(
         luaContext,
-        args.account_name as string,
+        args.account_name as string | undefined,
         args.character_name as string,
         args.realm as string | undefined,
         {

@@ -91,6 +91,18 @@ function ascendancyLabel(entry: PoeCharacterListEntry): string {
   return ascOrClass;
 }
 
+function resolveAccountName(accountName: string | undefined): string {
+  const explicit = accountName?.trim();
+  if (explicit) return explicit;
+
+  const fromEnv = process.env.POE_ACCOUNT_NAME?.trim();
+  if (fromEnv) return fromEnv;
+
+  throw new Error(
+    "account_name is required (with discriminator, e.g. account#1234), or set POE_ACCOUNT_NAME"
+  );
+}
+
 function formatLastLogin(unixSeconds: number | undefined, nowMs: number): string {
   if (typeof unixSeconds !== "number" || !Number.isFinite(unixSeconds)) return "?";
   const ms = unixSeconds * 1000;
@@ -112,16 +124,14 @@ function formatLastLogin(unixSeconds: number | undefined, nowMs: number): string
  */
 export async function handleListCharacters(
   _context: ImportHandlerContext,
-  accountName: string,
+  accountName?: string,
   realm?: string
 ) {
   return wrapHandler("list characters", async () => {
-    if (!accountName || !accountName.trim()) {
-      throw new Error("account_name is required (with discriminator, e.g. account#1234)");
-    }
+    const accountTrimmed = resolveAccountName(accountName);
 
     const effectiveRealm = (realm ?? "pc") as PoeRealm;
-    const characters = await fetchCharacterList(accountName.trim(), effectiveRealm);
+    const characters = await fetchCharacterList(accountTrimmed, effectiveRealm);
 
     if (characters.length === 0) {
       return {
@@ -129,7 +139,7 @@ export async function handleListCharacters(
           {
             type: "text" as const,
             text:
-              `No characters found on account "${accountName}" (realm: ${effectiveRealm}).\n\n` +
+              `No characters found on account "${accountTrimmed}" (realm: ${effectiveRealm}).\n\n` +
               `Tips:\n` +
               `- Make sure the account name includes the discriminator (e.g. account#1234).\n` +
               `- If the profile is private, set POE_SESSION_ID env var.`,
@@ -147,7 +157,7 @@ export async function handleListCharacters(
 
     // Render a markdown table with all fields the API actually returns.
     const lines: string[] = [];
-    lines.push(`=== Characters on ${accountName} ===`);
+    lines.push(`=== Characters on ${accountTrimmed} ===`);
     lines.push("");
     lines.push(`| Name | Level | Class | Ascendancy | League | Realm | Last Login | Pinnable |`);
     lines.push(`|------|-------|-------|------------|--------|-------|------------|----------|`);
@@ -403,21 +413,18 @@ function buildSkillsDiff(before: BuildSnapshot, after: BuildSnapshot): string[] 
  */
 export async function handleImportCharacter(
   context: ImportHandlerContext,
-  accountName: string,
+  accountName: string | undefined,
   characterName: string,
   realm?: string,
   options?: ImportCharacterOptions
 ) {
   return wrapHandler("import character", async () => {
-    if (!accountName || !accountName.trim()) {
-      throw new Error("account_name is required (with discriminator, e.g. account#1234)");
-    }
+    const accountTrimmed = resolveAccountName(accountName);
     if (!characterName || !characterName.trim()) {
       throw new Error("character_name is required");
     }
 
     const effectiveRealm = (realm ?? "pc") as PoeRealm;
-    const accountTrimmed = accountName.trim();
     const charTrimmed = characterName.trim();
 
     // 1. Bridge required — must have a build loaded for items/tree to attach to.

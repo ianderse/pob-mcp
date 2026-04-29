@@ -163,11 +163,14 @@ function makeContext(client: ReturnType<typeof createFakeBridge>['client']): Imp
 describe('importHandlers', () => {
   let fetchSpy: jest.SpiedFunction<typeof fetch>;
   let originalSessionId: string | undefined;
+  let originalAccountName: string | undefined;
 
   beforeEach(() => {
     fetchSpy = jest.spyOn(globalThis, 'fetch') as jest.SpiedFunction<typeof fetch>;
     originalSessionId = process.env.POE_SESSION_ID;
+    originalAccountName = process.env.POE_ACCOUNT_NAME;
     delete process.env.POE_SESSION_ID;
+    delete process.env.POE_ACCOUNT_NAME;
   });
 
   afterEach(() => {
@@ -176,6 +179,11 @@ describe('importHandlers', () => {
       delete process.env.POE_SESSION_ID;
     } else {
       process.env.POE_SESSION_ID = originalSessionId;
+    }
+    if (originalAccountName === undefined) {
+      delete process.env.POE_ACCOUNT_NAME;
+    } else {
+      process.env.POE_ACCOUNT_NAME = originalAccountName;
     }
   });
 
@@ -187,6 +195,30 @@ describe('importHandlers', () => {
       await expect(handleListCharacters(ctx, '')).rejects.toThrow(/discriminator/);
       await expect(handleListCharacters(ctx, '   ')).rejects.toThrow(/discriminator/);
       expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('uses POE_ACCOUNT_NAME when accountName is omitted', async () => {
+      process.env.POE_ACCOUNT_NAME = 'envAccount#1234';
+      fetchSpy.mockResolvedValueOnce(
+        makeResponse({
+          status: 200,
+          body: [
+            {
+              name: 'EnvHero',
+              class: 'Ranger',
+              league: 'Standard',
+              level: 90,
+            },
+          ],
+        })
+      );
+
+      const result = await handleListCharacters(ctx);
+      const text = result.content[0].text;
+
+      expect(text).toContain('=== Characters on envAccount#1234 ===');
+      expect(text).toContain('EnvHero');
+      expect(String(fetchSpy.mock.calls[0][0])).toContain('envAccount%231234');
     });
 
     it('returns "No characters found" with a POE_SESSION_ID tip on empty list', async () => {
@@ -371,6 +403,18 @@ describe('importHandlers', () => {
       await expect(handleImportCharacter(ctx, '', 'Hero')).rejects.toThrow(
         /account_name is required/
       );
+    });
+
+    it('uses POE_ACCOUNT_NAME when accountName is omitted', async () => {
+      process.env.POE_ACCOUNT_NAME = 'envAccount#1234';
+      stubImportFetches();
+      const { client } = createFakeBridge();
+      const ctx = makeContext(client);
+
+      const result = await handleImportCharacter(ctx, undefined, 'Hero');
+
+      expect(result.content[0].text).toContain('# Import: "Hero"');
+      expect(String(fetchSpy.mock.calls[0][0])).toContain('envAccount%231234');
     });
 
     it('throws when characterName is empty', async () => {
