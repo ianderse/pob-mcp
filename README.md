@@ -165,6 +165,18 @@ Note the full path to the `src/` directory — that's your `POB_FORK_PATH`.
 
 For vanilla PoB, set `POB_VANILLA=true`. The built-in adapter supports loading a build plus read-only stats, tree, and build-info calls; editing tools remain unavailable until individually verified against upstream.
 
+To verify a vanilla checkout locally after building this project:
+
+```bash
+POB_FORK_PATH=/path/to/PathOfBuilding/src node tests/smoke/vanilla-bridge.mjs
+```
+
+To exercise the same workflow through the MCP stdio transport (tool discovery, build load, stats, tree, and build info):
+
+```bash
+POB_FORK_PATH=/path/to/PathOfBuilding/src node tests/smoke/vanilla-mcp.mjs
+```
+
 #### 3. Verify
 ```bash
 luajit -v
