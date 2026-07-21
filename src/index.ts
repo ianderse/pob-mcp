@@ -272,9 +272,17 @@ class PoBMCPServer {
 
       // Add Lua tools if enabled
       if (this.luaClientManager.isEnabled()) {
-        tools.push(...getLuaToolSchemas());
-        tools.push(...getConfigToolSchemas()); // Phase 9: Config tools (require Lua)
-        tools.push(...getBuildGoalsToolSchemas()); // Build diagnostics (require Lua)
+        if (process.env.POB_VANILLA === 'true') {
+          const vanillaActions = new Set([
+            'lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats',
+            'lua_get_tree', 'lua_get_build_info',
+          ]);
+          tools.push(...getLuaToolSchemas().filter((tool) => vanillaActions.has(tool.name)));
+        } else {
+          tools.push(...getLuaToolSchemas());
+          tools.push(...getConfigToolSchemas()); // Phase 9: Config tools (require Lua)
+          tools.push(...getBuildGoalsToolSchemas()); // Build diagnostics (require Lua)
+        }
       }
 
       // Add optimization tools

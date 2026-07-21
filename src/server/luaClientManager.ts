@@ -5,6 +5,7 @@
  */
 
 import { PoBLuaApiClient } from '../pobLuaBridge.js';
+import path from 'node:path';
 
 export class LuaClientManager {
   private client: PoBLuaApiClient | null = null;
@@ -42,10 +43,11 @@ export class LuaClientManager {
     console.error('[Lua Bridge] Initializing client...');
 
     try {
+      const vanillaAdapter = process.env.POB_VANILLA === 'true';
       const stdioClient = new PoBLuaApiClient({
         cwd: process.env.POB_FORK_PATH,
         cmd: process.env.POB_CMD,
-        args: process.env.POB_ARGS ? [process.env.POB_ARGS] : undefined,
+        args: process.env.POB_ARGS ? [process.env.POB_ARGS] : vanillaAdapter ? [path.resolve(process.cwd(), 'lua/vanilla_stdio_bridge.lua')] : undefined,
         timeoutMs: process.env.POB_TIMEOUT_MS ? parseInt(process.env.POB_TIMEOUT_MS) : undefined,
       });
       await stdioClient.start();

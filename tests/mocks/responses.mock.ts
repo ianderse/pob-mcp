@@ -65,7 +65,7 @@ export const MOCK_RESPONSES = {
   },
   add_item_text: {
     ok: true,
-    result: {
+    item: {
       id: 123,
       name: 'Steel Blade',
       slot: 'Weapon 1',
@@ -74,7 +74,7 @@ export const MOCK_RESPONSES = {
   set_flask_active: { ok: true },
   get_skills: {
     ok: true,
-    result: {
+    skills: {
       mainSocketGroup: 1,
       calcsSkillNumber: 1,
       groups: [

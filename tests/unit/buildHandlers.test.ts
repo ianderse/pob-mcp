@@ -34,6 +34,9 @@ describe('BuildHandlers', () => {
         validateBuild: jest.fn(),
         formatValidation: jest.fn(),
       } as any,
+      pobDirectory: '/test/pob',
+      getLuaClient: () => null,
+      ensureLuaClient: async () => {},
     };
   });
 

@@ -133,6 +133,7 @@ npm run build
 | `POB_FORK_PATH` | `~/Projects/PathOfBuilding/src` | Path to PathOfBuilding/src |
 | `POB_CMD` | `luajit` | LuaJIT binary path |
 | `POB_TIMEOUT_MS` | `10000` | Lua request timeout (ms) |
+| `POB_VANILLA` | `false` | Use the built-in read-only adapter with vanilla PathOfBuildingCommunity `dev` |
 | `POE_TRADE_ENABLED` | `false` | Enable Trade API tools |
 
 ### Setting Up the Lua Bridge
@@ -154,9 +155,13 @@ sudo apt-get install luajit
 ```bash
 git clone https://github.com/ianderse/PathOfBuilding.git
 cd PathOfBuilding
-git checkout api-stdio
+git checkout dev
 ```
 Note the full path to the `src/` directory — that's your `POB_FORK_PATH`.
+
+> This MCP server requires the `ianderse/PathOfBuilding` fork, whose `dev` branch supplies the JSON-lines API under `src/API/`. The upstream PathOfBuildingCommunity `dev` branch has a generic `HeadlessWrapper.lua`, but does not include this API protocol, so it cannot be used as a drop-in bridge.
+
+For vanilla PoB, set `POB_VANILLA=true`. The built-in adapter supports loading a build plus read-only stats, tree, and build-info calls; editing tools remain unavailable until individually verified against upstream.
 
 #### 3. Verify
 ```bash

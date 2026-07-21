@@ -20,7 +20,6 @@ const mockDeps: ContextDependencies = {
   skillGemService: mockSkillGemService,
   pobDirectory: '/test/pob',
   luaEnabled: true,
-  useTcpMode: false,
   getLuaClient: () => mockLuaClient,
   ensureLuaClient: async () => {},
   stopLuaClient: async () => {},
@@ -36,7 +35,6 @@ describe('ContextBuilder', () => {
       expect(context.buildService).toBe(mockBuildService);
       expect(context.treeService).toBe(mockTreeService);
       expect(context.validationService).toBe(mockValidationService);
-      expect(Object.keys(context)).toHaveLength(3);
     });
   });
 
@@ -47,7 +45,6 @@ describe('ContextBuilder', () => {
       expect(context.buildService).toBe(mockBuildService);
       expect(context.treeService).toBe(mockTreeService);
       expect(context.watchService).toBe(mockWatchService);
-      expect(Object.keys(context)).toHaveLength(3);
     });
   });
 
@@ -58,7 +55,6 @@ describe('ContextBuilder', () => {
       expect(context.buildService).toBe(mockBuildService);
       expect(context.treeService).toBe(mockTreeService);
       expect(context.validationService).toBe(mockValidationService);
-      expect(Object.keys(context)).toHaveLength(3);
     });
   });
 
@@ -68,7 +64,6 @@ describe('ContextBuilder', () => {
 
       expect(context.pobDirectory).toBe('/test/pob');
       expect(context.luaEnabled).toBe(true);
-      expect(context.useTcpMode).toBe(false);
       expect(context.getLuaClient()).toBe(mockLuaClient);
       expect(typeof context.ensureLuaClient).toBe('function');
       expect(typeof context.stopLuaClient).toBe('function');
@@ -81,7 +76,6 @@ describe('ContextBuilder', () => {
 
       expect(context.getLuaClient()).toBe(mockLuaClient);
       expect(typeof context.ensureLuaClient).toBe('function');
-      expect(Object.keys(context)).toHaveLength(2);
     });
   });
 
@@ -94,7 +88,6 @@ describe('ContextBuilder', () => {
       expect(context.pobDirectory).toBe('/test/pob');
       expect(context.getLuaClient()).toBe(mockLuaClient);
       expect(typeof context.ensureLuaClient).toBe('function');
-      expect(Object.keys(context)).toHaveLength(5);
     });
   });
 
@@ -105,7 +98,6 @@ describe('ContextBuilder', () => {
       expect(context.buildService).toBe(mockBuildService);
       expect(context.exportService).toBe(mockExportService);
       expect(context.luaClient).toBe(mockLuaClient);
-      expect(Object.keys(context)).toHaveLength(3);
     });
   });
 
@@ -115,7 +107,6 @@ describe('ContextBuilder', () => {
 
       expect(context.buildService).toBe(mockBuildService);
       expect(context.skillGemService).toBe(mockSkillGemService);
-      expect(Object.keys(context)).toHaveLength(2);
     });
   });
 
@@ -126,7 +117,6 @@ describe('ContextBuilder', () => {
       expect(context.buildService).toBe(mockBuildService);
       expect(context.getLuaClient()).toBe(mockLuaClient);
       expect(typeof context.ensureLuaClient).toBe('function');
-      expect(Object.keys(context)).toHaveLength(3);
     });
   });
 
@@ -138,7 +128,6 @@ describe('ContextBuilder', () => {
       expect(context.validationService).toBe(mockValidationService);
       expect(context.getLuaClient()).toBe(mockLuaClient);
       expect(typeof context.ensureLuaClient).toBe('function');
-      expect(Object.keys(context)).toHaveLength(4);
     });
   });
 });

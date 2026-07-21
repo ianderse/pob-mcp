@@ -289,41 +289,6 @@ export function getLuaToolSchemas(): any[] {
       },
     },
     {
-      name: "create_spec",
-      description: "Create a new passive tree spec in the current build. Use for leveling guides: create specs titled 'Level 10', 'Level 20', etc. with different tree allocations. Use copyFrom to start from an existing spec and modify.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          title: { type: "string", description: "Title for the new spec (e.g. 'Level 40 Tree')" },
-          copyFrom: { type: "number", description: "Spec index (1-based) to copy class/ascendancy/nodes from" },
-          activate: { type: "boolean", description: "Whether to switch to the new spec (default: true)" },
-        },
-      },
-    },
-    {
-      name: "delete_spec",
-      description: "Delete a passive tree spec from the current build. Cannot delete the last remaining spec or the currently active spec (switch first with select_spec).",
-      inputSchema: {
-        type: "object",
-        properties: {
-          index: { type: "number", description: "Spec index to delete (1-based, use list_specs to see available specs)" },
-        },
-        required: ["index"],
-      },
-    },
-    {
-      name: "rename_spec",
-      description: "Rename a passive tree spec in the current build.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          index: { type: "number", description: "Spec index to rename (1-based)" },
-          title: { type: "string", description: "New title for the spec" },
-        },
-        required: ["index", "title"],
-      },
-    },
-    {
       name: "list_item_sets",
       description: "List all item sets in the currently loaded build. Each item set can have different gear equipped.",
       inputSchema: { type: "object", properties: {} },
@@ -674,46 +639,6 @@ export function getLuaToolSchemas(): any[] {
       },
     },
     {
-      name: "toggle_socket_group",
-      description: "Enable or disable an entire socket group (e.g. turn off a mana reservation aura to test its effect on stats)",
-      inputSchema: {
-        type: "object",
-        properties: {
-          group_index: {
-            type: "number",
-            description: "Socket group index (1-based)",
-          },
-          enabled: {
-            type: "boolean",
-            description: "true to enable the group, false to disable it",
-          },
-        },
-        required: ["group_index", "enabled"],
-      },
-    },
-    {
-      name: "toggle_gem",
-      description: "Enable or disable a specific gem within a socket group",
-      inputSchema: {
-        type: "object",
-        properties: {
-          group_index: {
-            type: "number",
-            description: "Socket group index (1-based)",
-          },
-          gem_index: {
-            type: "number",
-            description: "Gem index within group (1-based)",
-          },
-          enabled: {
-            type: "boolean",
-            description: "true to enable the gem, false to disable it",
-          },
-        },
-        required: ["group_index", "gem_index", "enabled"],
-      },
-    },
-    {
       name: "setup_skill_with_gems",
       description: "Setup a complete skill with multiple support gems in one operation. Does NOT auto-set as main skill for DPS. Call set_main_skill with the returned group_index afterward if this should be the primary DPS skill.",
       inputSchema: {
@@ -761,14 +686,6 @@ export function getLuaToolSchemas(): any[] {
           },
         },
         required: ["items"],
-      },
-    },
-    {
-      name: "suggest_masteries",
-      description: "Analyze all allocated mastery nodes and suggest the best effect choices by simulating each option's DPS/EHP impact. Requires a build to be loaded via lua_load_build.",
-      inputSchema: {
-        type: "object",
-        properties: {},
       },
     },
     {

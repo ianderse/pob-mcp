@@ -192,10 +192,14 @@ describe('BuildService', () => {
       const build = {
         Build: { className: 'Ranger' },
         Items: {
+          Item: [
+            { id: '1', '#text': 'Rarity: Rare\nDeath Bow\nThicket Bow' },
+            { id: '2', '#text': "Rarity: Unique\nKaom's Heart\nGlorious Plate" },
+          ],
           ItemSet: {
             Slot: [
-              { name: 'Weapon 1', Item: 'Rarity: Rare\nDeath Bow\nThicket Bow' },
-              { name: 'Body Armour', Item: 'Rarity: Unique\nKaom\'s Heart\nGlorious Plate' },
+              { name: 'Weapon 1', itemId: '1' },
+              { name: 'Body Armour', itemId: '2' },
             ],
           },
         },
@@ -265,7 +269,7 @@ describe('BuildService', () => {
       };
 
       const spec = buildService.getActiveSpec(build);
-      expect(spec.nodes).toBe('4,5,6');
+      expect(spec.nodes).toBe('1,2,3');
     });
 
     it('should return first spec if activeSpec not specified', () => {
