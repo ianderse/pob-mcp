@@ -480,6 +480,20 @@ Issues and pull requests are welcome!
                     <sub><b>J-Gierend</b></sub>
                 </a>
             </td>
+            <td align="center">
+                <a href="https://github.com/gonzodamus">
+                    <img src="https://avatars.githubusercontent.com/u/219195895?v=4" width="100;" alt="gonzodamus"/>
+                    <br />
+                    <sub><b>gonzodamus</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/mcagnion">
+                    <img src="https://avatars.githubusercontent.com/u/22574458?v=4" width="100;" alt="mcagnion"/>
+                    <br />
+                    <sub><b>Mickael Cagnion</b></sub>
+                </a>
+            </td>
 		</tr>
 	<tbody>
 </table>
