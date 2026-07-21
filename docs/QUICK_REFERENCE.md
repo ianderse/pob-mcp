@@ -434,6 +434,7 @@ Use these when asking for build planning help:
 ## Version Information
 
 - **Current Version**: Phase 4 Complete
+- **PoE Target**: 3.29
 - **Total Tools**: 91
 - **MCP SDK**: @modelcontextprotocol/sdk
 - **Node.js**: 14+ required

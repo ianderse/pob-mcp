@@ -2,6 +2,8 @@
 
 An MCP (Model Context Protocol) server that enables Claude to analyze, modify, and optimize Path of Building builds using PoB's actual calculation engine.
 
+> **PoE 3.29 compatibility:** This release targets Path of Building data and builds for the 3.29 league. Use a current PoB checkout for the matching tree, skills, and item data. Trade calls should always use `get_leagues` instead of hard-coding a challenge-league name.
+
 ---
 
 **☕ If you find this project helpful, consider [buying me a coffee](https://buymeacoffee.com/ianderse)!**
