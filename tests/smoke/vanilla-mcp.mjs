@@ -28,12 +28,17 @@ const request = (method, params) => new Promise((resolveRequest, reject) => {
   setTimeout(() => { if (pending.delete(id)) reject(new Error(`timed out: ${method}`)); }, 60_000);
 });
 const notify = (method, params) => child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+let snapshotCount = 0;
 try {
   await request('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'vanilla-smoke', version: '1.0' } });
   notify('notifications/initialized', {});
   const listed = await request('tools/list', {});
   const names = new Set(listed.result.tools.map((tool) => tool.name));
-  for (const name of ['lua_get_capabilities', 'lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats', 'lua_get_tree', 'lua_set_tree', 'lua_get_build_info', 'get_equipped_items', 'get_skill_setup']) {
+  const rejected = await request('tools/call', { name: 'not_a_real_tool', arguments: {} });
+  if (rejected.result?.isError !== true) throw new Error(`MCP errors must set isError: ${JSON.stringify(rejected)}`);
+  const invalidChain = await request('tools/call', { name: 'calculate_trading_profit', arguments: { league: 'Standard', currency_chain: ['Chaos Orb'] } });
+  if (invalidChain.result?.isError !== true) throw new Error(`handler errors must set isError: ${JSON.stringify(invalidChain)}`);
+  for (const name of ['lua_get_capabilities', 'lua_get_build_snapshot', 'lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats', 'lua_get_tree', 'lua_set_tree', 'lua_get_build_info', 'get_equipped_items', 'get_skill_setup']) {
     if (!names.has(name)) throw new Error(`missing vanilla MCP tool: ${name}`);
   }
   for (const name of ['add_item', 'toggle_flask', 'set_config']) {
@@ -43,18 +48,31 @@ try {
     ['lua_start', {}],
     ['lua_get_capabilities', {}],
     ['lua_load_build', { build_name: 'example.xml' }],
+    ['lua_get_build_snapshot', {}],
     ['lua_get_stats', {}],
     ['get_equipped_items', {}],
     ['get_skill_setup', { main_only: false }],
     ['lua_get_tree', { include_node_ids: true }],
     ['lua_set_tree', { classId: 2, ascendClassId: 0, nodes: [] }],
+    ['lua_get_build_snapshot', {}],
     ['lua_set_tree', { classId: 2, ascendClassId: 1, nodes: ['50459', '58427'] }],
+    ['lua_get_build_snapshot', {}],
     ['lua_get_build_info', {}],
   ]) {
     const response = await request('tools/call', { name, arguments: args });
     if (response.error || response.result?.isError) throw new Error(`${name} failed: ${JSON.stringify(response.error ?? response.result)}`);
+    if (name === 'lua_get_build_snapshot') {
+      const text = response.result?.content?.[0]?.text || '';
+      if (!text.includes('Current PoB Build Snapshot') || !text.includes('Equipped Items') || !text.includes('Skills')) {
+        throw new Error(`lua_get_build_snapshot returned an incomplete response: ${text}`);
+      }
+      const expectedNodes = [2, 1, 2][snapshotCount++];
+      if (!text.includes(`Tree: ${expectedNodes} allocated nodes`)) {
+        throw new Error(`snapshot did not report the expected passive-tree state: ${text}`);
+      }
+    }
   }
-  console.log('vanilla MCP passed: capabilities, load, stats, items, skills, tree mutation/restore, and build info all succeeded');
+  console.log('vanilla MCP passed: capabilities, snapshot, load, stats, items, skills, tree mutation/restore, and build info all succeeded');
 } finally {
   child.kill();
   await rm(buildsDir, { recursive: true, force: true });

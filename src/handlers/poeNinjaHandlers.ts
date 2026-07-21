@@ -187,6 +187,7 @@ export async function handleCalculateTradingProfit(
 
     if (currency_chain.length < 2) {
       return {
+        isError: true,
         content: [
           {
             type: 'text',

@@ -329,6 +329,57 @@ export async function handleLuaGetStats(context: LuaHandlerContext, category?: s
   });
 }
 
+/**
+ * A compact, post-edit view of the loaded build. Requests are deliberately
+ * sequential because both bridge implementations use a single stdio channel.
+ */
+export async function handleLuaGetBuildSnapshot(context: LuaHandlerContext) {
+  return wrapHandler('get build snapshot', async () => {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized');
+    }
+
+    const info = await luaClient.getBuildInfo();
+    const stats = await luaClient.getStats([
+      'Life', 'EnergyShield', 'Mana', 'TotalDPS', 'CombinedDPS', 'MinionTotalDPS', 'TotalEHP',
+      'FireResist', 'ColdResist', 'LightningResist', 'ChaosResist',
+    ]);
+    const tree = await luaClient.getTree();
+    const items = await luaClient.getItems();
+    const skills = await luaClient.getSkills();
+
+    const lines: string[] = ['=== Current PoB Build Snapshot ===', ''];
+    lines.push(`Build: ${info?.name || 'Unnamed'} | Level ${info?.level ?? 'Unknown'} | ${info?.className ?? 'Unknown'}${info?.ascendClassName ? ` (${info.ascendClassName})` : ''}`);
+    lines.push(`Tree: ${tree?.nodes?.length ?? 0} allocated nodes | version ${tree?.treeVersion ?? info?.treeVersion ?? 'Unknown'}`);
+
+    const statEntries = Object.entries(stats || {}).filter(([, value]) => value != null && value !== 0 && value !== '0');
+    if (statEntries.length > 0) {
+      lines.push('', '**Core Stats:**');
+      lines.push(statEntries.map(([key, value]) => `${key}: ${value}`).join(' | '));
+    }
+
+    const equipped = (items || []).filter((item: any) => item.id !== 0 && item.name);
+    lines.push('', `**Equipped Items:** ${equipped.length}`);
+    for (const item of equipped.slice(0, 12)) {
+      lines.push(`- ${item.slot}: ${item.name}${item.baseName && item.baseName !== item.name ? ` (${item.baseName})` : ''}`);
+    }
+    if (equipped.length > 12) lines.push(`- … ${equipped.length - 12} more (use get_equipped_items for full details)`);
+
+    const groups = Array.isArray(skills?.groups) ? skills.groups : [];
+    lines.push('', `**Skills:** ${groups.length} socket group${groups.length === 1 ? '' : 's'} | Main group: ${skills?.mainSocketGroup ?? 'None'}`);
+    const mainGroup = groups.find((group: any) => group.index === skills?.mainSocketGroup);
+    if (mainGroup?.gems?.length) {
+      lines.push(`Main gems: ${mainGroup.gems.map((gem: any) => gem.name).filter(Boolean).join(', ')}`);
+    }
+    lines.push('Use lua_get_stats, lua_get_tree, get_equipped_items, or get_skill_setup for full detail.');
+
+    return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+  });
+}
+
 const CLASS_NAMES: Record<number, string> = { 0:'Scion', 1:'Marauder', 2:'Ranger', 3:'Witch', 4:'Duelist', 5:'Templar', 6:'Shadow' };
 const ASCENDANCY_NAMES: Record<number, Record<number, string>> = {
   0: {1:'Ascendant'},

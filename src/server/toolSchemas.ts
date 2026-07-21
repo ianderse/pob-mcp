@@ -222,6 +222,11 @@ export function getLuaToolSchemas(): any[] {
       inputSchema: { type: "object", properties: {} },
     },
     {
+      name: "lua_get_build_snapshot",
+      description: "Get a compact, current-state summary after loading or editing a build: metadata, core live stats, passive-node count, equipped items, and main skill gems. Use detailed tools only when you need the underlying data.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
       name: "lua_start",
       description: "Start the PoB headless API process. This will spawn the LuaJIT process that can load builds and compute stats using the actual PoB calculation engine.",
       inputSchema: {
@@ -1425,6 +1430,26 @@ export function getTradeToolSchemas(): any[] {
       },
     },
     {
+      name: "find_resistance_gear",
+      description: "Find trade listings that efficiently cover elemental or chaos resistance gaps within a per-item and total budget. REQUIRES: POE_TRADE_ENABLED=true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          league: { type: "string", description: "Exact league name; use get_leagues when needed." },
+          fire_resist_needed: { type: "number", description: "Additional fire resistance needed (default: 0)." },
+          cold_resist_needed: { type: "number", description: "Additional cold resistance needed (default: 0)." },
+          lightning_resist_needed: { type: "number", description: "Additional lightning resistance needed (default: 0)." },
+          chaos_resist_needed: { type: "number", description: "Additional chaos resistance needed (default: 0)." },
+          max_price_per_item: { type: "number", description: "Maximum price for a single item (default: 50)." },
+          total_budget: { type: "number", description: "Maximum combined budget (default: 200)." },
+          currency: { type: "string", description: "Budget currency (default: chaos)." },
+          slots: { type: "array", items: { type: "string" }, description: "Optional slots to search, such as Ring 1, Belt, Boots, or Gloves." },
+          limit: { type: "number", description: "Maximum recommendations (default: 8)." },
+        },
+        required: ["league"],
+      },
+    },
+    {
       name: "search_cluster_jewels",
       description: "Search for cluster jewels with specific enchants and notables. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
       inputSchema: {
@@ -1520,6 +1545,11 @@ export function getBuildGoalsToolSchemas(): any[] {
           },
         },
       },
+    },
+    {
+      name: "suggest_masteries",
+      description: "Evaluate the effects available on allocated mastery nodes against the live PoB build and rank the strongest DPS and defence choices. Requires a loaded fork-backed build.",
+      inputSchema: { type: "object", properties: {} },
     },
     {
       name: "analyze_build_cluster_jewels",

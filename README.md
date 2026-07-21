@@ -135,7 +135,7 @@ npm run build
 | `POB_FORK_PATH` | `~/Projects/PathOfBuilding/src` | Path to PathOfBuilding/src |
 | `POB_CMD` | `luajit` | LuaJIT binary path |
 | `POB_TIMEOUT_MS` | `10000` | Lua request timeout (ms) |
-| `POB_VANILLA` | `false` | Use the built-in read-only adapter with vanilla PathOfBuildingCommunity `dev` |
+| `POB_VANILLA` | `false` | Use the built-in compatibility adapter with vanilla PathOfBuildingCommunity `dev` |
 | `POE_TRADE_ENABLED` | `false` | Enable Trade API tools |
 
 ### Setting Up the Lua Bridge
@@ -170,7 +170,7 @@ Set `POB_VANILLA=true` to run against an unmodified upstream `PathOfBuildingComm
 | MCP tool | Vanilla status |
 | --- | --- |
 | `lua_start`, `lua_stop`, `lua_load_build` | Supported |
-| `lua_get_stats`, `lua_get_tree`, `lua_get_build_info` | Supported |
+| `lua_get_build_snapshot`, `lua_get_stats`, `lua_get_tree`, `lua_get_build_info` | Supported |
 | `lua_set_tree` | Supported for the current in-memory build; validates through upstream PoB and returns the resulting allocation |
 | `get_equipped_items`, `get_skill_setup` | Supported read-only views |
 | Item, gem, flask, config, spec, export, and build-creation mutations | Not advertised in vanilla mode |
@@ -180,14 +180,34 @@ The compatibility suite was exercised against upstream `dev` commit `78951a2e7d2
 To verify a vanilla checkout locally after building this project:
 
 ```bash
-POB_FORK_PATH=/path/to/PathOfBuilding/src node tests/smoke/vanilla-bridge.mjs
+POB_FORK_PATH=/path/to/PathOfBuilding/src npm run test:smoke:vanilla
 ```
 
-To exercise the same workflow through the MCP stdio transport (tool discovery, capabilities, build load, stats, items, skills, reversible tree mutation, and build info):
+This runs both the adapter contract and MCP stdio transport checks: tool discovery, capabilities, build load, snapshot, stats, items, skills, reversible tree mutation, and build info.
+
+To exercise the default fork bridge using its documented `HeadlessWrapper.lua` entrypoint:
 
 ```bash
-POB_FORK_PATH=/path/to/PathOfBuilding/src node tests/smoke/vanilla-mcp.mjs
+POB_FORK_PATH=/path/to/ianderse-PathOfBuilding/src npm run test:smoke:fork
 ```
+
+This runs the bridge contract plus a full MCP workflow that verifies blank-build gem editing, build discovery and file persistence, loading, character-level mutation and restoration, tree search, build validation, configuration/snapshot save-and-restore, and defensive/boss-readiness analysis.
+
+To exercise the live Trade API integration (requires network access):
+
+```bash
+npm run test:smoke:trade
+```
+
+This verifies MCP discovery plus live league, stat, item-search, price-check, resistance-gear recommendation, currency-rate, and trading-profit requests against the Standard league.
+
+To verify live crafting-data integration (requires network access):
+
+```bash
+npm run test:smoke:crafting
+```
+
+This verifies that the crafting advisor obtains current currency rates and base-mod data for a known item base through MCP.
 
 #### 3. Verify
 ```bash
@@ -201,7 +221,7 @@ ls /path/to/PathOfBuilding/src/HeadlessWrapper.lua
 
 ## Available Tools
 
-The server registers **91 tools** across 10 categories.
+With every optional integration enabled, the server registers **91 tools** across 10 categories. Vanilla mode advertises only the verified compatibility subset.
 
 ### XML-Based Tools (Always Available)
 
@@ -235,6 +255,7 @@ The server registers **91 tools** across 10 categories.
 |---|---|
 | `lua_start` | Start the PoB calculation engine (stdio or TCP) |
 | `lua_stop` | Stop the engine and free resources |
+| `lua_get_build_snapshot` | Compact current-state view: core stats, tree count, equipped items, and main gems |
 | `lua_new_build` | Create a blank build for a given class/ascendancy |
 | `lua_load_build` | Load a build file into the engine |
 | `lua_save_build` | Save the current in-memory build to a `.xml` file |
@@ -246,11 +267,9 @@ The server registers **91 tools** across 10 categories.
 | `lua_set_tree` | Replace passive tree allocation (preserves class if omitted) |
 | `update_tree_delta` | Add/remove individual nodes without replacing entire tree |
 | `search_tree_nodes` | Search passive tree by name or stat text |
+| `suggest_masteries` | Rank effects available on allocated mastery nodes by live stat impact |
 | `list_specs` | List all tree specs in the current build |
 | `select_spec` | Switch active tree spec |
-| `create_spec` | Create a new tree spec |
-| `delete_spec` | Delete a tree spec |
-| `rename_spec` | Rename a tree spec |
 | `list_item_sets` | List all item sets in the current build |
 | `select_item_set` | Switch active item set |
 | `plan_leveling` | Generate a leveling plan for a build |

@@ -41,6 +41,16 @@ export interface UpgradeContext {
   league: string;
 }
 
+function getModText(mod: unknown): string {
+  if (typeof mod === 'string') return mod;
+  if (mod && typeof mod === 'object') {
+    const record = mod as { description?: unknown; text?: unknown };
+    if (typeof record.description === 'string') return record.description;
+    if (typeof record.text === 'string') return record.text;
+  }
+  return '';
+}
+
 export class ItemRecommendationEngine {
   constructor(
     private tradeClient: TradeApiClient,
@@ -436,7 +446,8 @@ export class ItemRecommendationEngine {
       ...(item.implicitMods || []),
     ];
 
-    for (const mod of allMods) {
+    for (const rawMod of allMods) {
+      const mod = getModText(rawMod);
       if (mod.toLowerCase().includes(statName.toLowerCase())) {
         const match = mod.match(/(\d+)/);
         if (match) {
@@ -467,7 +478,8 @@ export class ItemRecommendationEngine {
       ...(item.craftedMods || []),
     ];
 
-    for (const mod of allMods) {
+    for (const rawMod of allMods) {
+      const mod = getModText(rawMod);
       const lowerMod = mod.toLowerCase();
 
       // Look for specific resistances

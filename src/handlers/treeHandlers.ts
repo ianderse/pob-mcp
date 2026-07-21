@@ -184,6 +184,7 @@ export async function handleGetNearbyNodes(
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     return {
+      isError: true,
       content: [
         {
           type: "text" as const,
@@ -337,6 +338,7 @@ export async function handleFindPath(
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     return {
+      isError: true,
       content: [
         {
           type: "text" as const,

@@ -189,6 +189,7 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
     if (errorMsg.includes("Invalid passive tree data detected")) {
       // Return the full error message for invalid nodes
       return {
+        isError: true,
         content: [
           {
             type: "text" as const,

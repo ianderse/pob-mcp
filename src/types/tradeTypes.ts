@@ -29,6 +29,7 @@ export interface TradeFilters {
       price?: {
         min?: number;
         max?: number;
+        option?: string;
       };
       indexed?: {
         option?: string; // e.g., "1day", "3days", "1week"

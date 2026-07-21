@@ -162,6 +162,7 @@ export class TradeQueryBuilder {
     this.query.query.filters.trade_filters.filters.price = {
       min,
       max,
+      option: currency,
     };
 
     return this;

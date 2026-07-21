@@ -120,7 +120,7 @@ export async function handleSuggestCrafting(
             };
             const slotName = slotMap[slot.toLowerCase()];
             const item = items.find((i: any) => i.slot === slotName);
-            if (item?.base) base = item.base;
+            if (item?.baseName || item?.base) base = item.baseName ?? item.base;
           } catch {
             // No item in slot — fine, continue without auto-detected base
           }

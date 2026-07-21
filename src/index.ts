@@ -274,7 +274,7 @@ class PoBMCPServer {
       if (this.luaClientManager.isEnabled()) {
         if (process.env.POB_VANILLA === 'true') {
           const vanillaActions = new Set([
-            'lua_get_capabilities', 'lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats',
+            'lua_get_capabilities', 'lua_get_build_snapshot', 'lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats',
             'lua_get_tree', 'lua_get_build_info', 'lua_set_tree',
             'get_equipped_items', 'get_skill_setup',
           ]);
@@ -353,6 +353,7 @@ class PoBMCPServer {
           console.error(`[Tool Stack] ${error.stack}`);
         }
         return {
+          isError: true,
           content: [
             {
               type: "text",

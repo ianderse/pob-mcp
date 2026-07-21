@@ -61,6 +61,48 @@ export interface CurrencyOverview {
   }>;
 }
 
+/**
+ * poe.ninja changed its economy endpoint from named `lines` with
+ * `chaosEquivalent` to parallel item/rate collections. Normalize both shapes
+ * at the boundary so callers do not need to care which API generation replied.
+ */
+export function normalizeCurrencyOverview(data: unknown): CurrencyOverview {
+  const overview = data as Partial<NewCurrencyOverview & CurrencyOverview>;
+  if (Array.isArray(overview.lines) && overview.lines.length > 0 && 'currencyTypeName' in overview.lines[0]) {
+    return overview as CurrencyOverview;
+  }
+
+  const items = Array.isArray(overview.items) ? overview.items : [];
+  const rates = Array.isArray(overview.lines) ? overview.lines : [];
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  const rateById = new Map(rates.map((rate) => [rate.id, rate]));
+  const chaosItem = items.find((item) => item.name === 'Chaos Orb');
+  const chaosRate = chaosItem ? rateById.get(chaosItem.id) : undefined;
+  // Fragment responses quote directly in chaos but omit a Chaos Orb line.
+  const chaosPrimaryValue = chaosRate?.primaryValue ?? (overview.core?.primary === 'chaos' ? 1 : undefined);
+
+  if (typeof chaosPrimaryValue !== 'number' || !Number.isFinite(chaosPrimaryValue) || chaosPrimaryValue <= 0) {
+    throw new Error('poe.ninja API response did not contain a usable Chaos Orb rate');
+  }
+
+  const lines: CurrencyRate[] = [];
+  for (const rate of rates) {
+    const item = itemById.get(rate.id);
+    const chaosEquivalent = rate.primaryValue / chaosPrimaryValue;
+    if (!item?.name || !Number.isFinite(chaosEquivalent) || chaosEquivalent <= 0) continue;
+    lines.push({
+      currencyTypeName: item.name,
+      chaosEquivalent,
+      detailsId: item.detailsId,
+    });
+  }
+
+  return {
+    lines,
+    currencyDetails: items.map((item, index) => ({ id: index, name: item.name, tradeId: item.detailsId })),
+  };
+}
+
 export interface ArbitrageOpportunity {
   chain: string[];
   profitPercent: number;
@@ -103,7 +145,7 @@ export class PoeNinjaClient {
       throw new Error(`poe.ninja API request failed (${response.status}): ${await response.text()}`);
     }
 
-    const data = await response.json();
+    const data = normalizeCurrencyOverview(await response.json());
     this.putInCache(cacheKey, data);
     return data;
   }
@@ -129,7 +171,7 @@ export class PoeNinjaClient {
       throw new Error(`poe.ninja API request failed (${response.status}): ${await response.text()}`);
     }
 
-    const data = await response.json();
+    const data = normalizeCurrencyOverview(await response.json());
     this.putInCache(cacheKey, data);
     return data;
   }

@@ -105,4 +105,19 @@ describe('handleSuggestCrafting — graceful degradation', () => {
     const text = result.content[0].text;
     expect(text).toContain('Could not fetch poedb data');
   });
+
+  it('auto-detects an equipped baseName from either supported PoB bridge', async () => {
+    mockGetCurrencyExchangeMap.mockResolvedValue(new Map([['Divine Orb', 200]]));
+    fetchSpy.mockResolvedValue({ ok: true, text: async () => '<html>mods</html>' } as any);
+    const getItems = jest.fn(async () => [{ slot: 'Helmet', id: 1, name: 'Rare Helmet', baseName: 'Hubris Circlet' }]);
+    const context = {
+      getLuaClient: () => ({ getStats: async () => ({ Life: 4000 }), getItems }),
+      ninjaClient: mockNinjaClient as any,
+    };
+
+    const result = await handleSuggestCrafting(context as any, { slot: 'helmet' });
+
+    expect(getItems).toHaveBeenCalled();
+    expect(result.content[0].text).toContain('Crafting Advisor: Hubris Circlet (helmet)');
+  });
 });
