@@ -217,6 +217,11 @@ export function getToolSchemas(): ToolSchema[] {
 export function getLuaToolSchemas(): any[] {
   return [
     {
+      name: "lua_get_capabilities",
+      description: "Report the active PoB bridge mode, adapter version, and supported actions.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
       name: "lua_start",
       description: "Start the PoB headless API process. This will spawn the LuaJIT process that can load builds and compute stats using the actual PoB calculation engine.",
       inputSchema: {

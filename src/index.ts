@@ -69,7 +69,7 @@ class PoBMCPServer {
     this.server = new Server(
       {
         name: "pob-mcp-server",
-        version: "1.0.0",
+        version: "1.0.1",
       },
       {
         capabilities: {
@@ -274,8 +274,9 @@ class PoBMCPServer {
       if (this.luaClientManager.isEnabled()) {
         if (process.env.POB_VANILLA === 'true') {
           const vanillaActions = new Set([
-            'lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats',
-            'lua_get_tree', 'lua_get_build_info',
+            'lua_get_capabilities', 'lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats',
+            'lua_get_tree', 'lua_get_build_info', 'lua_set_tree',
+            'get_equipped_items', 'get_skill_setup',
           ]);
           tools.push(...getLuaToolSchemas().filter((tool) => vanillaActions.has(tool.name)));
         } else {

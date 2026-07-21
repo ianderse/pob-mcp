@@ -16,15 +16,28 @@ const client = new PoBLuaApiClient({
 try {
   await client.start();
   if (!await client.ping()) throw new Error('vanilla adapter did not respond to ping');
+  const capabilities = await client.getCapabilities();
+  for (const action of ['get_capabilities', 'get_items', 'get_skills', 'set_tree']) {
+    if (!capabilities.actions?.includes(action)) throw new Error(`missing vanilla capability: ${action}`);
+  }
   await client.loadBuildXml(await readFile(resolve('example-build.xml'), 'utf8'), 'vanilla-smoke');
   // The stdio bridge is deliberately single-request; keep these sequential.
   const info = await client.getBuildInfo();
   const tree = await client.getTree();
   const stats = await client.getStats(['Life', 'TotalEHP']);
-  if (!info?.className || !Array.isArray(tree?.nodes) || typeof stats.Life !== 'number') {
+  const items = await client.getItems();
+  const skillSetup = await client.getSkills();
+  if (!info?.className || !Array.isArray(tree?.nodes) || typeof stats.Life !== 'number' || !Array.isArray(items) || !Array.isArray(skillSetup?.groups)) {
     throw new Error('unexpected vanilla adapter response shape');
   }
-  console.log(`vanilla adapter passed: ${info.className}/${info.ascendClassName}, ${tree.nodes.length} nodes, ${stats.Life} life`);
+  const changed = await client.setTree({ ...tree, ascendClassId: 0, nodes: [] });
+  // Upstream keeps the class start allocated even when given an empty node list.
+  if (changed.ascendClassId !== 0 || changed.nodes.length >= tree.nodes.length) throw new Error('vanilla tree mutation was not applied');
+  const restored = await client.setTree(tree);
+  if (restored.ascendClassId !== tree.ascendClassId || restored.nodes.join(',') !== tree.nodes.join(',')) {
+    throw new Error('vanilla tree mutation did not restore the original allocation');
+  }
+  console.log(`vanilla adapter passed: ${info.className}/${info.ascendClassName}, ${tree.nodes.length} nodes, ${items.length} item slots, ${skillSetup.groups.length} skill groups`);
 } finally {
   await client.stop();
 }

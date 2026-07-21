@@ -161,9 +161,21 @@ git checkout dev
 ```
 Note the full path to the `src/` directory — that's your `POB_FORK_PATH`.
 
-> This MCP server requires the `ianderse/PathOfBuilding` fork, whose `dev` branch supplies the JSON-lines API under `src/API/`. The upstream PathOfBuildingCommunity `dev` branch has a generic `HeadlessWrapper.lua`, but does not include this API protocol, so it cannot be used as a drop-in bridge.
+> By default this MCP server uses the `ianderse/PathOfBuilding` fork, whose `dev` branch supplies the full JSON-lines API under `src/API/`. The upstream PathOfBuildingCommunity `dev` branch has a generic `HeadlessWrapper.lua`, so it needs the built-in compatibility adapter described below.
 
-For vanilla PoB, set `POB_VANILLA=true`. The built-in adapter supports loading a build plus read-only stats, tree, and build-info calls; editing tools remain unavailable until individually verified against upstream.
+### Vanilla PoB compatibility (PoE 3.29)
+
+Set `POB_VANILLA=true` to run against an unmodified upstream `PathOfBuildingCommunity/PathOfBuilding` checkout. The adapter is intentionally a limited, client-visible subset rather than a replacement for the fork API. Call `lua_get_capabilities` at runtime for the authoritative action list.
+
+| MCP tool | Vanilla status |
+| --- | --- |
+| `lua_start`, `lua_stop`, `lua_load_build` | Supported |
+| `lua_get_stats`, `lua_get_tree`, `lua_get_build_info` | Supported |
+| `lua_set_tree` | Supported for the current in-memory build; validates through upstream PoB and returns the resulting allocation |
+| `get_equipped_items`, `get_skill_setup` | Supported read-only views |
+| Item, gem, flask, config, spec, export, and build-creation mutations | Not advertised in vanilla mode |
+
+The compatibility suite was exercised against upstream `dev` commit `78951a2e7d23bc0bb78e4a2ff777b82e1e54dc1f`, the current PoE 3.29 data line at the time of verification. Tree changes are session-local and are not written back to the XML file.
 
 To verify a vanilla checkout locally after building this project:
 
@@ -171,7 +183,7 @@ To verify a vanilla checkout locally after building this project:
 POB_FORK_PATH=/path/to/PathOfBuilding/src node tests/smoke/vanilla-bridge.mjs
 ```
 
-To exercise the same workflow through the MCP stdio transport (tool discovery, build load, stats, tree, and build info):
+To exercise the same workflow through the MCP stdio transport (tool discovery, capabilities, build load, stats, items, skills, reversible tree mutation, and build info):
 
 ```bash
 POB_FORK_PATH=/path/to/PathOfBuilding/src node tests/smoke/vanilla-mcp.mjs

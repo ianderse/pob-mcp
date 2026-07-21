@@ -33,15 +33,28 @@ try {
   notify('notifications/initialized', {});
   const listed = await request('tools/list', {});
   const names = new Set(listed.result.tools.map((tool) => tool.name));
-  for (const name of ['lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats', 'lua_get_tree', 'lua_get_build_info']) {
+  for (const name of ['lua_get_capabilities', 'lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats', 'lua_get_tree', 'lua_set_tree', 'lua_get_build_info', 'get_equipped_items', 'get_skill_setup']) {
     if (!names.has(name)) throw new Error(`missing vanilla MCP tool: ${name}`);
   }
-  if (names.has('lua_set_tree') || names.has('add_item')) throw new Error('vanilla mode advertised an unsupported mutation');
-  for (const [name, args] of [['lua_start', {}], ['lua_load_build', { build_name: 'example.xml' }], ['lua_get_stats', {}], ['lua_get_tree', {}], ['lua_get_build_info', {}]]) {
+  for (const name of ['add_item', 'toggle_flask', 'set_config']) {
+    if (names.has(name)) throw new Error(`vanilla mode advertised an unsupported mutation: ${name}`);
+  }
+  for (const [name, args] of [
+    ['lua_start', {}],
+    ['lua_get_capabilities', {}],
+    ['lua_load_build', { build_name: 'example.xml' }],
+    ['lua_get_stats', {}],
+    ['get_equipped_items', {}],
+    ['get_skill_setup', { main_only: false }],
+    ['lua_get_tree', { include_node_ids: true }],
+    ['lua_set_tree', { classId: 2, ascendClassId: 0, nodes: [] }],
+    ['lua_set_tree', { classId: 2, ascendClassId: 1, nodes: ['50459', '58427'] }],
+    ['lua_get_build_info', {}],
+  ]) {
     const response = await request('tools/call', { name, arguments: args });
     if (response.error || response.result?.isError) throw new Error(`${name} failed: ${JSON.stringify(response.error ?? response.result)}`);
   }
-  console.log('vanilla MCP passed: load, stats, tree, and build info all succeeded');
+  console.log('vanilla MCP passed: capabilities, load, stats, items, skills, tree mutation/restore, and build info all succeeded');
 } finally {
   child.kill();
   await rm(buildsDir, { recursive: true, force: true });

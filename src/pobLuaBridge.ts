@@ -278,6 +278,12 @@ export class PoBLuaApiClient {
     return !!res.ok;
   }
 
+  async getCapabilities(): Promise<any> {
+    const res = await this.send({ action: "get_capabilities" });
+    if (!res.ok) return { mode: 'fork', adapter: 'native', capabilitiesReported: false };
+    return res.capabilities;
+  }
+
   async newBuild(params?: { className?: string; ascendancy?: string }): Promise<any> {
     const res = await this.send({ action: "new_build", params: params || {} });
     if (!res.ok) throw new Error(res.error || "new_build failed");
@@ -508,4 +514,3 @@ async setTree(params: {
     this.proc = null;
   }
 }
-
