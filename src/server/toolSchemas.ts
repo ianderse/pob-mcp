@@ -1397,6 +1397,11 @@ export function getTradeToolSchemas(): any[] {
             type: "boolean",
             description: "Filter by identification status",
           },
+          online_status: {
+            type: "string",
+            enum: ["available", "online", "onlineleague", "securable", "any"],
+            description: "Online-status filter (default: 'available'). Use 'securable' to restrict to instant-buyout listings from currently-online sellers (i.e. a click-and-buy result).",
+          },
           mods: {
             type: "array",
             items: {

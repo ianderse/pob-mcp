@@ -54,6 +54,7 @@ export async function handleSearchTradeItems(
     max_price?: number;
     price_currency?: string;
     online_only?: boolean;
+    online_status?: 'available' | 'online' | 'onlineleague' | 'securable' | 'any';
     rarity?: 'normal' | 'magic' | 'rare' | 'unique' | 'any';
     item_rarity?: 'normal' | 'magic' | 'rare' | 'unique' | 'any';
     min_links?: number;
@@ -77,6 +78,7 @@ export async function handleSearchTradeItems(
       max_price,
       price_currency = 'chaos',
       online_only = true,
+      online_status,
       rarity,
       item_rarity,
       min_links,
@@ -114,6 +116,7 @@ export async function handleSearchTradeItems(
     builder.applyOptions({
       league,
       onlineOnly: online_only,
+      onlineStatus: online_status,
       minPrice: min_price,
       maxPrice: max_price,
       priceCurrency: price_currency,

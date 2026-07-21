@@ -162,7 +162,7 @@ export interface TradeFilters {
 export interface TradeQuery {
   query: {
     status?: {
-      option: 'available' | 'online' | 'onlineleague' | 'any';
+      option: 'available' | 'online' | 'onlineleague' | 'securable' | 'any';
     };
     name?: string;
     type?: string;
@@ -499,6 +499,8 @@ export interface CacheEntry<T> {
 export interface SearchOptions {
   league: string;
   onlineOnly?: boolean;
+  /** Optional override for the online-status filter (default: 'available'). Use 'securable' for instant-buyout-from-online-seller listings only. */
+  onlineStatus?: 'available' | 'online' | 'onlineleague' | 'securable' | 'any';
   minPrice?: number;
   maxPrice?: number;
   priceCurrency?: string;

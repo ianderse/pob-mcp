@@ -116,7 +116,7 @@ export class TradeQueryBuilder {
    * - 'onlineleague': Only shows items from sellers online in the same league
    * - 'any': Shows all items regardless of seller status
    */
-  withOnlineStatus(status: 'available' | 'online' | 'onlineleague' | 'any'): this {
+  withOnlineStatus(status: 'available' | 'online' | 'onlineleague' | 'securable' | 'any'): this {
     this.query.query.status = { option: status };
     return this;
   }
@@ -518,8 +518,10 @@ export class TradeQueryBuilder {
    */
   applyOptions(options: SearchOptions): this {
     if (options.onlineOnly !== false) {
-      // Use 'available' status to get both instant buyout AND in-person trade items
-      this.withOnlineStatus('available');
+      // Default to 'available' (both instant-buyout and in-person trade items).
+      // Callers that want to restrict to instant-buyout-from-online-seller can
+      // pass onlineStatus: 'securable' explicitly.
+      this.withOnlineStatus(options.onlineStatus ?? 'available');
     }
 
     // Note: We intentionally do NOT set sale_type filter here.
