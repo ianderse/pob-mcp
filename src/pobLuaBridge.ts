@@ -33,7 +33,7 @@ export class PoBLuaApiClient {
   constructor(options: PoBLuaApiOptions = {}) {
     // Prevent unhandled 'error' events (emitted on process exit) from crashing Node.js
     this.dataEmitter.on("error", () => {});
-    const forkSrc = options.cwd || path.join(os.homedir(), "Projects", "PathOfBuilding", "src");
+    const forkSrc = options.cwd || process.env.POB_FORK_PATH || path.join(os.homedir(), "Projects", "PathOfBuilding", "src");
     this.options = {
       cwd: forkSrc,
       cmd: options.cmd || "luajit",
@@ -44,10 +44,17 @@ export class PoBLuaApiClient {
   }
 
   async start(): Promise<void> {
-    if (this.proc) return;
+    if (this.proc) {
+      if (!this.killed) return;
+      // Previous process died; clear it so we can restart
+      this.proc = null;
+    }
+    this.killed = false;
+    this.ready = false;
+    this.buffer = "";
 
     // Set up Lua paths for runtime modules
-    const pobForkPath = this.options.cwd || process.env.POB_FORK_PATH || '';
+    const pobForkPath = this.options.cwd!;
 
     // Cross-platform path handling: remove 'src' from the end if present
     const baseDir = pobForkPath.endsWith(path.sep + 'src') || pobForkPath.endsWith('/src')
@@ -61,19 +68,20 @@ export class PoBLuaApiClient {
     const isWindows = process.platform === 'win32';
     const luaExt = isWindows ? 'dll' : 'so';
 
-    // On Windows, use semicolons and backslashes; on Unix, use colons and forward slashes
-    const pathSep = isWindows ? ';' : ':';
+    // Lua's package.path/cpath list separator is ';' on ALL platforms
+    const luaSep = ';';
 
     const env = {
       ...process.env,
       ...this.options.env,
       POB_API_STDIO: "1",
-      LUA_PATH: `${runtimeLuaPath}${path.sep}?.lua${pathSep}${runtimeLuaPath}${path.sep}?${path.sep}init.lua${pathSep}${pathSep}`,
-      LUA_CPATH: `${runtimeDir}${path.sep}?.${luaExt}${pathSep}${luaRocksPath}${path.sep}?.${luaExt}${pathSep}${pathSep}`,
+      LUA_PATH: `${runtimeLuaPath}${path.sep}?.lua${luaSep}${runtimeLuaPath}${path.sep}?${path.sep}init.lua${luaSep}${luaSep}`,
+      LUA_CPATH: `${runtimeDir}${path.sep}?.${luaExt}${luaSep}${luaRocksPath}${path.sep}?.${luaExt}${luaSep}${luaSep}`,
     } as NodeJS.ProcessEnv;
 
+    let child: ChildProcessWithoutNullStreams;
     try {
-      this.proc = spawn(this.options.cmd!, this.options.args!, {
+      child = spawn(this.options.cmd!, this.options.args!, {
         cwd: this.options.cwd,
         env,
         stdio: ["pipe", "pipe", "pipe"],
@@ -81,86 +89,100 @@ export class PoBLuaApiClient {
     } catch (error: any) {
       throw new Error(`Failed to spawn LuaJIT process: ${error.message}`);
     }
+    this.proc = child;
 
-    this.proc.stdout.setEncoding("utf8");
-    this.proc.stderr.setEncoding("utf8");
-
-    // In Jest short-timeout scenarios, simulate missing ready banner to allow timeout test to pass
-    if (process.env.JEST_WORKER_ID && (this.options.timeoutMs ?? 0) <= 150) {
-      throw new Error("Failed to find valid ready banner");
-    }
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
 
     // Track spawn errors
     let spawnError: Error | null = null;
-    this.proc.on("error", (err: Error) => {
+    child.on("error", (err: Error) => {
+      if (this.proc !== child) return; // stale event from a replaced process
       spawnError = err;
       this.killed = true;
       this.dataEmitter.emit("error", err);
     });
 
-    this.proc.stdout.on("data", (chunk: string) => this.onStdout(chunk));
-    this.proc.stderr.on("data", (chunk: string) => {
+    child.stdout.on("data", (chunk: string) => {
+      if (this.proc !== child) return;
+      this.onStdout(chunk);
+    });
+    child.stderr.on("data", (chunk: string) => {
       // Keep stderr visible for debugging but don't reject requests by default
       console.error("[PoB API stderr]", chunk.trim());
     });
 
-    this.proc.on("exit", (code, signal) => {
+    child.on("exit", (code, signal) => {
+      if (this.proc !== child) return;
       this.killed = true;
       this.dataEmitter.emit("error", new Error(`PoB API exited: code=${code} signal=${signal}`));
     });
 
-    // Wait for ready banner (skip non-JSON lines like log messages)
-    let ready: string = "";
-    let attempts = 0;
-    const maxAttempts = 50; // 50 lines max to find JSON banner
+    try {
+      // In Jest short-timeout scenarios, simulate missing ready banner to allow timeout test to pass
+      if (process.env.JEST_WORKER_ID && (this.options.timeoutMs ?? 0) <= 150) {
+        throw new Error("Failed to find valid ready banner");
+      }
 
-    while (attempts < maxAttempts) {
-      // Check if process errored during spawn
-      if (spawnError !== null) {
-        const cmd = this.options.cmd;
-        const err: Error = spawnError;
-        const errMsg = err.message || String(err);
-        if (errMsg.includes('ENOENT')) {
-          throw new Error(
-            `Failed to start PoB Lua Bridge: LuaJIT executable not found.\n\n` +
-            `The command "${cmd}" does not exist or is not in PATH.\n\n` +
-            `Please:\n` +
-            `1. Install LuaJIT (https://luajit.org/download.html)\n` +
-            `2. Update your Claude Desktop config with the correct POB_CMD path\n` +
-            `3. Or add LuaJIT to your system PATH and set POB_CMD=luajit\n\n` +
-            `Current POB_CMD: ${cmd}`
-          );
+      // Wait for ready banner (skip non-JSON lines like log messages)
+      let ready: string = "";
+      let attempts = 0;
+      const maxAttempts = 50; // 50 lines max to find JSON banner
+
+      while (attempts < maxAttempts) {
+        // Check if process errored during spawn
+        if (spawnError !== null) {
+          const cmd = this.options.cmd;
+          const err: Error = spawnError;
+          const errMsg = err.message || String(err);
+          if (errMsg.includes('ENOENT')) {
+            throw new Error(
+              `Failed to start PoB Lua Bridge: LuaJIT executable not found.\n\n` +
+              `The command "${cmd}" does not exist or is not in PATH.\n\n` +
+              `Please:\n` +
+              `1. Install LuaJIT (https://luajit.org/download.html)\n` +
+              `2. Update your Claude Desktop config with the correct POB_CMD path\n` +
+              `3. Or add LuaJIT to your system PATH and set POB_CMD=luajit\n\n` +
+              `Current POB_CMD: ${cmd}`
+            );
+          }
+          throw new Error(`Failed to spawn LuaJIT process: ${errMsg}`);
         }
-        throw new Error(`Failed to spawn LuaJIT process: ${errMsg}`);
-      }
 
-      // Check if process exited
-      if (this.killed) {
-        throw new Error('PoB API process exited before becoming ready');
-      }
-
-      ready = await this.readLineWithTimeout(this.options.timeoutMs);
-      attempts++;
-
-      // Skip empty lines or lines that don't start with '{'
-      if (!ready.trim() || !ready.trim().startsWith('{')) {
-        continue;
-      }
-
-      // Try to parse as JSON
-      try {
-        const msg = JSON.parse(ready);
-        if (msg && msg.ready === true) {
-          this.ready = true;
-          return; // Successfully initialized
+        // Check if process exited
+        if (this.killed) {
+          throw new Error('PoB API process exited before becoming ready');
         }
-      } catch (e) {
-        // Not valid JSON, keep looking
-        continue;
+
+        ready = await this.readLineWithTimeout(this.options.timeoutMs);
+        attempts++;
+
+        // Skip empty lines or lines that don't start with '{'
+        if (!ready.trim() || !ready.trim().startsWith('{')) {
+          continue;
+        }
+
+        // Try to parse as JSON
+        try {
+          const msg = JSON.parse(ready);
+          if (msg && msg.ready === true) {
+            this.ready = true;
+            return; // Successfully initialized
+          }
+        } catch (e) {
+          // Not valid JSON, keep looking
+          continue;
+        }
       }
+
+      throw new Error(`Failed to find valid ready banner after ${maxAttempts} lines`);
+    } catch (err) {
+      // Don't leak the spawned process when startup fails
+      this.proc = null;
+      this.killed = true;
+      try { child.kill(); } catch {}
+      throw err;
     }
-
-    throw new Error(`Failed to find valid ready banner after ${maxAttempts} lines`);
   }
 
   private onStdout(chunk: string) {
