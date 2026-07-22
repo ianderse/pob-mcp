@@ -59,8 +59,8 @@ export async function handlePlanLeveling(
   if (luaClient) {
     try {
       const info = await luaClient.getBuildInfo();
-      className = className || info.class;
-      ascendancy = ascendancy || info.ascendancy;
+      className = className || info.className;
+      ascendancy = ascendancy || info.ascendClassName;
 
       if (!mainSkill) {
         const skills = await luaClient.getSkills();

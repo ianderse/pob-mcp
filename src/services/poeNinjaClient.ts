@@ -121,6 +121,7 @@ export interface ArbitrageOpportunity {
  */
 export class PoeNinjaClient {
   private baseUrl = 'https://poe.ninja/poe1/api/economy/exchange/current';
+  private legacyBaseUrl = 'https://poe.ninja/api/data';
   private cache = new Map<string, { data: any; timestamp: number }>();
   private cacheTTL = 300000; // 5 minutes
 
@@ -192,25 +193,61 @@ export class PoeNinjaClient {
   }
 
   /**
+   * Get currency rates including bid/ask spread (pay/receive) for a league.
+   *
+   * The current exchange endpoint only exposes a single chaos-equivalent rate,
+   * which is useless for arbitrage (buy==sell → every round trip is exactly 1.0).
+   * The legacy currencyoverview endpoint still returns per-currency pay/receive
+   * objects, so the arbitrage path fetches from it instead.
+   */
+  async getCurrencyRatesWithSpread(league: string): Promise<CurrencyOverview> {
+    const cacheKey = `currency-spread:${league}`;
+    const cached = this.getFromCache(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const url = `${this.legacyBaseUrl}/currencyoverview?league=${encodeURIComponent(league)}&type=Currency`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'pob-mcp-server/1.0',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`poe.ninja API request failed (${response.status}): ${await response.text()}`);
+    }
+
+    const raw = (await response.json()) as Partial<CurrencyOverview> | null;
+    const data: CurrencyOverview = {
+      lines: Array.isArray(raw?.lines) ? raw!.lines : [],
+      currencyDetails: Array.isArray(raw?.currencyDetails) ? raw!.currencyDetails : [],
+    };
+    this.putInCache(cacheKey, data);
+    return data;
+  }
+
+  /**
    * Find arbitrage opportunities using bid/ask spread from currency exchange rates.
    *
    * Real arbitrage requires separate buy and sell rates. poe.ninja provides:
    *   receive.value = chaos received per unit sold (sell/ask rate)
-   *   pay.value     = chaos paid per unit bought (buy/bid rate)
+   *   pay.value     = units of this currency per chaos paid (buy/bid rate, inverted)
    *
    * For a round-trip A→chaos→B→chaos→A to be profitable:
    *   (sellRate[A] / buyRate[B]) * (sellRate[B] / buyRate[A]) > 1
    *
-   * When buy==sell (no spread data), round-trips always return exactly 1 (0% profit).
+   * Lines without both pay and receive are skipped — when buy==sell (no spread
+   * data), round-trips always return exactly 1 (0% profit), which would silently
+   * read as "no arbitrage".
    */
   async findArbitrageOpportunities(league: string, minProfitPercent: number = 1.0): Promise<ArbitrageOpportunity[]> {
-    const overview = await this.getCurrencyRates(league);
+    const overview = await this.getCurrencyRatesWithSpread(league);
     const opportunities: ArbitrageOpportunity[] = [];
 
     // Build separate buy-rate and sell-rate maps (all in chaos per unit).
     // sell = chaos you receive per unit when selling
     // buy  = chaos you pay per unit when buying
-    // Fall back to chaosEquivalent for both when pay/receive unavailable.
     const sellRate = new Map<string, number>(); // chaos received when selling 1 unit
     const buyRate  = new Map<string, number>(); // chaos spent when buying  1 unit
 
@@ -219,20 +256,26 @@ export class PoeNinjaClient {
 
     for (const line of overview.lines) {
       const name = line.currencyTypeName;
-      if (!name || line.chaosEquivalent <= 0) continue;
+      if (!name) continue;
 
       // receive.value: chaos per unit of this currency (sell side)
-      const sell = line.receive?.value ?? line.chaosEquivalent;
-      // pay.value: chaos per unit of this currency when buying (buy side)
-      // poe.ninja pay.value is expressed as [units-of-currency per chaos], so invert it.
-      const buy = line.pay?.value
-        ? 1 / line.pay.value          // convert [currency/chaos] → [chaos/currency]
-        : line.chaosEquivalent;       // fallback: assume no spread
+      const sell = line.receive?.value;
+      // pay.value: expressed as [units-of-currency per chaos], so invert it
+      // to get chaos per unit of this currency when buying (buy side).
+      const pay = line.pay?.value;
 
-      if (sell > 0 && buy > 0) {
+      if (sell != null && sell > 0 && pay != null && pay > 0) {
         sellRate.set(name, sell);
-        buyRate.set(name, buy);
+        buyRate.set(name, 1 / pay);
       }
+    }
+
+    // Only Chaos Orb present means no line carried pay/receive data. Returning
+    // an empty list here would falsely read as "no arbitrage opportunities".
+    if (sellRate.size <= 1) {
+      throw new Error(
+        `poe.ninja spread data (pay/receive rates) unavailable for league "${league}" — cannot compute arbitrage opportunities`
+      );
     }
 
     const currencies = Array.from(sellRate.keys());

@@ -164,7 +164,7 @@ export class BuildService {
     // Notes
     if (build.Notes) {
       summary += "=== Notes ===\n";
-      summary += build.Notes.trim() + "\n";
+      summary += String(build.Notes).trim() + "\n";
     }
 
     return summary;
@@ -437,16 +437,24 @@ export class BuildService {
    * Extracts all equipped flasks with their mods and identifies immunities
    */
   parseFlasks(build: PoBBuild): FlaskAnalysis | null {
-    if (!build.Items?.ItemSet?.Slot) {
+    // Handle single ItemSet or array of ItemSets (pick the active set, else the first)
+    const itemSetRaw = build.Items?.ItemSet;
+    const itemSets: any[] = itemSetRaw
+      ? (Array.isArray(itemSetRaw) ? itemSetRaw : [itemSetRaw])
+      : [];
+    const activeItemSetId = String((build.Items as any)?.activeItemSet ?? '1');
+    const activeItemSet = itemSets.find((is: any) => String(is.id) === activeItemSetId) ?? itemSets[0];
+
+    if (!activeItemSet?.Slot) {
       return null;
     }
 
     // Build a map of items by ID
     const itemMap = new Map<string, string>();
-    if (build.Items.Item) {
-      const items = Array.isArray(build.Items.Item)
-        ? build.Items.Item
-        : [build.Items.Item];
+    if (build.Items!.Item) {
+      const items = Array.isArray(build.Items!.Item)
+        ? build.Items!.Item
+        : [build.Items!.Item];
 
       for (const item of items) {
         if (item.id && item['#text']) {
@@ -455,12 +463,12 @@ export class BuildService {
       }
     }
 
-    const slots = Array.isArray(build.Items.ItemSet.Slot)
-      ? build.Items.ItemSet.Slot
-      : [build.Items.ItemSet.Slot];
+    const slots: any[] = Array.isArray(activeItemSet.Slot)
+      ? activeItemSet.Slot
+      : [activeItemSet.Slot];
 
     // Find flask slots (Flask 1-5)
-    const flaskSlots = slots.filter(slot =>
+    const flaskSlots = slots.filter((slot: any) =>
       slot.name && slot.name.startsWith('Flask ')
     );
 
@@ -785,6 +793,20 @@ export class BuildService {
 
     const itemSet = build.Items.ItemSet;
     const slots = itemSet.Slot ? (Array.isArray(itemSet.Slot) ? itemSet.Slot : [itemSet.Slot]) : [];
+
+    // Build a map of items by ID so slots referencing an itemId can be resolved
+    const jewelItemMap = new Map<string, string>();
+    if (build.Items.Item) {
+      const items = Array.isArray(build.Items.Item)
+        ? build.Items.Item
+        : [build.Items.Item];
+
+      for (const item of items) {
+        if (item.id && item['#text']) {
+          jewelItemMap.set(item.id, item['#text']);
+        }
+      }
+    }
     const socketMappings = itemSet.SocketIdURL ? (Array.isArray(itemSet.SocketIdURL) ? itemSet.SocketIdURL : [itemSet.SocketIdURL]) : [];
 
     // Build a map of itemId -> socket info
@@ -815,10 +837,17 @@ export class BuildService {
 
     // Parse jewels from slots
     for (const slot of slots) {
-      if (!slot.Item || !slot.name) continue;
+      if (!slot.name) continue;
+
+      // Get item text either from inline Item or by looking up itemId
+      let itemText = slot.Item;
+      if (!itemText && slot.itemId) {
+        itemText = jewelItemMap.get(slot.itemId);
+      }
+
+      if (!itemText) continue;
 
       // Check if this is a jewel slot (by item text containing "Jewel")
-      const itemText = slot.Item;
       if (!itemText.includes('Jewel')) continue;
 
       const jewel = this.parseJewelItem(itemText, slot.itemId);

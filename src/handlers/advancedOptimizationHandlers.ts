@@ -34,6 +34,9 @@ export async function handleAnalyzeItems(
     let stats: BuildStats | undefined;
 
     // Try to use Lua client for accurate data if available
+    try {
+      await context.ensureLuaClient();
+    } catch { /* Lua unavailable — fall back to XML below */ }
     const luaClient = context.getLuaClient();
 
     if (luaClient) {
@@ -41,7 +44,6 @@ export async function handleAnalyzeItems(
       // Preserves any select_spec / select_item_set changes made in the current session.
       if (buildName) {
         const fs = await import('fs/promises');
-        const path = await import('path');
         let needsLoad = true;
         try {
           const info = await luaClient.getBuildInfo();
@@ -52,9 +54,13 @@ export async function handleAnalyzeItems(
           }
         } catch { /* no build loaded yet */ }
         if (needsLoad) {
-          const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
-          const xml = await fs.readFile(buildPath, 'utf-8');
-          await luaClient.loadBuildXml(xml, buildName);
+          try {
+            const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
+            const xml = await fs.readFile(buildPath, 'utf-8');
+            await luaClient.loadBuildXml(xml, buildName);
+          } catch {
+            // Build file not found — use whichever build is currently loaded in Lua bridge
+          }
         }
       }
 
@@ -166,16 +172,22 @@ export async function handleOptimizeSkillLinks(
     let buildArchetype = 'unknown';
 
     // Try Lua client first for accurate data
+    try {
+      await context.ensureLuaClient();
+    } catch { /* Lua unavailable — fall back to XML below */ }
     const luaClient = context.getLuaClient();
 
     if (luaClient) {
       // Load build if buildName provided
       if (buildName) {
         const fs2 = await import('fs/promises');
-        const path2 = await import('path');
-        const buildPath = path2.join(context.pobDirectory, buildName);
-        const xml = await fs2.readFile(buildPath, 'utf-8');
-        await luaClient.loadBuildXml(xml, buildName);
+        try {
+          const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
+          const xml = await fs2.readFile(buildPath, 'utf-8');
+          await luaClient.loadBuildXml(xml, buildName);
+        } catch {
+          // Build file not found — use whichever build is currently loaded in Lua bridge
+        }
       }
 
       try {

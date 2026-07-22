@@ -72,11 +72,11 @@ export class BuildExportService {
     // Generate XML
     const xmlContent = this.buildToXML(buildData);
 
-    // Determine output path
+    // Determine output path (sanitized to prevent path traversal outside targetDir)
     const fileName = options.outputName.endsWith('.xml')
       ? options.outputName
       : `${options.outputName}.xml`;
-    const filePath = path.join(targetDir, fileName);
+    const filePath = sanitizeBuildName(fileName, targetDir);
 
     // Check if file exists and handle overwrite
     await this.safeWrite(filePath, xmlContent, options.overwrite || false);

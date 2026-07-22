@@ -73,10 +73,10 @@ export class PoBLuaApiClient {
 
     const env = {
       ...process.env,
-      ...this.options.env,
       POB_API_STDIO: "1",
       LUA_PATH: `${runtimeLuaPath}${path.sep}?.lua${luaSep}${runtimeLuaPath}${path.sep}?${path.sep}init.lua${luaSep}${luaSep}`,
       LUA_CPATH: `${runtimeDir}${path.sep}?.${luaExt}${luaSep}${luaRocksPath}${path.sep}?.${luaExt}${luaSep}${luaSep}`,
+      ...this.options.env,
     } as NodeJS.ProcessEnv;
 
     let child: ChildProcessWithoutNullStreams;
@@ -93,6 +93,10 @@ export class PoBLuaApiClient {
 
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
+
+    // EPIPE from a write racing process death must not crash the server;
+    // the 'exit' handler below already surfaces the failure via dataEmitter.
+    child.stdin.on("error", () => {});
 
     // Track spawn errors
     let spawnError: Error | null = null;
@@ -249,7 +253,21 @@ export class PoBLuaApiClient {
       const maxAttempts = 100;
 
       while (attempts < maxAttempts) {
-        const line = await this.readLineWithTimeout(this.options.timeoutMs);
+        let line: string;
+        try {
+          line = await this.readLineWithTimeout(this.options.timeoutMs);
+        } catch (err) {
+          // A timed-out request leaves the protocol desynced: the late reply
+          // would be consumed as the answer to the NEXT request. Kill the
+          // process so the manager restarts from a clean state instead.
+          if (err instanceof Error && /Timed out/.test(err.message)) {
+            this.killed = true;
+            this.buffer = "";
+            try { this.proc?.kill(); } catch {}
+            throw new Error("Timed out waiting for response; the PoB bridge was terminated to avoid protocol desync and will restart on the next call");
+          }
+          throw err;
+        }
         attempts++;
 
         // Skip empty lines or lines that don't look like JSON (debug messages, etc.)
@@ -461,6 +479,22 @@ async setTree(params: {
     const res = await this.send({ action: "get_mastery_options" });
     if (!res.ok) throw new Error(res.error || "get_mastery_options failed");
     return res.result;
+  }
+
+  async evaluateAnointCandidates(params: { slot: string; focus?: 'dps' | 'defence' | 'both'; limit?: number }): Promise<{
+    candidates: Array<{ nodeId: number | string; name: string; dpsDelta: number; ehpDelta: number; score: number; recipe?: string[] }>;
+    base: { CombinedDPS: number; TotalEHP: number }; evaluated: number; skipped: number; slot: string; baseType: string; focus: string;
+  }> {
+    const res = await this.send({ action: 'evaluate_anoint_candidates', params });
+    if (!res.ok) throw new Error(res.error || 'evaluate_anoint_candidates failed');
+    return res as any;
+  }
+
+  async generateWeightedTradeQuery(slot: string, options?: Record<string, unknown>): Promise<{ query: unknown; warning?: string }> {
+    const res = await this.send({ action: 'generate_weighted_trade_query', params: { slot, options: options || {} } });
+    if (!res.ok) throw new Error(res.error || 'generate_weighted_trade_query failed');
+    const query = typeof res.query === 'string' ? JSON.parse(res.query) : res.query;
+    return { query, warning: typeof res.warning === 'string' ? res.warning : undefined };
   }
 
   async createSpec(params?: { title?: string; copyFrom?: number; activate?: boolean }): Promise<any> {

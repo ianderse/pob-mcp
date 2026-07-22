@@ -7,9 +7,11 @@ import { join, resolve } from 'node:path';
 
 if (!process.env.POB_FORK_PATH) throw new Error('POB_FORK_PATH must point to vanilla PoB src.');
 const buildsDir = await mkdtemp(join(tmpdir(), 'pob-mcp-vanilla-'));
+const weightedSmoke = process.env.POE_WEIGHTED_SMOKE === 'true';
 await cp(resolve('example-build.xml'), join(buildsDir, 'example.xml'));
+await cp(resolve(process.env.POB_FORK_PATH, '../spec/TestBuilds/3.13/OccVortex.xml'), join(buildsDir, 'occ-vortex.xml'));
 const child = spawn('node', [resolve('build/index.js')], {
-  env: { ...process.env, POB_DIRECTORY: buildsDir, POB_LUA_ENABLED: 'true', POB_VANILLA: 'true' },
+  env: { ...process.env, POB_DIRECTORY: buildsDir, POB_LUA_ENABLED: 'true', POB_VANILLA: 'true', ...(weightedSmoke ? { POE_TRADE_ENABLED: 'true' } : {}) },
   stdio: ['pipe', 'pipe', 'pipe'],
 });
 let buffer = ''; let nextId = 1; const pending = new Map();
@@ -38,7 +40,7 @@ try {
   if (rejected.result?.isError !== true) throw new Error(`MCP errors must set isError: ${JSON.stringify(rejected)}`);
   const invalidChain = await request('tools/call', { name: 'calculate_trading_profit', arguments: { league: 'Standard', currency_chain: ['Chaos Orb'] } });
   if (invalidChain.result?.isError !== true) throw new Error(`handler errors must set isError: ${JSON.stringify(invalidChain)}`);
-  for (const name of ['lua_get_capabilities', 'lua_get_build_snapshot', 'lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats', 'lua_get_tree', 'lua_set_tree', 'lua_get_build_info', 'get_equipped_items', 'get_skill_setup']) {
+  for (const name of ['lua_get_capabilities', 'lua_get_build_snapshot', 'lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats', 'lua_get_tree', 'lua_set_tree', 'lua_get_build_info', 'get_equipped_items', 'get_skill_setup', 'find_best_anointment']) {
     if (!names.has(name)) throw new Error(`missing vanilla MCP tool: ${name}`);
   }
   for (const name of ['add_item', 'toggle_flask', 'set_config']) {
@@ -71,6 +73,19 @@ try {
         throw new Error(`snapshot did not report the expected passive-tree state: ${text}`);
       }
     }
+  }
+  const anointLoad = await request('tools/call', { name: 'lua_load_build', arguments: { build_name: 'occ-vortex.xml' } });
+  if (anointLoad.error || anointLoad.result?.isError) throw new Error(`anoint fixture load failed: ${JSON.stringify(anointLoad.error ?? anointLoad.result)}`);
+  const anoints = await request('tools/call', { name: 'find_best_anointment', arguments: { slot: 'Amulet', focus: 'both', max_results: 3 } });
+  if (anoints.error || anoints.result?.isError) throw new Error(`find_best_anointment failed: ${JSON.stringify(anoints.error ?? anoints.result)}`);
+  const anointText = anoints.result?.content?.[0]?.text || '';
+  if (!anointText.includes('=== Best Anointment') || !anointText.includes('Evaluated ')) throw new Error(`anoint response was incomplete: ${anointText}`);
+  if (weightedSmoke) {
+    if (!process.env.POE_SESSION_ID) throw new Error('POE_SESSION_ID is required for the weighted vanilla smoke test.');
+    const weighted = await request('tools/call', { name: 'find_weighted_trade_items', arguments: { league: 'Standard', slot: 'Amulet', limit: 1 } });
+    if (weighted.error || weighted.result?.isError) throw new Error(`find_weighted_trade_items failed: ${JSON.stringify(weighted.error ?? weighted.result)}`);
+    const weightedText = weighted.result?.content?.[0]?.text || '';
+    if (!weightedText.includes('=== Weighted BIS Search (Standard, slot: Amulet) ===')) throw new Error(`weighted trade response was incomplete: ${weightedText}`);
   }
   console.log('vanilla MCP passed: capabilities, snapshot, load, stats, items, skills, tree mutation/restore, and build info all succeeded');
 } finally {

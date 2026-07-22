@@ -200,15 +200,6 @@ function analyzeItemSlot(
     }
   }
 
-  // Flask slots
-  if (slot.includes('Flask')) {
-    if (!item.name || item.name.includes('empty')) {
-      analysis.issues.push('Flask slot is empty');
-      analysis.priority = 'medium';
-      analysis.suggestions.push('Use utility flasks for damage/defense boosts');
-    }
-  }
-
   // Set priority based on issues
   if (analysis.issues.length > 0 && analysis.priority === 'low') {
     analysis.priority = 'medium';

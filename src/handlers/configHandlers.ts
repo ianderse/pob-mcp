@@ -17,6 +17,16 @@ export interface ConfigPresetContext {
 
 const PRESET_DIR_NAME = '.pob-mcp-presets';
 
+// Parameters BuildOps.lua's set_config actually handles (keep in sync)
+const SUPPORTED_CONFIG_PARAMS = new Set([
+  'bandit', 'pantheonMajorGod', 'pantheonMinorGod', 'enemyLevel',
+  'enemyFireResist', 'enemyColdResist', 'enemyLightningResist', 'enemyChaosResist',
+  'enemyArmour', 'enemyEvasion',
+  'usePowerCharges', 'useFrenzyCharges', 'useEnduranceCharges',
+  'conditionShockedGround', 'conditionFortify', 'conditionLeeching',
+  'buffOnslaught', 'enemyIsBoss',
+]);
+
 async function getPresetPath(pobDirectory: string, name: string): Promise<string> {
   const dir = path.join(pobDirectory, PRESET_DIR_NAME);
   await fs.mkdir(dir, { recursive: true });
@@ -141,10 +151,16 @@ export async function handleSetConfig(
 
   let output = `=== Configuration Updated ===\n\n`;
   output += `${args.config_name}:\n`;
-  output += `  Old Value: ${formatValue(oldValue)}\n`;
+  if (oldValue !== undefined) {
+    output += `  Old Value: ${formatValue(oldValue)}\n`;
+  }
   output += `  New Value: ${formatValue(args.value)}\n\n`;
 
-  if (newStats.TotalDPS) {
+  if (!SUPPORTED_CONFIG_PARAMS.has(args.config_name)) {
+    output += `⚠️ "${args.config_name}" is not a known set_config parameter — this parameter may not be supported and the change may have had no effect.\n\n`;
+  }
+
+  if (newStats.TotalDPS != null) {
     output += `=== Current Stats ===\n`;
     output += `Total DPS: ${formatNumber(newStats.TotalDPS)}\n`;
     if (newStats.Life) output += `Life: ${formatNumber(newStats.Life)}\n`;
@@ -184,39 +200,43 @@ export async function handleSetEnemyStats(
     throw new Error("Lua bridge not active. Use lua_start and lua_load_build first.");
   }
 
-  // Get current DPS before changes
+  // Get current DPS and config before changes
   const oldStats = await luaClient.getStats(['TotalDPS', 'CombinedDPS', 'Life', 'EnergyShield']);
+  let currentConfig: Record<string, any> = {};
+  try {
+    currentConfig = await luaClient.getConfig() ?? {};
+  } catch { /* old values unavailable — omit them from output */ }
 
   // Build config update params
   const params: Record<string, any> = {};
   const changesSummary: Array<{key: string; old: any; new: any}> = [];
 
   if (args.level !== undefined) {
-    changesSummary.push({ key: "Enemy Level", old: 84, new: args.level });
+    changesSummary.push({ key: "Enemy Level", old: currentConfig.enemyLevel, new: args.level });
     params.enemyLevel = args.level;
   }
   if (args.fire_resist !== undefined) {
-    changesSummary.push({ key: "Fire Resist", old: 40, new: args.fire_resist });
+    changesSummary.push({ key: "Fire Resist", old: currentConfig.enemyFireResistance, new: args.fire_resist });
     params.enemyFireResist = args.fire_resist;
   }
   if (args.cold_resist !== undefined) {
-    changesSummary.push({ key: "Cold Resist", old: 40, new: args.cold_resist });
+    changesSummary.push({ key: "Cold Resist", old: currentConfig.enemyColdResistance, new: args.cold_resist });
     params.enemyColdResist = args.cold_resist;
   }
   if (args.lightning_resist !== undefined) {
-    changesSummary.push({ key: "Lightning Resist", old: 40, new: args.lightning_resist });
+    changesSummary.push({ key: "Lightning Resist", old: currentConfig.enemyLightningResistance, new: args.lightning_resist });
     params.enemyLightningResist = args.lightning_resist;
   }
   if (args.chaos_resist !== undefined) {
-    changesSummary.push({ key: "Chaos Resist", old: 20, new: args.chaos_resist });
+    changesSummary.push({ key: "Chaos Resist", old: currentConfig.enemyChaosResistance, new: args.chaos_resist });
     params.enemyChaosResist = args.chaos_resist;
   }
   if (args.armor !== undefined) {
-    changesSummary.push({ key: "Armor", old: 0, new: args.armor });
+    changesSummary.push({ key: "Armor", old: currentConfig.enemyArmour, new: args.armor });
     params.enemyArmour = args.armor;
   }
   if (args.evasion !== undefined) {
-    changesSummary.push({ key: "Evasion", old: 0, new: args.evasion });
+    changesSummary.push({ key: "Evasion", old: currentConfig.enemyEvasion, new: args.evasion });
     params.enemyEvasion = args.evasion;
   }
 
@@ -231,7 +251,11 @@ export async function handleSetEnemyStats(
 
   for (const change of changesSummary) {
     const suffix = change.key.includes("Resist") ? "%" : "";
-    output += `${change.key}: ${change.old}${suffix} → ${change.new}${suffix}\n`;
+    if (change.old != null) {
+      output += `${change.key}: ${change.old}${suffix} → ${change.new}${suffix}\n`;
+    } else {
+      output += `${change.key}: ${change.new}${suffix}\n`;
+    }
   }
 
   output += `\n=== DPS Update ===\n`;

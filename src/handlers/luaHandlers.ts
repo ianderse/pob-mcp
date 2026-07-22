@@ -249,9 +249,12 @@ export async function handleLuaGetStats(context: LuaHandlerContext, category?: s
     const textLines: string[] = ['=== PoB Calculated Stats ===', ''];
 
     if (stats && typeof stats === 'object') {
-      // Filter out zero/null/undefined values to reduce noise
-      const nonZero = (v: unknown) => v != null && v !== 0 && v !== '0';
-      const entries = Object.entries(stats).filter(([, v]) => nonZero(v));
+      // In 'all' mode filter out zero values to reduce noise; specific
+      // categories keep zeros (e.g. ChaosResist 0 is meaningful)
+      const isAllMode = !category || category === 'all';
+      const keep = (v: unknown) =>
+        v != null && (!isAllMode || (v !== 0 && v !== '0'));
+      const entries = Object.entries(stats).filter(([, v]) => keep(v));
 
       // Group by offense/defense if showing all
       if (!category || category === 'all') {
@@ -299,7 +302,7 @@ export async function handleLuaGetStats(context: LuaHandlerContext, category?: s
           }
         }
       } else {
-        // Just show the requested category, skip zeros
+        // Just show the requested category (zeros included)
         const maxStats = 50;
         let shown = 0;
         for (const [key, value] of entries) {

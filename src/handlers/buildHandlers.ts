@@ -3,7 +3,6 @@ import type { TreeService } from "../services/treeService.js";
 import type { ValidationService } from "../services/validationService.js";
 import type { TreeAnalysisResult } from "../types.js";
 import type { HandlerContext } from "../utils/contextBuilder.js";
-import path from "path";
 import fs from "fs/promises";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { sanitizeBuildName } from "../utils/pathSanitizer.js";
@@ -237,7 +236,7 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
   // saved state matches what the user sees in PoB and avoids reporting wrong stats
   // (e.g. resistances from a different gear set than the one the user expects).
   const loadEndgame = async (luaClient: any, buildName: string) => {
-    const buildPath = path.join(context.pobDirectory, buildName);
+    const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
     const buildXml = await fs.readFile(buildPath, 'utf-8');
     const displayName = buildName.replace(/\.xml$/i, '').split(/[/\\]/).pop() ?? buildName;
     await luaClient.loadBuildXml(buildXml, displayName);
@@ -268,15 +267,37 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
   let luaOk = false;
   let r1: any = null;
   let r2: any = null;
+  let luaClient: any = null;
   try {
     await context.ensureLuaClient();
-    const luaClient = context.getLuaClient();
-    if (luaClient) {
+    luaClient = context.getLuaClient();
+  } catch { /* Lua unavailable — fall through to XML */ }
+
+  if (luaClient) {
+    // Never replace a *different* in-memory build (data-loss risk) — comparing
+    // loads both builds into the bridge, which would clobber unsaved work.
+    const basename = (n: string) => n.replace(/\.xml$/i, '').split(/[/\\]/).pop() ?? n;
+    let loadedName = '';
+    try {
+      const info = await luaClient.getBuildInfo();
+      loadedName = info?.name ?? '';
+    } catch { /* no build loaded yet — safe to load */ }
+    if (loadedName) {
+      const loaded = basename(loadedName);
+      if (loaded !== basename(build1Name) && loaded !== basename(build2Name)) {
+        throw new Error(
+          `A different build ("${loadedName}") is currently loaded in the Lua bridge and may have unsaved changes. ` +
+          `compare_builds would replace it. Save it first with lua_save_build, then re-run compare_builds.`
+        );
+      }
+    }
+
+    try {
       r1 = await loadEndgame(luaClient, build1Name);
       r2 = await loadEndgame(luaClient, build2Name);
       luaOk = true;
-    }
-  } catch { /* fall through to XML */ }
+    } catch { /* fall through to XML */ }
+  }
 
   if (luaOk && r1 && r2) {
     const fmtNum = (n: any) =>

@@ -128,8 +128,8 @@ export async function handleSuggestOptimalNodes(
     try {
       const skills = await luaClient.getSkills();
       const allGemNames: string[] = [];
-      if (skills && skills.socketGroups) {
-        for (const group of skills.socketGroups) {
+      if (skills && skills.groups) {
+        for (const group of skills.groups) {
           for (const gem of (group.gems || [])) {
             if (gem.name) allGemNames.push(gem.name.toLowerCase());
           }

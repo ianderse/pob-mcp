@@ -279,10 +279,12 @@ class PoBMCPServer {
             'get_equipped_items', 'get_skill_setup',
           ]);
           tools.push(...getLuaToolSchemas().filter((tool) => vanillaActions.has(tool.name)));
+          tools.push(...getBuildGoalsToolSchemas().filter((tool) => tool.name === 'find_best_anointment'));
         } else {
           tools.push(...getLuaToolSchemas());
           tools.push(...getConfigToolSchemas()); // Phase 9: Config tools (require Lua)
-          tools.push(...getBuildGoalsToolSchemas()); // Build diagnostics (require Lua)
+          // find_best_anointment is backed by a vanilla-adapter-only Lua action
+          tools.push(...getBuildGoalsToolSchemas().filter((tool) => tool.name !== 'find_best_anointment'));
         }
       }
 
@@ -300,7 +302,12 @@ class PoBMCPServer {
 
       // Add Trade API tools if enabled
       if (this.tradeClient) {
-        tools.push(...getTradeToolSchemas());
+        // Weighted search needs the vanilla Lua bridge (query generation) and an
+        // authenticated session (the Trade API rejects anonymous weighted sums)
+        const weightedAvailable = Boolean(process.env.POE_SESSION_ID)
+          && this.luaClientManager.isEnabled()
+          && process.env.POB_VANILLA === 'true';
+        tools.push(...getTradeToolSchemas().filter((tool) => tool.name !== 'find_weighted_trade_items' || weightedAvailable));
       }
 
       // Add poe.ninja API tools (always available)

@@ -148,16 +148,16 @@ const MORE_MULTIPLIER_GEMS = new Set([
   'hypothermia support',
   'trap and mine damage support',
   'multiple totems support',
-  'Exceptional controlled destruction support',
-  'Exceptional elemental focus support',
-  'Exceptional spell echo support',
-  'Exceptional brutality support',
-  'Exceptional swift affliction support',
-  'Exceptional deadly ailments support',
-  'Exceptional void manipulation support',
-  'Exceptional minion damage support',
-  'Exceptional added fire damage support',
-  'Exceptional melee physical damage support',
+  'exceptional controlled destruction support',
+  'exceptional elemental focus support',
+  'exceptional spell echo support',
+  'exceptional brutality support',
+  'exceptional swift affliction support',
+  'exceptional deadly ailments support',
+  'exceptional void manipulation support',
+  'exceptional minion damage support',
+  'exceptional added fire damage support',
+  'exceptional melee physical damage support',
 ]);
 
 /**
@@ -174,10 +174,10 @@ const PENETRATION_GEMS = new Set([
   'hypothermia support', // cold exposure
   'storm brand',         // lightning exposure via some interactions
   'void manipulation support',
-  'Exceptional fire penetration support',
-  'Exceptional cold penetration support',
-  'Exceptional lightning penetration support',
-  'Exceptional void manipulation support',
+  'exceptional fire penetration support',
+  'exceptional cold penetration support',
+  'exceptional lightning penetration support',
+  'exceptional void manipulation support',
 ]);
 
 /**
@@ -185,15 +185,15 @@ const PENETRATION_GEMS = new Set([
  */
 const CLEAR_SPEED_GEMS = new Set([
   'greater multiple projectiles support',
-  'Exceptional greater multiple projectiles support',
+  'exceptional greater multiple projectiles support',
   'chain support',
   'fork support',
-  'Exceptional fork support',
+  'exceptional fork support',
   'pierce support',
   'volley support',
   'lesser multiple projectiles support',
   'spell cascade support',
-  'Exceptional spell cascade support',
+  'exceptional spell cascade support',
   'reap support',
 ]);
 
@@ -202,11 +202,11 @@ const CLEAR_SPEED_GEMS = new Set([
  */
 const BOSSING_GEMS = new Set([
   'concentrated effect support',
-  'Exceptional concentrated effect support',
+  'exceptional concentrated effect support',
   'barrage support',
-  'Exceptional added fire damage support',
-  'Exceptional deadly ailments support',
-  'Exceptional vile toxins support',
+  'exceptional added fire damage support',
+  'exceptional deadly ailments support',
+  'exceptional vile toxins support',
   'empower support',
 ]);
 

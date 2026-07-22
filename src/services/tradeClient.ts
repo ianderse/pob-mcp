@@ -211,6 +211,8 @@ export class TradeApiClient {
       headers: {
         'Content-Type': 'application/json',
         'User-Agent': 'pob-mcp-server/1.0',
+        // The official Trade API rejects anonymous weighted-sum searches
+        ...(process.env.POE_SESSION_ID ? { Cookie: `POESESSID=${process.env.POE_SESSION_ID}` } : {}),
       },
     };
 

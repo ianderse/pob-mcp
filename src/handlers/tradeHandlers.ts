@@ -2,7 +2,7 @@ import { wrapHandler } from '../utils/errorHandling.js';
 import { TradeApiClient } from '../services/tradeClient.js';
 import { TradeQueryBuilder } from '../services/tradeQueryBuilder.js';
 import { StatMapper } from '../services/statMapper.js';
-import { ItemRecommendationEngine, UpgradeContext } from '../services/itemRecommendationEngine.js';
+import { ItemRecommendationEngine } from '../services/itemRecommendationEngine.js';
 import { ItemListing, SearchOptions, ItemRecommendation, ResistanceRequirements, BudgetConstraints } from '../types/tradeTypes.js';
 import { CostBenefitAnalyzer } from '../services/costBenefitAnalyzer.js';
 import { PoeNinjaClient } from '../services/poeNinjaClient.js';
@@ -12,6 +12,27 @@ interface TradeContext {
   statMapper?: StatMapper;
   recommendationEngine?: ItemRecommendationEngine;
   ninjaClient?: PoeNinjaClient;
+}
+
+export async function handleFindWeightedTradeItems(context: TradeContext & { getLuaClient: () => import('../pobLuaBridge.js').PoBLuaApiClient | null; ensureLuaClient: () => Promise<void> }, args: { league: string; slot: string; options?: Record<string, unknown>; limit?: number }) {
+  return wrapHandler('find weighted trade items', async () => {
+    if (!process.env.POE_SESSION_ID) throw new Error('find_weighted_trade_items requires POE_SESSION_ID because the official Trade API rejects anonymous weighted searches.');
+    if (process.env.POB_VANILLA !== 'true') throw new Error('find_weighted_trade_items requires POB_VANILLA=true — only the vanilla PoB adapter can drive TradeQueryGenerator.');
+    await context.ensureLuaClient();
+    const client = context.getLuaClient();
+    if (!client) throw new Error('Lua bridge not active. Load a build first.');
+    const { query, warning } = await client.generateWeightedTradeQuery(args.slot, args.options);
+    if (!query || typeof query !== 'object') throw new Error('PoB returned no trade query');
+    const search = await context.tradeClient.searchItems(args.league, query as any);
+    if (!search.result?.length) return { content: [{ type: 'text' as const, text: `=== Weighted BIS Search (${args.league}, slot: ${args.slot}) ===\nNo items found.${warning ? `\nWarning: ${warning}` : ''}` }] };
+    const items = await context.tradeClient.fetchItems(search.result.slice(0, Math.min(args.limit ?? 5, 10)), search.id);
+    const lines = [`=== Weighted BIS Search (${args.league}, slot: ${args.slot}) ===`, `Total matches: ${search.total} | Showing: ${items.length}`, `🔗 ${getTradeSearchUrl(args.league, search.id)}`, warning ? `Warning: ${warning}` : ''];
+    for (const [index, listing] of items.entries()) {
+      const item = listing.item, price = listing.listing.price;
+      lines.push(`${index + 1}. ${item.name || item.typeLine}${item.name && item.typeLine && item.name !== item.typeLine ? ` (${item.typeLine})` : ''}`, price ? `   Price: ${price.amount} ${price.currency}` : '   Price: unlisted', `   Seller: ${listing.listing.account?.name ?? 'unknown'}`, '');
+    }
+    return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+  });
 }
 
 // ========================================
@@ -470,7 +491,7 @@ async function formatSearchResults(items: ItemListing[], totalResults: number, l
       output += `   Stats: ${statParts.join(', ')}\n`;
     }
 
-    output += `   ${seller.online ? '🟢' : '🔴'} ${seller.name}\n`;
+    output += `   ${seller?.online ? '🟢' : '🔴'} ${seller?.name ?? 'unknown'}\n`;
     output += `   🔗 ${getTradeItemUrl(league, searchId, listing.id)}\n\n`;
   }
 
@@ -479,6 +500,9 @@ async function formatSearchResults(items: ItemListing[], totalResults: number, l
 }
 
 function getMaxLinks(sockets: Array<{ group: number }>): number {
+  if (sockets.length === 0) {
+    return 0;
+  }
   const groups = new Map<number, number>();
   for (const socket of sockets) {
     const count = groups.get(socket.group) || 0;
@@ -567,72 +591,6 @@ export async function handleSearchStats(
 }
 
 // Phase 3: Recommendation Engine Handlers
-
-export async function handleFindItemUpgrades(
-  context: TradeContext,
-  args: any
-): Promise<{ content: Array<{ type: string; text: string }> }> {
-  return wrapHandler('find item upgrades', async () => {
-    const {
-      slot,
-      league,
-      build_needs,
-      current_item,
-      max_price = 100,
-      currency = 'chaos',
-      limit = 5,
-    } = args;
-
-    if (!context.recommendationEngine) {
-      return {
-        content: [{ type: 'text', text: 'Recommendation engine not available.' }],
-      };
-    }
-
-    const upgradeContext: UpgradeContext = {
-      currentItem: current_item ? {
-        name: current_item.name || 'Current Item',
-        slot,
-        life: current_item.life,
-        es: current_item.es,
-        resistances: {
-          fire: current_item.fire_resist,
-          cold: current_item.cold_resist,
-          lightning: current_item.lightning_resist,
-          chaos: current_item.chaos_resist,
-        },
-      } : undefined,
-      buildNeeds: {
-        lifeNeeded: build_needs?.life,
-        esNeeded: build_needs?.es,
-        dpsTarget: build_needs?.dps,
-        resistanceGaps: (build_needs && (build_needs.fire_resist || build_needs.cold_resist || build_needs.lightning_resist)) ? {
-          fire: build_needs.fire_resist || 0,
-          cold: build_needs.cold_resist || 0,
-          lightning: build_needs.lightning_resist || 0,
-          chaos: build_needs.chaos_resist || 0,
-        } : undefined,
-      },
-      budget: {
-        maxPricePerItem: max_price,
-        totalBudget: max_price * 2,
-        currency,
-      },
-      league,
-    };
-
-    const recommendations = await context.recommendationEngine.findUpgrades(slot, upgradeContext);
-
-    if (recommendations.length === 0) {
-      return {
-        content: [{ type: 'text', text: `No upgrade recommendations found for ${slot} in ${league} within budget.` }],
-      };
-    }
-
-    const output = formatItemRecommendations(recommendations.slice(0, limit), slot, league);
-    return { content: [{ type: 'text', text: output }] };
-  });
-}
 
 export async function handleFindResistanceGear(
   context: TradeContext,
@@ -736,7 +694,7 @@ function formatItemRecommendations(
       }
     }
 
-    output += `   ${rec.listing.listing.account.online ? '🟢' : '🔴'} ${rec.listing.listing.account.name}\n`;
+    output += `   ${rec.listing.listing.account?.online ? '🟢' : '🔴'} ${rec.listing.listing.account?.name ?? 'unknown'}\n`;
     output += `   🔗 ${getTradeItemUrl(league, rec.searchId, rec.listing.id)}\n\n`;
   }
 
@@ -801,7 +759,7 @@ function formatResistanceRecommendations(
       }
     }
 
-    output += `   ${rec.listing.listing.account.online ? '🟢' : '🔴'} ${rec.listing.listing.account.name}\n`;
+    output += `   ${rec.listing.listing.account?.online ? '🟢' : '🔴'} ${rec.listing.listing.account?.name ?? 'unknown'}\n`;
     output += `   🔗 ${getTradeItemUrl(league, rec.searchId, rec.listing.id)}\n\n`;
   }
 
@@ -815,6 +773,7 @@ export async function handleCompareTradeItems(
   context: TradeContext,
   args: {
     item_ids: string[];
+    search_id?: string;
     build_context?: {
       life_needed?: number;
       es_needed?: number;
@@ -831,7 +790,7 @@ export async function handleCompareTradeItems(
   }>;
 }> {
   return wrapHandler('compare trade items', async () => {
-    const { item_ids, build_context } = args;
+    const { item_ids, search_id, build_context } = args;
 
     if (!item_ids || item_ids.length === 0) {
       return {
@@ -845,7 +804,7 @@ export async function handleCompareTradeItems(
       };
     }
 
-    const items = await context.tradeClient.fetchItems(item_ids);
+    const items = await context.tradeClient.fetchItems(item_ids, search_id);
 
     if (items.length === 0) {
       return {
@@ -891,8 +850,8 @@ function formatItemComparison(
       coldResist: extractResistValue(item, 'cold'),
       lightningResist: extractResistValue(item, 'lightning'),
       chaosResist: extractResistValue(item, 'chaos'),
-      seller: listing.listing.account.name,
-      online: listing.listing.account.online,
+      seller: listing.listing.account?.name ?? 'unknown',
+      online: listing.listing.account?.online ?? false,
     };
   });
 
@@ -1023,13 +982,13 @@ function extractResistValue(item: any, element: string): number {
     const lowerMod = mod.toLowerCase();
 
     if (lowerMod.includes(element + ' resistance')) {
-      const match = mod.match(/\+?(\d+)%/);
+      const match = mod.match(/(-?\d+)%/);
       if (match) total += parseInt(match[1], 10);
     }
 
     if ((element === 'fire' || element === 'cold' || element === 'lightning') &&
         (lowerMod.includes('all elemental resistances') || lowerMod.includes('to all resistances'))) {
-      const match = mod.match(/\+?(\d+)%/);
+      const match = mod.match(/(-?\d+)%/);
       if (match) total += parseInt(match[1], 10);
     }
   }

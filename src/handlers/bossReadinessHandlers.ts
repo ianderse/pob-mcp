@@ -95,7 +95,7 @@ export async function handleCheckBossReadiness(context: BossReadinessContext, bo
 
   const life = Number(stats.Life ?? 0);
   const ehp = Number(stats.TotalEHP ?? life);
-  const dps = Number(stats.CombinedDPS ?? stats.TotalDPS ?? stats.MinionTotalDPS ?? 0);
+  const dps = Number(stats.CombinedDPS || stats.TotalDPS || stats.MinionTotalDPS || 0);
   const fireRes = Number(stats.FireResist ?? -60);
   const coldRes = Number(stats.ColdResist ?? -60);
   const lightRes = Number(stats.LightningResist ?? -60);

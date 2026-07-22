@@ -506,10 +506,10 @@ export class ValidationService {
       const mainSkill = skillArray[0];
       const gems = Array.isArray(mainSkill.Gem) ? mainSkill.Gem : mainSkill.Gem ? [mainSkill.Gem] : [];
       const supportNames = gems
-        .filter((g: any) => g.name?.toLowerCase().includes('support'))
-        .map((g: any) => (g.name || '').toLowerCase());
+        .filter((g: any) => (g.nameSpec ?? g.name)?.toLowerCase().includes('support'))
+        .map((g: any) => (g.nameSpec ?? g.name ?? '').toLowerCase());
 
-      if (supportNames.length < 2) return; // Not enough gems to evaluate
+      if (supportNames.length < 2) continue; // Not enough gems to evaluate
 
       const moreMultiplierGems = new Set([
         'controlled destruction', 'elemental focus', 'multistrike', 'spell echo',

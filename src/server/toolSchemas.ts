@@ -276,10 +276,17 @@ export function getLuaToolSchemas(): any[] {
         properties: {
           build_name: {
             type: "string",
-            description: "Name of the build file to load",
+            description: "Name of the build file to load. Exactly one of build_name or build_xml must be provided.",
+          },
+          build_xml: {
+            type: "string",
+            description: "Raw PoB build XML to load directly instead of reading a file. Exactly one of build_name or build_xml must be provided.",
+          },
+          name: {
+            type: "string",
+            description: "Display name for the loaded build (optional; defaults to the build filename when build_name is used)",
           },
         },
-        required: ["build_name"],
       },
     },
     {
@@ -296,6 +303,41 @@ export function getLuaToolSchemas(): any[] {
           index: { type: "number", description: "Spec index (1-based, use list_specs to see available specs)" },
         },
         required: ["index"],
+      },
+    },
+    {
+      name: "create_spec",
+      description: "Create a new passive tree spec in the currently loaded build, optionally copying an existing spec. Requires Lua bridge with a loaded build.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Title for the new spec (optional)" },
+          copyFrom: { type: "number", description: "Spec index (1-based) to copy the tree allocation from (optional, use list_specs to see available specs)" },
+          activate: { type: "boolean", description: "Make the new spec active immediately (default: false)" },
+        },
+      },
+    },
+    {
+      name: "delete_spec",
+      description: "Delete a passive tree spec from the currently loaded build. Requires Lua bridge with a loaded build.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          index: { type: "number", description: "Spec index to delete (1-based, use list_specs to see available specs)" },
+        },
+        required: ["index"],
+      },
+    },
+    {
+      name: "rename_spec",
+      description: "Rename a passive tree spec in the currently loaded build. Requires Lua bridge with a loaded build.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          index: { type: "number", description: "Spec index to rename (1-based, use list_specs to see available specs)" },
+          title: { type: "string", description: "New title for the spec" },
+        },
+        required: ["index", "title"],
       },
     },
     {
@@ -435,6 +477,10 @@ export function getLuaToolSchemas(): any[] {
             type: "number",
             description: "Maximum results to return (default: 20)",
           },
+          include_allocated: {
+            type: "boolean",
+            description: "Include nodes that are already allocated in the results (default: false)",
+          },
         },
         required: ["query"],
       },
@@ -453,6 +499,10 @@ export function getLuaToolSchemas(): any[] {
             type: "string",
             description: "Slot to equip in: Weapon 1, Weapon 2, Helmet, Body Armour, Gloves, Boots, Amulet, Ring 1, Ring 2, Belt, Flask 1-5",
             enum: ["Weapon 1", "Weapon 2", "Helmet", "Body Armour", "Gloves", "Boots", "Amulet", "Ring 1", "Ring 2", "Belt", "Flask 1", "Flask 2", "Flask 3", "Flask 4", "Flask 5"],
+          },
+          no_auto_equip: {
+            type: "boolean",
+            description: "Add the item to the build's item list without equipping it in a slot (default: false)",
           },
         },
         required: ["item_text", "slot_name"],
@@ -511,6 +561,10 @@ export function getLuaToolSchemas(): any[] {
             type: "number",
             description: "Active skill index within group (1-based, optional). Selects which active skill in the group to use for DPS calculation — relevant when a group has multiple active skills.",
           },
+          skill_part: {
+            type: "number",
+            description: "Skill part index (1-based, optional). Selects which part of a multi-part skill to use for DPS calculation.",
+          },
         },
         required: ["group_index"],
       },
@@ -533,6 +587,10 @@ export function getLuaToolSchemas(): any[] {
           enabled: {
             type: "boolean",
             description: "Whether group is enabled (default: true)",
+          },
+          include_in_full_dps: {
+            type: "boolean",
+            description: "Include this group's skills in Full DPS totals (default: false)",
           },
         },
         required: ["label"],
@@ -559,6 +617,10 @@ export function getLuaToolSchemas(): any[] {
           quality: {
             type: "number",
             description: "Gem quality % (default: 0)",
+          },
+          quality_type: {
+            type: "string",
+            description: "Type: 'Default', 'Anomalous', 'Divergent', 'Phantasmal' (optional)",
           },
           enabled: {
             type: "boolean",
@@ -649,6 +711,46 @@ export function getLuaToolSchemas(): any[] {
       },
     },
     {
+      name: "toggle_socket_group",
+      description: "Enable or disable an entire socket group. Stats are recalculated. Requires Lua bridge with a loaded build.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          group_index: {
+            type: "number",
+            description: "Socket group index (1-based)",
+          },
+          enabled: {
+            type: "boolean",
+            description: "true to enable the group, false to disable it",
+          },
+        },
+        required: ["group_index", "enabled"],
+      },
+    },
+    {
+      name: "toggle_gem",
+      description: "Enable or disable a single gem within a socket group. Stats are recalculated. Requires Lua bridge with a loaded build.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          group_index: {
+            type: "number",
+            description: "Socket group index (1-based)",
+          },
+          gem_index: {
+            type: "number",
+            description: "Gem index within group (1-based)",
+          },
+          enabled: {
+            type: "boolean",
+            description: "true to enable the gem, false to disable it",
+          },
+        },
+        required: ["group_index", "gem_index", "enabled"],
+      },
+    },
+    {
       name: "setup_skill_with_gems",
       description: "Setup a complete skill with multiple support gems in one operation. Does NOT auto-set as main skill for DPS. Call set_main_skill with the returned group_index afterward if this should be the primary DPS skill.",
       inputSchema: {
@@ -671,6 +773,14 @@ export function getLuaToolSchemas(): any[] {
             type: "string",
             description: "Item slot (optional)",
             enum: ["Weapon 1", "Weapon 2", "Helmet", "Body Armour", "Gloves", "Boots", "Amulet", "Ring 1", "Ring 2", "Belt", "Flask 1", "Flask 2", "Flask 3", "Flask 4", "Flask 5"],
+          },
+          enabled: {
+            type: "boolean",
+            description: "Whether the new group is enabled (default: true)",
+          },
+          include_in_full_dps: {
+            type: "boolean",
+            description: "Include this group's skills in Full DPS totals (default: false)",
           },
         },
         required: ["label", "active_gem", "support_gems"],
@@ -796,9 +906,13 @@ export function getOptimizationToolSchemas(): any[] {
             type: "object",
             description: "Constraints like minimum life, required keystones, etc.",
           },
-          preserve_keystones: {
-            type: "boolean",
-            description: "Whether to preserve allocated keystones (default: true)",
+          max_points: {
+            type: "number",
+            description: "Number of passive points to optimize; caps how many recommended allocations are returned (default: 10)",
+          },
+          max_iterations: {
+            type: "number",
+            description: "Maximum optimization iterations (accepted for forward compatibility; not used by the current analyzer)",
           },
         },
         required: ["build_name", "goal"],
@@ -1279,6 +1393,11 @@ export function getExportToolSchemas(): any[] {
 export function getTradeToolSchemas(): any[] {
   return [
     {
+      name: "find_weighted_trade_items",
+      description: "Find build-specific best-in-slot listings using upstream PoB's native TradeQueryGenerator stat weights. Requires vanilla PoB, a loaded build, POE_TRADE_ENABLED=true, and POE_SESSION_ID (the official Trade API rejects anonymous weighted searches).",
+      inputSchema: { type: "object", properties: { league: { type: "string" }, slot: { type: "string" }, options: { type: "object" }, limit: { type: "number" } }, required: ["league", "slot"] },
+    },
+    {
       name: "search_trade_items",
       description: "Search the Path of Exile trade site for items with filters. Returns matching items with prices, stats, and seller information. Default limit is 5 items to minimize token usage. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
       inputSchema: {
@@ -1405,28 +1524,33 @@ export function getTradeToolSchemas(): any[] {
     },
     {
       name: "compare_trade_items",
-      description: "Compare two trade items side by side with DPS/defense calculations. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
+      description: "Compare trade listings side by side with DPS/defense calculations. Takes listing ids from a prior search_trade_items result. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
       inputSchema: {
         type: "object",
         properties: {
-          item1_name: {
-            type: "string",
-            description: "First item name to compare",
+          item_ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "Listing ids to compare, from a prior search_trade_items result",
           },
-          item2_name: {
+          search_id: {
             type: "string",
-            description: "Second item name to compare",
+            description: "The search id from the same search_trade_items result. Provides the query context expected by the trade fetch endpoint.",
           },
-          league: {
-            type: "string",
-            description: "EXACT league name as specified by user",
-          },
-          slot: {
-            type: "string",
-            description: "Gear slot for context-aware comparison",
+          build_context: {
+            type: "object",
+            description: "Optional build needs for context-aware scoring",
+            properties: {
+              life_needed: { type: "number" },
+              es_needed: { type: "number" },
+              dps_target: { type: "number" },
+              fire_resist_needed: { type: "number" },
+              cold_resist_needed: { type: "number" },
+              lightning_resist_needed: { type: "number" },
+            },
           },
         },
-        required: ["item1_name", "item2_name", "league"],
+        required: ["item_ids"],
       },
     },
     {
@@ -1552,11 +1676,30 @@ export function getBuildGoalsToolSchemas(): any[] {
       inputSchema: { type: "object", properties: {} },
     },
     {
+      name: "find_best_anointment",
+      description: "Rank anointable notables for an equipped Amulet or anointable Belt using upstream PoB's non-destructive live stat simulation. Requires POB_VANILLA=true and a loaded build with the selected item equipped.",
+      inputSchema: { type: "object", properties: { slot: { type: "string", enum: ["Amulet", "Belt"] }, focus: { type: "string", enum: ["dps", "defence", "both"] }, max_results: { type: "number" } }, required: ["slot"] },
+    },
+    {
       name: "analyze_build_cluster_jewels",
       description: "Analyze the cluster jewels currently equipped in the build, evaluate which notables synergize with the build archetype, and flag wasted notables",
       inputSchema: {
         type: "object",
         properties: {},
+      },
+    },
+    {
+      name: "analyze_cluster_jewels",
+      description: "Analyze the cluster jewels in a saved build file: jewel size, passive count, and allocated notables. Reads the build XML directly — does not require the Lua bridge or Trade API.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          build_name: {
+            type: "string",
+            description: "Build file to analyze (e.g., 'MyBuild.xml')",
+          },
+        },
+        required: ["build_name"],
       },
     },
     {

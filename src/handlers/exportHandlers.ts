@@ -216,10 +216,10 @@ export async function handleExportBuildSummary(context: ExportContext) {
   try { tree = await luaClient.getTree(); } catch { /* best effort */ }
 
   const classNames = ['Scion', 'Marauder', 'Ranger', 'Witch', 'Duelist', 'Templar', 'Shadow'];
-  const className = (tree?.classId != null ? classNames[tree.classId] : null) || info?.class || 'Unknown';
+  const className = (tree?.classId != null ? classNames[tree.classId] : null) || info?.className || 'Unknown';
   const buildName = info?.name || 'Unnamed Build';
   const level = info?.level || '?';
-  const ascendancy = info?.ascendancy || '';
+  const ascendancy = info?.ascendClassName || '';
 
   const dps = Number(stats.CombinedDPS || stats.TotalDPS || stats.MinionTotalDPS || 0);
   const dpsLabel = (stats.MinionTotalDPS && !stats.TotalDPS) ? 'Minion DPS' : 'DPS';

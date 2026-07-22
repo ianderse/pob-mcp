@@ -136,7 +136,12 @@ npm run build
 | `POB_CMD` | `luajit` | LuaJIT binary path |
 | `POB_TIMEOUT_MS` | `10000` | Lua request timeout (ms) |
 | `POB_VANILLA` | `false` | Use the built-in compatibility adapter with vanilla PathOfBuildingCommunity `dev` |
+| `POB_DEBUG` | `false` | Set `"true"` for verbose Lua bridge logging |
+| `POB_ARGS` | (none) | Space-separated arguments passed to the Lua process (overrides the default adapter arguments) |
 | `POE_TRADE_ENABLED` | `false` | Enable Trade API tools |
+| `POE_SESSION_ID` | (none) | Your POESESSID cookie value; required for the `find_weighted_trade_items` tool |
+| `POE_CACHE_TTL` | `300` | Trade API response cache TTL in seconds |
+| `POE_RATE_LIMIT_PER_SECOND` | `4` | Trade API requests per second |
 
 ### Setting Up the Lua Bridge
 

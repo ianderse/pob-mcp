@@ -17,6 +17,7 @@ import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBui
 import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handleWatchStatus, handleRefreshTreeData } from "../handlers/watchHandlers.js";
 import { handleCompareTrees, handleGetNearbyNodes, handleFindPath, handleGetPassiveUpgrades, handleSuggestMasteries } from "../handlers/treeHandlers.js";
 import { handleGetBuildIssues, formatIssuesResponse } from "../handlers/buildGoalsHandlers.js";
+import { handleFindBestAnointment } from "../handlers/anointHandlers.js";
 import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaSaveBuild, handleLuaLoadBuild, handleLuaGetStats, handleLuaGetBuildSnapshot, handleLuaGetTree, handleLuaSetTree, handleSearchTreeNodes, handleLuaGetBuildInfo, handleLuaReloadBuild, handleUpdateTreeDelta, handleCreateSpec, handleListSpecs, handleSelectSpec, handleDeleteSpec, handleRenameSpec, handleListItemSets, handleSelectItemSet } from "../handlers/luaHandlers.js";
 import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems, handleSetSocketGroupEnabled, handleSetGemEnabled } from "../handlers/itemSkillHandlers.js";
 import { handleAnalyzeDefenses, handleSuggestOptimalNodes, handleOptimizeTree } from "../handlers/optimizationHandlers.js";
@@ -25,7 +26,7 @@ import { handleGetConfig, handleSetConfig, handleSetEnemyStats, handleSaveConfig
 import { handleValidateBuild } from "../handlers/validationHandlers.js";
 import { handleExportBuild, handleSaveTree, handleSnapshotBuild, handleListSnapshots, handleRestoreSnapshot, handleExportBuildSummary } from "../handlers/exportHandlers.js";
 import { handleAnalyzeSkillLinks, handleSuggestSupportGems, handleCompareGemSetups, handleValidateGemQuality, handleFindOptimalLinks, handleGemUpgradePath } from "../handlers/skillGemHandlers.js";
-import { handleSearchTradeItems, handleGetItemPrice, handleGetLeagues, handleSearchStats, handleFindItemUpgrades, handleFindResistanceGear, handleCompareTradeItems } from "../handlers/tradeHandlers.js";
+import { handleSearchTradeItems, handleGetItemPrice, handleGetLeagues, handleSearchStats, handleFindResistanceGear, handleCompareTradeItems, handleFindWeightedTradeItems } from "../handlers/tradeHandlers.js";
 import { handleGetCurrencyRates, handleFindArbitrage, handleCalculateTradingProfit } from "../handlers/poeNinjaHandlers.js";
 import { handleSearchClusterJewels, handleAnalyzeClusterJewels, handleAnalyzeBuildClusterJewels } from "../handlers/clusterJewelHandlers.js";
 import { handleGenerateShoppingList } from "../handlers/shoppingListHandlers.js";
@@ -526,6 +527,11 @@ export async function routeToolCall(
       return await handleSearchTradeItems(tradeContext, args as any);
     }
 
+    case "find_weighted_trade_items":
+      if (!deps.tradeClient) throw new Error('Trade API is not enabled. Set POE_TRADE_ENABLED=true to enable.');
+      if (!args?.league || !args?.slot) throw new Error('find_weighted_trade_items requires league and slot');
+      return await handleFindWeightedTradeItems({ tradeClient: deps.tradeClient, statMapper: deps.statMapper || undefined, ninjaClient: deps.ninjaClient, getLuaClient: deps.getLuaClient, ensureLuaClient: deps.ensureLuaClient }, args as any);
+
     case "get_item_price": {
       if (!deps.tradeClient) {
         throw new Error("Trade API is not enabled. Set POE_TRADE_ENABLED=true to enable.");
@@ -726,6 +732,10 @@ export async function routeToolCall(
         getLuaClient: deps.getLuaClient,
         ensureLuaClient: deps.ensureLuaClient,
       });
+
+    case "find_best_anointment":
+      if (!args?.slot || typeof args.slot !== 'string') throw new Error('find_best_anointment requires a slot');
+      return await handleFindBestAnointment({ getLuaClient: deps.getLuaClient, ensureLuaClient: deps.ensureLuaClient }, { slot: args.slot, focus: args.focus as 'dps' | 'defence' | 'both' | undefined, max_results: args.max_results as number | undefined });
 
     case "get_build_notes":
       if (!args?.build_name) throw new Error("Missing build_name");

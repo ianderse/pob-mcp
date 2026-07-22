@@ -159,7 +159,7 @@ describe('WatchService', () => {
 
   describe('handleFileChange (via private method access)', () => {
     it('should ignore non-XML files', () => {
-      (watchService as any).handleFileChange('/path/to/file.txt', 'modified');
+      (watchService as any).handleFileChange(`${testDirectory}/file.txt`, 'modified');
 
       // No changes should be tracked
       expect(watchService.getRecentChangesCount()).toBe(0);
@@ -167,7 +167,7 @@ describe('WatchService', () => {
     });
 
     it('should process XML files', (done) => {
-      (watchService as any).handleFileChange('/path/to/build.xml', 'modified');
+      (watchService as any).handleFileChange(`${testDirectory}/build.xml`, 'modified');
 
       // Due to debouncing, wait for setTimeout
       setTimeout(() => {
@@ -178,9 +178,9 @@ describe('WatchService', () => {
     });
 
     it('should debounce rapid changes to same file', (done) => {
-      (watchService as any).handleFileChange('/path/to/build.xml', 'modified');
-      (watchService as any).handleFileChange('/path/to/build.xml', 'modified');
-      (watchService as any).handleFileChange('/path/to/build.xml', 'modified');
+      (watchService as any).handleFileChange(`${testDirectory}/build.xml`, 'modified');
+      (watchService as any).handleFileChange(`${testDirectory}/build.xml`, 'modified');
+      (watchService as any).handleFileChange(`${testDirectory}/build.xml`, 'modified');
 
       setTimeout(() => {
         // Should only process once despite 3 calls

@@ -478,6 +478,7 @@ export class TreeService {
     const pathingNodes = totalNodes - destinationNodes;
 
     if (totalNodes === 0) return "No nodes allocated";
+    if (destinationNodes === 0) return "No keystones, notables, or jewel sockets allocated";
 
     const ratio = pathingNodes / destinationNodes;
 

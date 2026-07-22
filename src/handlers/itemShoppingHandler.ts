@@ -197,8 +197,8 @@ export async function handleFindItemUpgrades(
       try {
         const info = await luaClient.getBuildInfo();
         buildName = info?.name ?? null;
-        buildClass = info?.className && info?.ascendancy
-          ? `${info.className} (${info.ascendancy})`
+        buildClass = info?.className && info?.ascendClassName
+          ? `${info.className} (${info.ascendClassName})`
           : (info?.className ?? null);
       } catch { /* build info unavailable */ }
 
@@ -232,7 +232,7 @@ export async function handleFindItemUpgrades(
           : null;
         if (equipped) {
           currentItemName = equipped.name ?? equipped.title ?? null;
-          currentItemBase = equipped.base ?? null;
+          currentItemBase = equipped.baseName ?? null;
           currentItemRarity = equipped.rarity ?? null;
         }
       } catch { /* items unavailable */ }

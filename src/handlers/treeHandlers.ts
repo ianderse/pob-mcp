@@ -144,7 +144,7 @@ export async function handleGetNearbyNodes(
     const textLines: string[] = [
       `=== Nearby Nodes (within ${distance} nodes) ===`,
       '',
-      `Build: ${buildName}`,
+      `Build: ${buildName || '(in-memory build)'}`,
       `Found ${nearbyNodes.length} nodes`,
       '',
     ];
@@ -215,9 +215,8 @@ export async function handleFindPath(
         }
         allocatedNodeIds = context.buildService.parseAllocatedNodes(build);
         treeVersion = context.buildService.extractBuildVersion(build);
-      } catch (fileErr) {
+      } catch {
         // Fall through to Lua fallback
-        if (buildName) throw fileErr; // Re-throw if explicitly requested
       }
     }
 
@@ -284,7 +283,7 @@ export async function handleFindPath(
     const textLines: string[] = [
       `=== Path to ${targetNode.name || "Node " + targetNodeId} ===`,
       '',
-      `Build: ${buildName}`,
+      `Build: ${buildName || '(in-memory build)'}`,
       `Target: ${targetNode.name || "Unknown"} [${targetNodeId}]`,
     ];
     if (targetNode.isKeystone) textLines.push('Type: KEYSTONE');

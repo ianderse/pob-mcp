@@ -10,6 +10,7 @@ if (!cwd) throw new Error('POB_FORK_PATH must point to a vanilla PoB src directo
 const client = new PoBLuaApiClient({
   cwd,
   args: [resolve('lua/vanilla_stdio_bridge.lua')],
+  env: { POB_API_STDIO: '0' },
   timeoutMs: 60_000,
 });
 
@@ -17,7 +18,7 @@ try {
   await client.start();
   if (!await client.ping()) throw new Error('vanilla adapter did not respond to ping');
   const capabilities = await client.getCapabilities();
-  for (const action of ['get_capabilities', 'get_items', 'get_skills', 'set_tree']) {
+  for (const action of ['get_capabilities', 'get_items', 'get_skills', 'set_tree', 'generate_weighted_trade_query']) {
     if (!capabilities.actions?.includes(action)) throw new Error(`missing vanilla capability: ${action}`);
   }
   await client.loadBuildXml(await readFile(resolve('example-build.xml'), 'utf8'), 'vanilla-smoke');
@@ -36,6 +37,12 @@ try {
   const restored = await client.setTree(tree);
   if (restored.ascendClassId !== tree.ascendClassId || restored.nodes.join(',') !== tree.nodes.join(',')) {
     throw new Error('vanilla tree mutation did not restore the original allocation');
+  }
+  await client.loadBuildXml(await readFile(resolve(cwd, '../spec/TestBuilds/3.13/OccVortex.xml'), 'utf8'), 'weighted-query-smoke');
+  const weighted = await client.generateWeightedTradeQuery('Amulet');
+  const query = weighted.query;
+  if (!query || typeof query !== 'object' || query.query?.status?.option !== 'available' || query.query?.filters?.type_filters?.filters?.category?.option !== 'accessory.amulet' || !Array.isArray(query.query?.stats?.[0]?.filters) || query.query.stats[0].filters.length === 0) {
+    throw new Error(`unexpected upstream weighted trade query: ${JSON.stringify(query)}`);
   }
   console.log(`vanilla adapter passed: ${info.className}/${info.ascendClassName}, ${tree.nodes.length} nodes, ${items.length} item slots, ${skillSetup.groups.length} skill groups`);
 } finally {
