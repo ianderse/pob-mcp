@@ -17,7 +17,6 @@ interface TradeContext {
 export async function handleFindWeightedTradeItems(context: TradeContext & { getLuaClient: () => import('../pobLuaBridge.js').PoBLuaApiClient | null; ensureLuaClient: () => Promise<void> }, args: { league: string; slot: string; options?: Record<string, unknown>; limit?: number }) {
   return wrapHandler('find weighted trade items', async () => {
     if (!process.env.POE_SESSION_ID) throw new Error('find_weighted_trade_items requires POE_SESSION_ID because the official Trade API rejects anonymous weighted searches.');
-    if (process.env.POB_VANILLA !== 'true') throw new Error('find_weighted_trade_items requires POB_VANILLA=true — only the vanilla PoB adapter can drive TradeQueryGenerator.');
     await context.ensureLuaClient();
     const client = context.getLuaClient();
     if (!client) throw new Error('Lua bridge not active. Load a build first.');

@@ -1394,7 +1394,7 @@ export function getTradeToolSchemas(): any[] {
   return [
     {
       name: "find_weighted_trade_items",
-      description: "Find build-specific best-in-slot listings using upstream PoB's native TradeQueryGenerator stat weights. Requires vanilla PoB, a loaded build, POE_TRADE_ENABLED=true, and POE_SESSION_ID (the official Trade API rejects anonymous weighted searches).",
+      description: "Find build-specific best-in-slot listings using upstream PoB's native TradeQueryGenerator stat weights. Requires a loaded build, POE_TRADE_ENABLED=true, and POE_SESSION_ID (the official Trade API rejects anonymous weighted searches).",
       inputSchema: { type: "object", properties: { league: { type: "string" }, slot: { type: "string" }, options: { type: "object" }, limit: { type: "number" } }, required: ["league", "slot"] },
     },
     {
@@ -1672,12 +1672,12 @@ export function getBuildGoalsToolSchemas(): any[] {
     },
     {
       name: "suggest_masteries",
-      description: "Evaluate the effects available on allocated mastery nodes against the live PoB build and rank the strongest DPS and defence choices. Requires a loaded fork-backed build.",
+      description: "Evaluate the effects available on allocated mastery nodes against the live PoB build and rank the strongest DPS and defence choices. Requires a loaded build.",
       inputSchema: { type: "object", properties: {} },
     },
     {
       name: "find_best_anointment",
-      description: "Rank anointable notables for an equipped Amulet or anointable Belt using upstream PoB's non-destructive live stat simulation. Requires POB_VANILLA=true and a loaded build with the selected item equipped.",
+      description: "Rank anointable notables for an equipped Amulet or anointable Belt using upstream PoB's non-destructive live stat simulation. Requires a loaded build with the selected item equipped.",
       inputSchema: { type: "object", properties: { slot: { type: "string", enum: ["Amulet", "Belt"] }, focus: { type: "string", enum: ["dps", "defence", "both"] }, max_results: { type: "number" } }, required: ["slot"] },
     },
     {

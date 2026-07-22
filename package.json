@@ -13,9 +13,9 @@
     "test:coverage": "jest --coverage",
     "test:unit": "jest tests/unit",
     "test:ci": "jest --ci --coverage --maxWorkers=2",
-    "test:smoke:fork": "node tests/smoke/fork-bridge.mjs && node tests/smoke/fork-mcp.mjs",
-    "test:smoke:vanilla": "node tests/smoke/vanilla-bridge.mjs && node tests/smoke/vanilla-mcp.mjs",
-    "test:smoke:vanilla:weighted": "POE_WEIGHTED_SMOKE=true node tests/smoke/vanilla-mcp.mjs",
+    "test:smoke": "node tests/smoke/bridge.mjs && node tests/smoke/mcp.mjs",
+    "test:smoke:full": "node tests/smoke/mcp-full.mjs",
+    "test:smoke:weighted": "POE_WEIGHTED_SMOKE=true node tests/smoke/mcp.mjs",
     "test:smoke:trade": "node tests/smoke/trade-mcp.mjs",
     "test:smoke:crafting": "node tests/smoke/crafting-mcp.mjs"
   },

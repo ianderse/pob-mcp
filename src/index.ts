@@ -270,22 +270,12 @@ class PoBMCPServer {
       // Get base tools
       const tools: any[] = getToolSchemas();
 
-      // Add Lua tools if enabled
+      // Add Lua tools if enabled — the repo-owned stdio adapter drives a stock
+      // PoB checkout and supports the full action set
       if (this.luaClientManager.isEnabled()) {
-        if (process.env.POB_VANILLA === 'true') {
-          const vanillaActions = new Set([
-            'lua_get_capabilities', 'lua_get_build_snapshot', 'lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats',
-            'lua_get_tree', 'lua_get_build_info', 'lua_set_tree',
-            'get_equipped_items', 'get_skill_setup',
-          ]);
-          tools.push(...getLuaToolSchemas().filter((tool) => vanillaActions.has(tool.name)));
-          tools.push(...getBuildGoalsToolSchemas().filter((tool) => tool.name === 'find_best_anointment'));
-        } else {
-          tools.push(...getLuaToolSchemas());
-          tools.push(...getConfigToolSchemas()); // Phase 9: Config tools (require Lua)
-          // find_best_anointment is backed by a vanilla-adapter-only Lua action
-          tools.push(...getBuildGoalsToolSchemas().filter((tool) => tool.name !== 'find_best_anointment'));
-        }
+        tools.push(...getLuaToolSchemas());
+        tools.push(...getConfigToolSchemas()); // Phase 9: Config tools (require Lua)
+        tools.push(...getBuildGoalsToolSchemas()); // Build diagnostics (require Lua)
       }
 
       // Add optimization tools
@@ -302,11 +292,10 @@ class PoBMCPServer {
 
       // Add Trade API tools if enabled
       if (this.tradeClient) {
-        // Weighted search needs the vanilla Lua bridge (query generation) and an
+        // Weighted search needs the Lua bridge (query generation) and an
         // authenticated session (the Trade API rejects anonymous weighted sums)
         const weightedAvailable = Boolean(process.env.POE_SESSION_ID)
-          && this.luaClientManager.isEnabled()
-          && process.env.POB_VANILLA === 'true';
+          && this.luaClientManager.isEnabled();
         tools.push(...getTradeToolSchemas().filter((tool) => tool.name !== 'find_weighted_trade_items' || weightedAvailable));
       }
 

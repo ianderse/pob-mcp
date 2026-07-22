@@ -1,76 +1,43 @@
 -- JSON-lines adapter for an unmodified PathOfBuildingCommunity checkout.
 -- Run with cwd set to its src/ directory: luajit /path/to/vanilla_stdio_bridge.lua
+-- All build operations live in pob_ops.lua (repo-owned); no PoB patches required.
 local json = require('dkjson')
 
--- The upstream wrapper initializes PoB and exposes loadBuildFromXML plus `build`.
+-- Locate this script's directory so repo-owned modules load regardless of cwd
+local ADAPTER_DIR = (arg and arg[0] or ''):gsub('[^/\\]*$', '')
+if ADAPTER_DIR == '' then ADAPTER_DIR = './' end
+
+-- Stock HeadlessWrapper does not define this render stub; define it before the
+-- dofile so an upstream version, if one is ever added, takes precedence.
+if not GetVirtualScreenSize then
+  function GetVirtualScreenSize() return 1920, 1080 end
+end
+
+-- The upstream wrapper initializes PoB and exposes newBuild/loadBuildFromXML plus `build`.
 dofile('HeadlessWrapper.lua')
+
+local BuildOps = dofile(ADAPTER_DIR .. 'pob_ops.lua')
 
 local function reply(value)
   io.write(json.encode(value), '\n')
   io.flush()
 end
 
-local function output()
-  if not build or not build.calcsTab then return nil, 'build not initialized' end
-  if build.calcsTab.BuildOutput then build.calcsTab:BuildOutput() end
-  return build.calcsTab.mainOutput or {}, nil
-end
-
-local function stats(params)
-  local out, err = output()
-  if err then return { ok = false, error = err } end
-  local fields = params.fields or { 'Life', 'EnergyShield', 'Armour', 'Evasion', 'FireResist', 'ColdResist', 'LightningResist', 'ChaosResist', 'TotalDPS', 'CombinedDPS', 'TotalEHP' }
-  local result = {}
-  for _, key in ipairs(fields) do if out[key] ~= nil then result[key] = out[key] end end
-  return { ok = true, stats = result }
-end
-
-local function tree()
-  if not build or not build.spec then return { ok = false, error = 'build/spec not initialized' } end
-  local spec, nodes = build.spec, {}
-  for id in pairs(spec.allocNodes or {}) do table.insert(nodes, tonumber(id) or id) end
-  table.sort(nodes)
-  return { ok = true, tree = { treeVersion = spec.treeVersion, classId = tonumber(spec.curClassId) or 0, ascendClassId = tonumber(spec.curAscendClassId) or 0, secondaryAscendClassId = tonumber(spec.curSecondaryAscendClassId) or 0, nodes = nodes, masteryEffects = spec.masterySelections or {} } }
-end
-
-local function items()
-  if not build or not build.itemsTab then return { ok = false, error = 'items not initialized' } end
-  local tab, result, seen = build.itemsTab, {}, {}
-  local function add(slotName)
-    if seen[slotName] then return end; seen[slotName] = true
-    local control = tab.slots and tab.slots[slotName]; if not control then return end
-    local id = control.selItemId or 0; local entry = { slot = slotName, id = id }
-    local item = id > 0 and tab.items[id] or nil
-    if item then entry.name = item.name; entry.baseName = item.baseName; entry.type = item.type; entry.rarity = item.rarity; entry.raw = item.raw end
-    local active = tab.activeItemSet and tab.activeItemSet[slotName]
-    if active and active.active ~= nil then entry.active = active.active and true or false end
-    table.insert(result, entry)
-  end
-  for _, slot in ipairs(tab.orderedSlots or {}) do if slot.slotName then add(slot.slotName) end end
-  for slotName in pairs(tab.slots or {}) do add(slotName) end
-  return { ok = true, items = result }
-end
-
-local function skills()
-  if not build or not build.skillsTab then return { ok = false, error = 'skills not initialized' } end
-  local groups = {}
-  for index, group in ipairs(build.skillsTab.socketGroupList or {}) do
-    local gems, names = {}, {}
-    for gemIndex, gem in ipairs(group.gemList or {}) do table.insert(gems, { index = gemIndex, name = gem.nameSpec or gem.name or '', level = gem.level or 1, quality = gem.quality or 0, enabled = gem.enabled ~= false }) end
-    for _, effect in ipairs(group.displaySkillList or {}) do if effect.activeEffect and effect.activeEffect.grantedEffect then table.insert(names, effect.activeEffect.grantedEffect.name) end end
-    table.insert(groups, { index = index, label = group.label, slot = group.slot, enabled = group.enabled, includeInFullDPS = group.includeInFullDPS, mainActiveSkill = group.mainActiveSkill, skills = names, gems = gems })
-  end
-  return { ok = true, skills = { mainSocketGroup = build.mainSocketGroup, groups = groups } }
-end
-
-local function set_tree(params)
-  if not build or not build.spec then return { ok = false, error = 'build/spec not initialized' } end
-  if type(params.nodes) ~= 'table' then return { ok = false, error = 'nodes must be an array' } end
-  local nodes = {}; for _, id in ipairs(params.nodes) do table.insert(nodes, tonumber(id)) end
-  local ok, err = pcall(build.spec.ImportFromNodeList, build.spec, tonumber(params.classId) or 0, tonumber(params.ascendClassId) or 0, tonumber(params.secondaryAscendClassId) or 0, nodes, {}, params.masteryEffects or {}, params.treeVersion)
-  if not ok then return { ok = false, error = 'set_tree failed: ' .. tostring(err) } end
-  output(); return tree()
-end
+-- Class name → classId mapping (PoE1)
+local CLASS_IDS = {
+  Scion=0, Marauder=1, Ranger=2, Witch=3, Duelist=4, Templar=5, Shadow=6,
+  scion=0, marauder=1, ranger=2, witch=3, duelist=4, templar=5, shadow=6,
+}
+-- Ascendancy index matches the order in the tree data ascendancies array (1-based)
+local ASCENDANCY_IDS = {
+  [0] = { Ascendant=1 },
+  [1] = { Juggernaut=1, Berserker=2, Chieftain=3 },
+  [2] = { Raider=1, Deadeye=2, Pathfinder=3 },
+  [3] = { Occultist=1, Elementalist=2, Necromancer=3 },
+  [4] = { Slayer=1, Gladiator=2, Champion=3 },
+  [5] = { Inquisitor=1, Hierophant=2, Guardian=3 },
+  [6] = { Assassin=1, Trickster=2, Saboteur=3 },
+}
 
 -- Evaluate upstream PoB's native anoint simulation without altering the loaded build.
 -- This follows NotableDBControl's MiscCalculator approach, while restoring the UI
@@ -153,24 +120,147 @@ local function generate_weighted_trade_query(params)
   return result
 end
 
-reply({ ok = true, ready = true, version = { adapter = 'vanilla-stdio-v1' } })
+-- Wrap a BuildOps function that returns (result, err) into the JSON envelope.
+-- resultKey names the field the TS bridge reads the payload from.
+local function op(fn, resultKey)
+  return function(params)
+    local res, err = fn(params or {})
+    if res == nil then return { ok = false, error = err or 'operation failed' } end
+    local envelope = { ok = true }
+    if resultKey then envelope[resultKey] = res end
+    return envelope
+  end
+end
+
+local handlers = {}
+
+handlers.ping = function() return { ok = true, pong = true } end
+
+handlers.version = function()
+  return { ok = true, version = {
+    number = _G.launch and launch.versionNumber or '?',
+    branch = _G.launch and launch.versionBranch or '?',
+    platform = _G.launch and launch.versionPlatform or '?',
+    adapter = 'vanilla-stdio-v2',
+  } }
+end
+
+handlers.new_build = function(params)
+  if not _G.newBuild then return { ok = false, error = 'headless wrapper not initialized' } end
+  _G.newBuild()
+  if params and (params.className or params.ascendancy) then
+    local classId = params.className and (CLASS_IDS[params.className] or CLASS_IDS[params.className:lower()]) or 0
+    local ascendId = params.ascendancy and ASCENDANCY_IDS[classId] and ASCENDANCY_IDS[classId][params.ascendancy] or 0
+    if build and build.spec then
+      BuildOps.import_from_node_list(build.spec, classId, ascendId, 0, {}, {}, {}, nil)
+    end
+  end
+  return { ok = true }
+end
+
+handlers.load_build_xml = function(params)
+  if not params or type(params.xml) ~= 'string' then return { ok = false, error = 'missing xml' } end
+  if not _G.loadBuildFromXML then return { ok = false, error = 'headless wrapper not initialized' } end
+  local ok, err = pcall(_G.loadBuildFromXML, params.xml, (params.name and tostring(params.name)) or 'API Build')
+  if not ok then return { ok = false, error = tostring(err) } end
+  return { ok = true, build_id = 1 }
+end
+
+handlers.get_stats = function(params)
+  local stats, err = BuildOps.export_stats(params and params.fields or nil)
+  if not stats then return { ok = false, error = err } end
+  return { ok = true, stats = stats }
+end
+
+handlers.set_tree = function(params)
+  local ok2, err = BuildOps.set_tree(params or {})
+  if not ok2 then return { ok = false, error = err } end
+  return { ok = true, tree = (BuildOps.get_tree()) }
+end
+
+handlers.update_tree_delta = function(params)
+  local ok2, err = BuildOps.update_tree_delta(params or {})
+  if not ok2 then return { ok = false, error = err } end
+  return { ok = true, tree = (BuildOps.get_tree()) }
+end
+
+handlers.set_config = function(params)
+  local ok2, err = BuildOps.set_config(params or {})
+  if not ok2 then return { ok = false, error = err } end
+  return { ok = true, config = (BuildOps.get_config()) }
+end
+
+handlers.set_main_selection = function(params)
+  local ok2, err = BuildOps.set_main_selection(params or {})
+  if not ok2 then return { ok = false, error = err } end
+  return { ok = true, skills = (BuildOps.get_skills()) }
+end
+
+handlers.set_level = function(params)
+  if not params or params.level == nil then return { ok = false, error = 'missing level' } end
+  local ok2, err = BuildOps.set_level(params.level)
+  if not ok2 then return { ok = false, error = err } end
+  return { ok = true }
+end
+
+handlers.set_flask_active = op(BuildOps.set_flask_active)
+handlers.set_gem_level = op(BuildOps.set_gem_level)
+handlers.set_gem_quality = op(BuildOps.set_gem_quality)
+handlers.set_gem_enabled = op(BuildOps.set_gem_enabled)
+handlers.remove_skill = op(BuildOps.remove_skill)
+handlers.remove_gem = op(BuildOps.remove_gem)
+
+handlers.get_tree = op(BuildOps.get_tree, 'tree')
+handlers.get_items = op(BuildOps.get_items, 'items')
+handlers.get_skills = op(BuildOps.get_skills, 'skills')
+handlers.get_build_info = op(BuildOps.get_build_info, 'info')
+handlers.get_config = op(BuildOps.get_config, 'config')
+handlers.calc_with = op(BuildOps.calc_with, 'output')
+handlers.export_build_xml = op(BuildOps.export_build_xml, 'xml')
+handlers.add_item_text = op(BuildOps.add_item_text, 'item')
+handlers.create_socket_group = op(BuildOps.create_socket_group, 'socketGroup')
+handlers.add_gem = op(BuildOps.add_gem, 'gem')
+handlers.search_nodes = op(BuildOps.search_nodes, 'results')
+handlers.get_mastery_options = op(BuildOps.get_mastery_options, 'result')
+handlers.save_build = op(BuildOps.save_build, 'result')
+handlers.list_specs = op(BuildOps.list_specs, 'result')
+handlers.select_spec = op(BuildOps.select_spec, 'result')
+handlers.create_spec = op(BuildOps.create_spec, 'result')
+handlers.delete_spec = op(BuildOps.delete_spec, 'result')
+handlers.rename_spec = op(BuildOps.rename_spec, 'result')
+handlers.list_item_sets = op(BuildOps.list_item_sets, 'result')
+handlers.select_item_set = op(BuildOps.select_item_set, 'result')
+handlers.set_socket_group_enabled = op(BuildOps.set_socket_group_enabled, 'result')
+
+handlers.evaluate_anoint_candidates = evaluate_anoint_candidates
+handlers.generate_weighted_trade_query = generate_weighted_trade_query
+
+handlers.get_capabilities = function()
+  local actions = { 'quit' }
+  for name in pairs(handlers) do table.insert(actions, name) end
+  table.sort(actions)
+  return { ok = true, capabilities = { mode = 'vanilla', adapter = 'vanilla-stdio-v2', actions = actions } }
+end
+
+reply({ ok = true, ready = true, version = { adapter = 'vanilla-stdio-v2' } })
 for line in io.lines() do
   local request = json.decode(line)
   local action, params = request and request.action, request and request.params or {}
-  if action == 'ping' then reply({ ok = true, pong = true })
-  elseif action == 'load_build_xml' then
-    local ok, err = pcall(loadBuildFromXML, params.xml, params.name)
-    reply(ok and { ok = true } or { ok = false, error = tostring(err) })
-  elseif action == 'get_stats' then reply(stats(params))
-  elseif action == 'get_tree' then reply(tree())
-  elseif action == 'set_tree' then reply(set_tree(params))
-  elseif action == 'get_items' then reply(items())
-  elseif action == 'get_skills' then reply(skills())
-  elseif action == 'evaluate_anoint_candidates' then reply(evaluate_anoint_candidates(params))
-  elseif action == 'generate_weighted_trade_query' then reply(generate_weighted_trade_query(params))
-  elseif action == 'get_capabilities' then reply({ ok = true, capabilities = { mode = 'vanilla', adapter = 'vanilla-stdio-v1', actions = { 'ping', 'get_capabilities', 'load_build_xml', 'get_stats', 'get_tree', 'set_tree', 'get_items', 'get_skills', 'get_build_info', 'evaluate_anoint_candidates', 'generate_weighted_trade_query', 'quit' } } })
-  elseif action == 'get_build_info' then
-    if not build then reply({ ok = false, error = 'build not initialized' }) else reply({ ok = true, info = { name = build.buildName, level = build.characterLevel, className = build.spec and build.spec.curClassName, ascendClassName = build.spec and build.spec.curAscendClassName, treeVersion = build.targetVersion } }) end
-  elseif action == 'quit' then reply({ ok = true, quit = true }); break
-  else reply({ ok = false, error = 'unsupported by vanilla adapter: ' .. tostring(action) }) end
+  if action == 'quit' then
+    reply({ ok = true, quit = true })
+    break
+  end
+  local handler = handlers[action]
+  if not handler then
+    reply({ ok = false, error = 'unknown action: ' .. tostring(action) })
+  else
+    local ok, res = pcall(handler, params)
+    if not ok then
+      reply({ ok = false, error = tostring(res) })
+    elseif type(res) ~= 'table' then
+      reply({ ok = false, error = 'handler returned no response' })
+    else
+      reply(res)
+    end
+  end
 end

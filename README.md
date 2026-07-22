@@ -117,7 +117,7 @@ npm run build
       "env": {
         "POB_DIRECTORY": "/path/to/your/Path of Building/Builds",
         "POB_LUA_ENABLED": "true",
-        "POB_FORK_PATH": "/path/to/PathOfBuilding/src",
+        "POB_PATH": "/path/to/PathOfBuilding/src",
         "POB_CMD": "/usr/local/bin/luajit",
         "POB_TIMEOUT_MS": "10000"
       }
@@ -132,10 +132,9 @@ npm run build
 |---|---|---|
 | `POB_DIRECTORY` | OS-default Builds dir | Path to your PoB builds directory |
 | `POB_LUA_ENABLED` | `false` | Set `"true"` to enable Lua bridge |
-| `POB_FORK_PATH` | `~/Projects/PathOfBuilding/src` | Path to PathOfBuilding/src |
+| `POB_PATH` | `~/Projects/PathOfBuilding/src` | Path to a stock PathOfBuilding checkout's `src/` directory (`POB_FORK_PATH` is accepted as a legacy alias) |
 | `POB_CMD` | `luajit` | LuaJIT binary path |
 | `POB_TIMEOUT_MS` | `10000` | Lua request timeout (ms) |
-| `POB_VANILLA` | `false` | Use the built-in compatibility adapter with vanilla PathOfBuildingCommunity `dev` |
 | `POB_DEBUG` | `false` | Set `"true"` for verbose Lua bridge logging |
 | `POB_ARGS` | (none) | Space-separated arguments passed to the Lua process (overrides the default adapter arguments) |
 | `POE_TRADE_ENABLED` | `false` | Enable Trade API tools |
@@ -160,43 +159,27 @@ sudo apt-get install luajit
 
 #### 2. Clone PathOfBuilding
 ```bash
-git clone https://github.com/ianderse/PathOfBuilding.git
-cd PathOfBuilding
-git checkout dev
+git clone https://github.com/PathOfBuildingCommunity/PathOfBuilding.git
 ```
-Note the full path to the `src/` directory — that's your `POB_FORK_PATH`.
+Note the full path to the `src/` directory — that's your `POB_PATH`.
 
-> By default this MCP server uses the `ianderse/PathOfBuilding` fork, whose `dev` branch supplies the full JSON-lines API under `src/API/`. The upstream PathOfBuildingCommunity `dev` branch has a generic `HeadlessWrapper.lua`, so it needs the built-in compatibility adapter described below.
+> No fork or patches are required. The server ships its own stdio adapter (`lua/vanilla_stdio_bridge.lua` + `lua/pob_ops.lua`) that loads the stock `HeadlessWrapper.lua` as a library and drives PoB's real calculation engine directly. Every Lua-bridge tool — stats, tree editing, gems, items, config, specs, save/export, anointments, weighted trade queries — works against an unmodified checkout. Call `lua_get_capabilities` at runtime for the authoritative action list.
 
-### Vanilla PoB compatibility (PoE 3.29)
-
-Set `POB_VANILLA=true` to run against an unmodified upstream `PathOfBuildingCommunity/PathOfBuilding` checkout. The adapter is intentionally a limited, client-visible subset rather than a replacement for the fork API. Call `lua_get_capabilities` at runtime for the authoritative action list.
-
-| MCP tool | Vanilla status |
-| --- | --- |
-| `lua_start`, `lua_stop`, `lua_load_build` | Supported |
-| `lua_get_build_snapshot`, `lua_get_stats`, `lua_get_tree`, `lua_get_build_info` | Supported |
-| `lua_set_tree` | Supported for the current in-memory build; validates through upstream PoB and returns the resulting allocation |
-| `get_equipped_items`, `get_skill_setup` | Supported read-only views |
-| Item, gem, flask, config, spec, export, and build-creation mutations | Not advertised in vanilla mode |
-
-The compatibility suite was exercised against upstream `dev` commit `78951a2e7d23bc0bb78e4a2ff777b82e1e54dc1f`, the current PoE 3.29 data line at the time of verification. Tree changes are session-local and are not written back to the XML file.
-
-To verify a vanilla checkout locally after building this project:
+To verify a checkout locally after building this project:
 
 ```bash
-POB_FORK_PATH=/path/to/PathOfBuilding/src npm run test:smoke:vanilla
+POB_PATH=/path/to/PathOfBuilding/src npm run test:smoke
 ```
 
-This runs both the adapter contract and MCP stdio transport checks: tool discovery, capabilities, build load, snapshot, stats, items, skills, reversible tree mutation, and build info.
+This runs both the adapter contract and MCP stdio transport checks: tool discovery, capabilities, build load, snapshot, stats, items, skills, reversible tree mutation, config, anointment ranking, and build info.
 
-To exercise the default fork bridge using its documented `HeadlessWrapper.lua` entrypoint:
+For the deep end-to-end workflow suite:
 
 ```bash
-POB_FORK_PATH=/path/to/ianderse-PathOfBuilding/src npm run test:smoke:fork
+POB_PATH=/path/to/PathOfBuilding/src npm run test:smoke:full
 ```
 
-This runs the bridge contract plus a full MCP workflow that verifies blank-build gem editing, build discovery and file persistence, loading, character-level mutation and restoration, tree search, build validation, configuration/snapshot save-and-restore, and defensive/boss-readiness analysis.
+This verifies blank-build gem editing, build discovery and file persistence, loading, character-level mutation and restoration, tree search, build validation, configuration/snapshot save-and-restore, and defensive/boss-readiness analysis.
 
 To exercise the live Trade API integration (requires network access):
 
@@ -466,20 +449,20 @@ sudo apt-get install luajit  # Ubuntu/Debian
 Or set `POB_CMD` to the full path (e.g., `/opt/homebrew/bin/luajit`).
 
 **`Failed to find valid ready banner`**
-`POB_FORK_PATH` must point to the directory containing `HeadlessWrapper.lua`:
+`POB_PATH` must point to the directory containing `HeadlessWrapper.lua`:
 ```bash
-ls "$POB_FORK_PATH/HeadlessWrapper.lua"   # must exist
-ls "$POB_FORK_PATH/Modules/"              # must exist
+ls "$POB_PATH/HeadlessWrapper.lua"   # must exist
+ls "$POB_PATH/Modules/"              # must exist
 ```
 
 **`Timed out waiting for response`**
 - Increase `POB_TIMEOUT_MS` (try `20000`)
-- Test manually: `cd "$POB_FORK_PATH" && luajit HeadlessWrapper.lua`
+- Test manually: `cd "$POB_PATH" && luajit HeadlessWrapper.lua`
 
 **Stats don't match PoB GUI**
 - Check bandit/pantheon/enemy settings with `get_config`
 - Ensure the correct tree spec is active in the XML
-- Make sure your PathOfBuilding fork is on the `api-stdio` branch and up to date
+- Make sure your PathOfBuilding checkout is up to date
 
 **Bridge becomes unresponsive**
 ```
@@ -489,9 +472,6 @@ If still unresponsive, restart Claude Desktop.
 
 **Nodes dropped after `lua_set_tree`**
 Nodes must form a valid connected path from the class starting node. Disconnected nodes are silently dropped by PoB. Ensure all intermediate nodes are included.
-
-**`lua_save_build` doesn't persist gem changes**
-Gem modifications made via `add_gem`, `set_gem_level`, `set_gem_quality` are currently held in Lua memory and are not serialized back to the XML on save. This is a known limitation.
 
 ---
 

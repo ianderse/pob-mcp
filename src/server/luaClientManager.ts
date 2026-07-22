@@ -70,14 +70,13 @@ export class LuaClientManager {
   private async initClient(): Promise<void> {
     console.error('[Lua Bridge] Initializing client...');
 
-    const vanillaAdapter = process.env.POB_VANILLA === 'true';
     const stdioClient = new PoBLuaApiClient({
-      cwd: process.env.POB_FORK_PATH,
+      cwd: process.env.POB_PATH || process.env.POB_FORK_PATH,
       cmd: process.env.POB_CMD,
-      args: process.env.POB_ARGS ? process.env.POB_ARGS.split(/\s+/).filter(Boolean) : vanillaAdapter ? [path.join(repoRoot, 'lua', 'vanilla_stdio_bridge.lua')] : undefined,
-      // The repo-owned vanilla adapter calls HeadlessWrapper as a library; its
-      // own JSON-lines loop must not take over stdin/stdout first.
-      env: vanillaAdapter ? { POB_API_STDIO: '0' } : undefined,
+      args: process.env.POB_ARGS ? process.env.POB_ARGS.split(/\s+/).filter(Boolean) : [path.join(repoRoot, 'lua', 'vanilla_stdio_bridge.lua')],
+      // The repo-owned adapter calls HeadlessWrapper as a library; nothing in
+      // the PoB checkout may take over stdin/stdout first.
+      env: { POB_API_STDIO: '0' },
       timeoutMs: process.env.POB_TIMEOUT_MS ? parseInt(process.env.POB_TIMEOUT_MS) : undefined,
     });
 

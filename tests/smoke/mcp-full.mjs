@@ -1,12 +1,12 @@
-// End-to-end MCP smoke test against the project fork's default stdio bridge.
-// Usage: POB_FORK_PATH=/path/to/PathOfBuilding/src node tests/smoke/fork-mcp.mjs
+// Deep end-to-end MCP smoke test: full tool surface against a stock PoB checkout.
+// Usage: POB_PATH=/path/to/PathOfBuilding/src node tests/smoke/mcp-full.mjs
 import { cp, mkdtemp, rm } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-if (!process.env.POB_FORK_PATH) throw new Error('POB_FORK_PATH must point to the fork PathOfBuilding src directory.');
-const buildsDir = await mkdtemp(join(tmpdir(), 'pob-mcp-fork-'));
+if (!process.env.POB_PATH && !process.env.POB_FORK_PATH) throw new Error('POB_PATH must point to a stock PoB src directory.');
+const buildsDir = await mkdtemp(join(tmpdir(), 'pob-mcp-full-'));
 await cp(resolve('example-build.xml'), join(buildsDir, 'example.xml'));
 const child = spawn('node', [resolve('build/index.js')], {
   env: { ...process.env, POB_DIRECTORY: buildsDir, POB_LUA_ENABLED: 'true' },
@@ -35,12 +35,12 @@ const call = async (name, args = {}) => {
 };
 
 try {
-  await request('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'fork-smoke', version: '1.0' } });
+  await request('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'full-smoke', version: '1.0' } });
   notify('notifications/initialized', {});
   const listed = await request('tools/list', {});
   const names = new Set(listed.result.tools.map((tool) => tool.name));
   for (const name of ['lua_start', 'lua_load_build', 'lua_get_build_snapshot', 'set_character_level', 'lua_set_tree', 'list_specs', 'select_spec', 'suggest_masteries', 'add_item', 'get_equipped_items']) {
-    if (!names.has(name)) throw new Error(`missing fork MCP tool: ${name}`);
+    if (!names.has(name)) throw new Error(`missing MCP tool: ${name}`);
   }
 
   const rejected = await request('tools/call', { name: 'not_a_real_tool', arguments: {} });
@@ -60,9 +60,9 @@ try {
   if (!buildList.includes('example.xml')) throw new Error(`build discovery was incomplete: ${buildList}`);
   const buildStats = await call('get_build_stats', { build_name: 'example.xml' });
   if (!buildStats.includes('=== Stats for example.xml ===')) throw new Error(`file build stats were incomplete: ${buildStats}`);
-  await call('set_build_notes', { build_name: 'example.xml', notes: 'fork MCP smoke note' });
+  await call('set_build_notes', { build_name: 'example.xml', notes: 'MCP smoke note' });
   const notes = await call('get_build_notes', { build_name: 'example.xml' });
-  if (!notes.includes('fork MCP smoke note')) throw new Error(`build notes were not persisted: ${notes}`);
+  if (!notes.includes('MCP smoke note')) throw new Error(`build notes were not persisted: ${notes}`);
   await call('lua_load_build', { build_name: 'example.xml' });
   const before = await call('lua_get_build_snapshot');
   if (!before.includes('Level 90')) throw new Error(`unexpected initial snapshot: ${before}`);
@@ -101,7 +101,7 @@ try {
   await call('restore_snapshot', { build_name: 'example.xml', snapshot_id: snapshotId, backup_current: false });
   const boss = await call('check_boss_readiness', { boss: 'shaper' });
   if (!boss.includes('Boss Readiness: The Shaper')) throw new Error(`boss readiness was incomplete: ${boss}`);
-  console.log('fork MCP passed: blank-build gem editing, file/build persistence, load, snapshot, level edit/restore, specs, skills/tree search, mastery/issue/defence analysis, validation, configuration presets, and boss readiness all succeeded');
+  console.log('full MCP smoke passed: blank-build gem editing, file/build persistence, load, snapshot, level edit/restore, specs, skills/tree search, mastery/issue/defence analysis, validation, configuration presets, and boss readiness all succeeded');
 } finally {
   child.kill();
   await rm(buildsDir, { recursive: true, force: true });
