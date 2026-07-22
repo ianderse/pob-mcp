@@ -2,6 +2,8 @@
 
 An MCP (Model Context Protocol) server that enables Claude to analyze, modify, and optimize Path of Building builds using PoB's actual calculation engine.
 
+Works against a **stock [PathOfBuildingCommunity](https://github.com/PathOfBuildingCommunity/PathOfBuilding) checkout** — no fork, no patches. The server ships its own stdio adapter that loads PoB's `HeadlessWrapper.lua` as a library and drives the real calculation engine directly.
+
 > **PoE 3.29 compatibility:** This release targets Path of Building data and builds for the 3.29 league. Use a current PoB checkout for the matching tree, skills, and item data. Trade calls should always use `get_leagues` instead of hard-coding a challenge-league name.
 
 ---
@@ -22,8 +24,10 @@ An MCP (Model Context Protocol) server that enables Claude to analyze, modify, a
 - **Live Stats**: Accurate stat calculation using PoB's own engine — identical to what PoB GUI shows
 - **Build Loading & Creation**: Load existing builds or create new ones from scratch by class/ascendancy
 - **Passive Tree Editing**: Set full tree allocation and see immediate stat recalculation
+- **Tree Specs**: List, switch, create, copy, rename, and delete passive tree specs
 - **Node Search**: Search the passive tree for nodes by name or stat text
 - **Character Level**: Set level and watch all stats update accordingly
+- **Anointment Ranking**: Simulate every anointable notable through PoB's live calculator and rank by DPS/EHP impact
 
 ### Item & Skill Management (Lua Bridge)
 - **Items**: Add items from PoE clipboard text, view all equipped gear
@@ -69,6 +73,7 @@ An MCP (Model Context Protocol) server that enables Claude to analyze, modify, a
 
 ### Trade API (Optional, `POE_TRADE_ENABLED=true`)
 - **Item Search**: Search trade with stat filters, price range, link count
+- **Weighted BIS Search**: Build-specific best-in-slot listings using PoB's native TradeQueryGenerator stat weights (requires `POE_SESSION_ID`)
 - **Price Checking**: Min/max/median/average from recent listings
 - **Upgrade Finder**: Identify best item upgrade candidates for your build
 - **Resistance Gear**: Find affordable gear to cap resistances
@@ -189,6 +194,12 @@ npm run test:smoke:trade
 
 This verifies MCP discovery plus live league, stat, item-search, price-check, resistance-gear recommendation, currency-rate, and trading-profit requests against the Standard league.
 
+To also exercise the authenticated weighted BIS search (requires your `POESESSID`):
+
+```bash
+POB_PATH=/path/to/PathOfBuilding/src POE_SESSION_ID=<your POESESSID> npm run test:smoke:weighted
+```
+
 To verify live crafting-data integration (requires network access):
 
 ```bash
@@ -209,7 +220,7 @@ ls /path/to/PathOfBuilding/src/HeadlessWrapper.lua
 
 ## Available Tools
 
-With every optional integration enabled, the server registers **91 tools** across 10 categories. Vanilla mode advertises only the verified compatibility subset.
+With every optional integration enabled, the server registers **99 tools** across 10 categories.
 
 ### XML-Based Tools (Always Available)
 
@@ -258,6 +269,9 @@ With every optional integration enabled, the server registers **91 tools** acros
 | `suggest_masteries` | Rank effects available on allocated mastery nodes by live stat impact |
 | `list_specs` | List all tree specs in the current build |
 | `select_spec` | Switch active tree spec |
+| `create_spec` | Create a new tree spec, optionally copying an existing one |
+| `rename_spec` | Rename a tree spec |
+| `delete_spec` | Delete a tree spec |
 | `list_item_sets` | List all item sets in the current build |
 | `select_item_set` | Switch active item set |
 | `plan_leveling` | Generate a leveling plan for a build |
@@ -284,6 +298,8 @@ With every optional integration enabled, the server registers **91 tools** acros
 | `set_gem_quality` | Set gem quality (Default/Anomalous/Divergent/Phantasmal) |
 | `remove_gem` | Remove a gem by group + gem index |
 | `remove_skill` | Remove an entire socket group |
+| `toggle_socket_group` | Enable/disable an entire socket group |
+| `toggle_gem` | Enable/disable a single gem within a group |
 | `setup_skill_with_gems` | Create a socket group with active gem + supports in one call |
 
 **Slot names**: `Weapon 1`, `Weapon 2`, `Helmet`, `Body Armour`, `Gloves`, `Boots`, `Amulet`, `Ring 1`, `Ring 2`, `Belt`, `Flask 1`–`Flask 5`
@@ -301,6 +317,8 @@ With every optional integration enabled, the server registers **91 tools** acros
 | `get_build_issues` | Get prioritized list of build problems and suggestions |
 | `check_boss_readiness` | Evaluate readiness for specific boss encounters |
 | `suggest_watchers_eye` | Suggest Watcher's Eye mods for the build's auras |
+| `find_best_anointment` | Rank anointable notables by live DPS/EHP impact (Amulet or anointable Belt) |
+| `analyze_cluster_jewels` | Analyze a cluster jewel setup from a build file |
 
 **`suggest_optimal_nodes` goals**: `damage`, `defense`, `life`, `es`, `resist`, `speed`
 
@@ -373,6 +391,7 @@ Rates are updated every 5 minutes from poe.ninja. Pass the **exact** league name
 | Tool | Description |
 |---|---|
 | `search_trade_items` | Search trade with stat filters, price range, link count |
+| `find_weighted_trade_items` | Build-specific BIS search via PoB's TradeQueryGenerator stat weights (requires `POE_SESSION_ID` and the Lua bridge) |
 | `get_item_price` | Price statistics (min/max/median/average) for an item |
 | `get_leagues` | List available leagues |
 | `search_stats` | Look up Trade API stat IDs |
@@ -423,6 +442,13 @@ Rates are updated every 5 minutes from poe.ninja. Pass the **exact** league name
 2. set_enemy_stats (level: 84, fire_resist: 40, cold_resist: 40, lightning_resist: 40)
 3. set_config (config_name: "enemyIsBoss", value: true)
 4. lua_get_stats (category: "offense")
+```
+
+### Find the best anointment and shop for upgrades
+```
+1. lua_load_build (build_name: "MyBuild.xml")
+2. find_best_anointment (slot: "Amulet", focus: "both")
+3. find_weighted_trade_items (league: "Standard", slot: "Amulet")   ← requires POE_TRADE_ENABLED + POE_SESSION_ID
 ```
 
 ---
