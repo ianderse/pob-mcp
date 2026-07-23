@@ -12,6 +12,7 @@ import {
   type SkillGroup,
 } from "../skillLinkOptimizer.js";
 import { sanitizeBuildName } from "../utils/pathSanitizer.js";
+import { activeSkillSet, asArray } from "../utils/xmlCollections.js";
 
 export interface AdvancedOptimizationContext {
   buildService: BuildService;
@@ -235,12 +236,9 @@ export async function handleOptimizeSkillLinks(
       );
 
       // Extract skills from XML
-      if (build.Skills?.SkillSet?.Skill) {
-        const skills = Array.isArray(build.Skills.SkillSet.Skill)
-          ? build.Skills.SkillSet.Skill
-          : [build.Skills.SkillSet.Skill];
-
-        skillGroups = skills.map((skill: any, idx) => {
+      const skills = asArray(activeSkillSet(build)?.Skill);
+      if (skills.length > 0) {
+        skillGroups = skills.map((skill: any, idx: number) => {
           const gems = Array.isArray(skill.Gem) ? skill.Gem : skill.Gem ? [skill.Gem] : [];
 
           return {
@@ -316,10 +314,8 @@ export async function handleCreateBudgetBuild(
 
     // Get main skill from first skill group
     let main_skill = 'your main skill';
-    if (build.Skills?.SkillSet?.Skill) {
-      const skills = Array.isArray(build.Skills.SkillSet.Skill)
-        ? build.Skills.SkillSet.Skill
-        : [build.Skills.SkillSet.Skill];
+    {
+      const skills = asArray(activeSkillSet(build)?.Skill);
       const firstSkill = skills[0];
       if (firstSkill?.Gem) {
         const gems = Array.isArray(firstSkill.Gem) ? firstSkill.Gem : [firstSkill.Gem];
