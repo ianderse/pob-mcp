@@ -723,7 +723,12 @@ export async function routeToolCall(
 
     case "plan_leveling":
       return await handlePlanLeveling(
-        { getLuaClient: deps.getLuaClient, ensureLuaClient: deps.ensureLuaClient },
+        {
+          getLuaClient: deps.getLuaClient,
+          ensureLuaClient: deps.ensureLuaClient,
+          readBuild: (name: string) =>
+            deps.contextBuilder.buildHandlerContext().buildService.readBuild(name),
+        },
         args || {}
       );
 

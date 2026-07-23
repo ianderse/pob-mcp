@@ -7,11 +7,40 @@
  */
 
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import type { PoBBuild, PoBGem, PoBSkill } from "../types.js";
 import { wrapHandler } from "../utils/errorHandling.js";
+import { activeSkillSet, asArray } from "../utils/xmlCollections.js";
 
 export interface LevelingContext {
   getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
+  // Supplied so build_name can be honoured; absent contexts fall back to the bridge.
+  readBuild?: (buildName: string) => Promise<PoBBuild>;
+}
+
+/** Reads class, ascendancy and main skill straight out of a saved build file. */
+function describeBuild(build: PoBBuild): {
+  className?: string;
+  ascendancy?: string;
+  mainSkill?: string;
+} {
+  const className = build.Build?.className;
+  const ascendancy = build.Build?.ascendClassName;
+
+  const groups = asArray<PoBSkill>(activeSkillSet(build)?.Skill);
+
+  // mainSocketGroup is 1-based and indexes the socket groups of the active set.
+  const groupIndex = Number(build.Build?.mainSocketGroup ?? 1) - 1;
+  const group = groups[groupIndex] ?? groups[0];
+
+  // Supports share the <Gem> element with actives, so pick the actives out first.
+  const actives = asArray<PoBGem>(group?.Gem).filter(
+    g => !(g.gemId ?? '').includes('SupportGem') && !(g.skillId ?? '').startsWith('Support')
+  );
+  const activeIndex = Number(group?.mainActiveSkill ?? 1) - 1;
+  const mainSkill = (actives[activeIndex] ?? actives[0])?.nameSpec;
+
+  return { className, ascendancy, mainSkill };
 }
 
 // Act-by-act milestone levels (PoE 1 campaign)
@@ -54,9 +83,23 @@ export async function handlePlanLeveling(
   let mainSkill = args.main_skill;
   let ascendancy = args.ascendancy;
 
+  // A named build is the most specific source, and the caller clearly meant that
+  // one — read it before falling back to whatever the bridge happens to hold.
+  if (args.build_name) {
+    if (!context.readBuild) {
+      throw new Error('build_name is not supported in this context — pass class_name and main_skill instead.');
+    }
+    // Guessing a class for a build the user named by hand would produce a
+    // confidently wrong guide, so let the read error surface instead.
+    const described = describeBuild(await context.readBuild(args.build_name));
+    className = className || described.className;
+    ascendancy = ascendancy || described.ascendancy;
+    mainSkill = mainSkill || described.mainSkill;
+  }
+
   // Try to read info from the currently loaded Lua build
   const luaClient = context.getLuaClient();
-  if (luaClient) {
+  if (luaClient && !(className && ascendancy && mainSkill)) {
     try {
       const info = await luaClient.getBuildInfo();
       className = className || info.className;
@@ -80,6 +123,7 @@ export async function handlePlanLeveling(
   }
 
   // Defaults when neither Lua nor args provide a value
+  const classResolved = Boolean(className);
   className = className || 'Witch';
   mainSkill = mainSkill || 'your main skill';
   ascendancy = ascendancy || 'Unknown';
@@ -88,6 +132,11 @@ export async function handlePlanLeveling(
 
   let output = `# Leveling Guide: ${className} (${ascendancy})\n`;
   output += `**Main Skill:** ${mainSkill}\n\n`;
+  if (!classResolved) {
+    // Without this the placeholder class reads like a recommendation.
+    output += `> No build was resolved, so this is the generic ${className} outline. ` +
+      `Pass \`build_name\`, or \`class_name\` and \`main_skill\`, for a guide that matches your build.\n\n`;
+  }
 
   output += `## Before Your Main Skill is Available\n`;
   output += `Use: **${starter.early}**\n`;
