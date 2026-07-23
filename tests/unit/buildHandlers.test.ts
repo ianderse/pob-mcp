@@ -1,4 +1,11 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
+
+// loadEndgame reads the build file off disk before handing it to the bridge.
+jest.mock('fs/promises', () => ({
+  __esModule: true,
+  default: { readFile: jest.fn(async () => '<?xml version="1.0"?><PathOfBuilding/>') },
+}));
+
 import {
   handleListBuilds,
   handleAnalyzeBuild,
@@ -6,6 +13,7 @@ import {
   handleGetBuildStats,
   type HandlerContext,
 } from '../../src/handlers/buildHandlers.js';
+import { BOOTSTRAP_BUILD_NAME } from '../../src/server/bootstrapBuild.js';
 import { BuildService } from '../../src/services/buildService.js';
 import { TreeService } from '../../src/services/treeService.js';
 import type { PoBBuild } from '../../src/types.js';
@@ -262,6 +270,54 @@ describe('BuildHandlers', () => {
 
       expect(result.content[0].text).toContain('Life: 4500 vs 5000');
       expect(result.content[0].text).toContain('TotalDPS: 1000000 vs 800000');
+    });
+
+    it('should compare when the bridge only holds the bootstrap build', async () => {
+      // A freshly started bridge always holds the bootstrap build. Treating it as
+      // unsaved user work made compare_builds fail until a build was loaded first.
+      mockBuildService.readBuild.mockResolvedValueOnce(build1).mockResolvedValueOnce(build2);
+      context.getLuaClient = () => ({
+        getBuildInfo: async () => ({ name: BOOTSTRAP_BUILD_NAME }),
+        loadBuild: async () => { throw new Error('lua unavailable in test'); },
+      }) as any;
+
+      const result = await handleCompareBuilds(context, 'build1.xml', 'build2.xml');
+
+      expect(result.content[0].text).toContain('Build Comparison');
+    });
+
+    it('should still refuse to clobber a different loaded build', async () => {
+      mockBuildService.readBuild.mockResolvedValueOnce(build1).mockResolvedValueOnce(build2);
+      context.getLuaClient = () => ({
+        getBuildInfo: async () => ({ name: 'My Unsaved League Starter' }),
+        loadBuild: async () => { throw new Error('should never be reached'); },
+      }) as any;
+
+      await expect(handleCompareBuilds(context, 'build1.xml', 'build2.xml'))
+        .rejects.toThrow('My Unsaved League Starter');
+    });
+
+    it('should report live DPS instead of N/A', async () => {
+      // get_stats returns defence-only fields unless offensive ones are named,
+      // which left the most important row of the comparison permanently blank.
+      let requestedFields: string[] | undefined;
+      const statsFor = (dps: number) => ({ Life: 4000, CombinedDPS: dps, CritChance: 50 });
+      let call = 0;
+      context.getLuaClient = () => ({
+        loadBuildXml: async () => ({ ok: true }),
+        listSpecs: async () => ({ specs: [] }),
+        listItemSets: async () => ({ itemSets: [] }),
+        getStats: async (fields?: string[]) => {
+          requestedFields = fields;
+          return statsFor(call++ === 0 ? 1_500_000 : 900_000);
+        },
+      }) as any;
+
+      const result = await handleCompareBuilds(context, 'build1.xml', 'build2.xml');
+
+      expect(requestedFields).toContain('CombinedDPS');
+      expect(result.content[0].text).toContain('1.500.000');
+      expect(result.content[0].text).not.toMatch(/DPS \(combined\).*N\/A/);
     });
 
     it('should handle builds with single PlayerStat object', async () => {

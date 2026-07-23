@@ -5,6 +5,7 @@
  */
 
 import { PoBLuaApiClient } from '../pobLuaBridge.js';
+import { BOOTSTRAP_BUILD_NAME } from './bootstrapBuild.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -92,7 +93,7 @@ export class LuaClientManager {
 
       while (attempts < maxAttempts) {
         try {
-          await stdioClient.loadBuildXml(testXml, 'Init Test');
+          await stdioClient.loadBuildXml(testXml, BOOTSTRAP_BUILD_NAME);
           console.error('[Lua Bridge] HeadlessWrapper fully initialized');
           break;
         } catch (loadError) {
