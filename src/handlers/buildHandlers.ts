@@ -6,6 +6,7 @@ import type { HandlerContext } from "../utils/contextBuilder.js";
 import fs from "fs/promises";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { sanitizeBuildName } from "../utils/pathSanitizer.js";
+import { BOOTSTRAP_BUILD_NAME } from "../server/bootstrapBuild.js";
 export type { HandlerContext } from "../utils/contextBuilder.js";
 
 export async function handleListBuilds(context: HandlerContext) {
@@ -259,7 +260,13 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
       }
     } catch { /* ignore */ }
 
-    const stats = await luaClient.getStats();
+    // get_stats defaults to defence-only fields, so the offensive rows below have
+    // to be requested by name — otherwise DPS and crit always render as "N/A".
+    const stats = await luaClient.getStats([
+      'Life', 'EnergyShield', 'TotalEHP', 'Mana',
+      'TotalDPS', 'CombinedDPS', 'MinionTotalDPS', 'CritChance', 'CritMultiplier',
+      'FireResist', 'ColdResist', 'LightningResist', 'ChaosResist',
+    ]);
     return { stats, selectedSpec, selectedItemSet, displayName };
   };
 
@@ -282,7 +289,9 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
       const info = await luaClient.getBuildInfo();
       loadedName = info?.name ?? '';
     } catch { /* no build loaded yet — safe to load */ }
-    if (loadedName) {
+    // The bootstrap build is not user work — a freshly started bridge always holds
+    // it, so treating it as unsaved changes would block compare_builds outright.
+    if (loadedName && loadedName !== BOOTSTRAP_BUILD_NAME) {
       const loaded = basename(loadedName);
       if (loaded !== basename(build1Name) && loaded !== basename(build2Name)) {
         throw new Error(
