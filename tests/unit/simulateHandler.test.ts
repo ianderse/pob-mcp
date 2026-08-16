@@ -69,6 +69,22 @@ describe('handleLuaSimulate', () => {
     );
   });
 
+  it('refuses a reporting flag as if it were a hypothesis', async () => {
+    await expect(
+      handleLuaSimulate(contextReturning({ output: output(), base: output() }), { useFullDPS: true }),
+    ).rejects.toThrow(/nothing to simulate/);
+  });
+
+  it('still passes the reporting flag alongside a real override', async () => {
+    const calls: unknown[] = [];
+    await handleLuaSimulate(contextReturning({ output: output(), base: output() }, calls), {
+      addNodes: [1],
+      useFullDPS: true,
+    });
+
+    expect(calls[0]).toMatchObject({ addNodes: [1], useFullDPS: true });
+  });
+
   it('flags an unmet attribute requirement the swap introduced', async () => {
     const unusable = output({
       Str: 100,

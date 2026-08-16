@@ -1098,20 +1098,22 @@ export async function handleLuaSimulate(
     const luaClient = context.getLuaClient();
     if (!luaClient) throw new Error('Lua client not initialized');
 
-    const overrides = {
+    const hypothesis = {
       addNodes: args.addNodes,
       removeNodes: args.removeNodes,
       masteryEffects: args.masteryEffects,
       repItem: args.itemText,
       repSlotName: args.slotName,
       toggleFlask: args.toggleFlask,
-      useFullDPS: args.useFullDPS,
     };
-    if (Object.values(overrides).every((value) => value === undefined)) {
+    // useFullDPS changes how the calculation reports, not what it assumes, so a
+    // call carrying only that would report an honest zero delta as a failed
+    // override — the very signal this tool exists to make trustworthy.
+    if (Object.values(hypothesis).every((value) => value === undefined)) {
       throw new Error('nothing to simulate: pass at least one of itemText+slotName, toggleFlask, addNodes, removeNodes or masteryEffects');
     }
 
-    const { output, base } = await luaClient.calcWith(overrides);
+    const { output, base } = await luaClient.calcWith({ ...hypothesis, useFullDPS: args.useFullDPS });
 
     const described = [
       args.itemText && args.slotName ? `swap ${args.slotName}` : undefined,
