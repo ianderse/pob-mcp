@@ -35,7 +35,7 @@ export const DEFENSIVE_STAT_FIELDS: readonly string[] = [
 export type DamageType = 'Physical' | 'Fire' | 'Cold' | 'Lightning' | 'Chaos';
 
 /** The elemental and chaos types, i.e. the ones a resistance purchase can move. */
-export const RESISTED_TYPES: readonly DamageType[] = ['Fire', 'Cold', 'Lightning', 'Chaos'];
+const RESISTED_TYPES: readonly DamageType[] = ['Fire', 'Cold', 'Lightning', 'Chaos'];
 
 export interface MaxHitEntry {
   type: DamageType;
@@ -860,7 +860,7 @@ export function formatResistanceSweep(summary: ResistanceSweepSummary): string {
  * Types sitting at the resistance cap print identical numbers on purpose: the
  * max hit uses the capped resistance, so overcap is worth exactly nothing here.
  */
-export function formatMaxHits(maxHits: MaxHitAnalysis): string {
+function formatMaxHits(maxHits: MaxHitAnalysis): string {
   if (!maxHits.available || !maxHits.binding) {
     return '**Binding Constraint:** unavailable — PoB returned no *MaximumHitTaken stats for this build.\n\n';
   }
