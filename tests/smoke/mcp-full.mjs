@@ -71,6 +71,11 @@ try {
   if (!validation.includes('Build Validation')) throw new Error(`build validation was incomplete: ${validation}`);
   const defenses = await call('analyze_defenses', { build_name: 'example.xml' });
   if (!defenses.includes('Defensive Analysis')) throw new Error(`defence analysis was incomplete: ${defenses}`);
+  // The per-type max hits are absent from the default stat set, so this only
+  // appears if the handler asked PoB for them by name.
+  if (!defenses.includes('Binding Constraint — max hit taken, by damage type:')) {
+    throw new Error(`defence analysis reported no binding constraint: ${defenses}`);
+  }
   const config = await call('get_config');
   if (!config.includes('Configuration')) throw new Error(`config retrieval was incomplete: ${config}`);
   await call('save_config_preset', { name: 'smoke' });
