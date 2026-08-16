@@ -9,7 +9,8 @@ interface BuildGoalsHandlerContext {
   ensureLuaClient: () => Promise<void>;
 }
 
-const ISSUES_FIELDS = [
+/** Exported so a caller that already fetched these can hand them straight in. */
+export const ISSUES_FIELDS = [
   'Life', 'LifeUnreserved', 'EnergyShield', 'Mana', 'ManaUnreserved',
   'FireResist', 'ColdResist', 'LightningResist', 'ChaosResist',
   'FireResistOverCap', 'ColdResistOverCap', 'LightningResistOverCap',
@@ -20,13 +21,18 @@ const ISSUES_FIELDS = [
   'TotalEHP',
 ];
 
-export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
+export async function handleGetBuildIssues(
+  context: BuildGoalsHandlerContext,
+  prefetchedStats?: Record<string, any>
+) {
   return wrapHandler('get build issues', async () => {
     await context.ensureLuaClient();
     const luaClient = context.getLuaClient();
     if (!luaClient) throw new Error('Lua bridge not active. Use lua_start and lua_load_build first.');
 
-    const stats = await luaClient.getStats(ISSUES_FIELDS);
+    // The bridge is single-request, so a caller holding these already (post-load
+    // summary) would otherwise pay a second serialised round-trip for the same numbers.
+    const stats = prefetchedStats ?? await luaClient.getStats(ISSUES_FIELDS);
     const issues: BuildIssue[] = [];
 
     // Elemental resistances
