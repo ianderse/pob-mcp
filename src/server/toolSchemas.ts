@@ -998,13 +998,17 @@ export function getOptimizationToolSchemas(): ToolSchema[] {
     {
       name: "analyze_defenses",
       truncatable: true,
-      description: "Deep-dive into defensive layers (avoidance/mitigation/recovery): EHP, spell suppression, evasion, block, armour/PDR, life regen, leech. Use this when you specifically want detailed defense breakdown. validate_build already covers this — only call analyze_defenses separately if you need more defensive detail than validate_build provides.",
+      description: "Ranks a build's defences by the BINDING CONSTRAINT: the max hit PoB computes per damage type (physical/fire/cold/lightning/chaos), lowest first, so you can see which hit kills this character and how much headroom the rest have. Use this before recommending any defensive purchase — TotalEHP averages across damage types and will rank a patch to the strongest type about level with a patch to the weakest. Also reports the usual layers (avoidance/mitigation/recovery, suppression, block, armour/PDR, regen). Limits: max hits use CAPPED resistance, so types at the cap tie and overcap counts for nothing here; the figures are for the currently loaded config and enemy settings. validate_build does NOT report max hits, so call this one for any survivability ranking.",
       inputSchema: {
         type: "object",
         properties: {
           build_name: {
             type: "string",
             description: "Build to analyze",
+          },
+          sweep_resistances: {
+            type: "boolean",
+            description: "Measure how far the binding resistance is worth buying. Steps that resistance up 5% at a time on the real engine (a few seconds) and reports the point at which the floor changes hands, past which more of it buys nothing. Mutates the loaded build during the sweep and restores it from a snapshot afterwards. Skipped when physical is the binding constraint, since no resistance moves it.",
           },
         },
         required: ["build_name"],
@@ -1230,7 +1234,7 @@ export function getValidationToolSchemas(): ToolSchema[] {
     {
       name: "validate_build",
       truncatable: true,
-      description: "Comprehensive build validation: resistances, life pool, defensive layers (avoidance/mitigation/recovery), mana sustain, accuracy, flask immunities, damage scaling. Provides prioritized critical/warning/info recommendations. PREFER this over get_build_issues + analyze_defenses — it covers both in one call. Do not call all three.",
+      description: "Comprehensive build validation: resistances, life pool, defensive layers (avoidance/mitigation/recovery), mana sustain, accuracy, flask immunities, damage scaling. Provides prioritized critical/warning/info recommendations. PREFER this over get_build_issues — it covers both in one call. It does NOT report per-damage-type max hits, so use analyze_defenses when the question is which damage type kills the character or where a defensive point should go.",
       inputSchema: {
         type: "object",
         properties: {

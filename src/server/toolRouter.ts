@@ -403,7 +403,11 @@ export async function routeToolCall(
 
     // Phase 6: Build Optimization tools
     case "analyze_defenses":
-      return await handleAnalyzeDefenses(optimizationContext, args?.build_name as string | undefined);
+      return await handleAnalyzeDefenses(
+        optimizationContext,
+        args?.build_name as string | undefined,
+        args?.sweep_resistances === true
+      );
 
     case "suggest_optimal_nodes":
       if (!args) throw new Error("Missing arguments");
