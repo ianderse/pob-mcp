@@ -29,7 +29,7 @@ try {
   // calc_with returns PoB's live object graph, which contains reference cycles.
   // Before the sanitiser this killed the process on the first call, taking the
   // caller's loaded build with it.
-  const out = await client.calcWith({});
+  const { output: out } = await client.calcWith({});
   check('calc_with returns a serialisable result', typeof out?.TotalDPS === 'number' || typeof out?.Life === 'number');
   check('bridge survives calc_with', client.isAlive());
 
@@ -42,13 +42,18 @@ try {
   // Runs on the repo-owned geared fixture: example-build.xml has too few
   // allocated nodes for a life delta to be guaranteed there.
   await client.loadBuildXml(await readFile(gearedBuildXml, 'utf8'), 'truthfulness-smoke-geared');
-  const baseline = await client.calcWith({});
+  const { output: baseline, base } = await client.calcWith({});
+  check(
+    'calc_with returns the unmodified build as its base',
+    typeof base?.Life === 'number' && base.Life === baseline?.Life,
+    `base Life ${base?.Life}, no-override Life ${baseline?.Life}`,
+  );
   const allocatedForDrop = (await client.getTree()).nodes ?? [];
   // The fixture is repo-owned, so an empty allocation list is fixture damage,
   // not an environment condition worth skipping on.
   check('geared fixture has allocated nodes', allocatedForDrop.length > 0, `got ${allocatedForDrop.length}`);
   if (allocatedForDrop.length > 0) {
-    const dropped = await client.calcWith({ removeNodes: allocatedForDrop });
+    const { output: dropped } = await client.calcWith({ removeNodes: allocatedForDrop });
     check(
       'calc_with applies removeNodes override',
       typeof dropped?.Life === 'number' && typeof baseline?.Life === 'number' && dropped.Life < baseline.Life,

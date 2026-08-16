@@ -9,7 +9,9 @@ import { atomicWriteFile } from "./utils/atomicWrite.js";
 import { resolvePoBLayout } from "./utils/pobLayout.js";
 
 /** Lua bridge request envelope */
-type LuaRequest = { action: string; params?: Record<string, unknown> };
+// params is only ever serialised, so an interface with declared keys is as valid
+// a payload here as a bag of unknowns.
+type LuaRequest = { action: string; params?: object };
 /** Lua bridge response envelope — always an object with at minimum `ok: boolean` */
 type LuaResponse = { ok: boolean; error?: string; [key: string]: unknown };
 
@@ -305,6 +307,23 @@ export interface AilmentReport {
     note?: string;
     isConfiguredEnemy?: boolean;
   }>;
+}
+
+/**
+ * One hypothetical passed to PoB's MiscCalculator. Nothing here is written to
+ * the build: the engine applies the overrides for a single calculation only.
+ * `repItem` is raw item text and needs `repSlotName` (an itemsTab slot name such
+ * as "Body Armour", never a base type); `toggleFlask` flips the flask in that
+ * 1-based flask slot from its current state.
+ */
+export interface CalcWithParams {
+  addNodes?: Array<number | string>;
+  removeNodes?: Array<number | string>;
+  masteryEffects?: Record<string | number, number>;
+  repItem?: string;
+  repSlotName?: string;
+  toggleFlask?: number;
+  useFullDPS?: boolean;
 }
 
 export class PoBLuaApiClient {
@@ -830,10 +849,10 @@ async setTree(params: {
     };
   }
 
-  async calcWith(params: { addNodes?: Array<number | string>; removeNodes?: Array<number | string>; masteryEffects?: Record<string | number, number>; useFullDPS?: boolean }): Promise<CalcOutput> {
+  async calcWith(params: CalcWithParams): Promise<{ output: CalcOutput; base: CalcOutput }> {
     const res = await this.send({ action: "calc_with", params });
     if (!res.ok) throw new Error(res.error || "calc_with failed");
-    return res.output as CalcOutput;
+    return { output: res.output as CalcOutput, base: res.base as CalcOutput };
   }
 
   async getMasteryOptions(): Promise<MasteryOptions> {
