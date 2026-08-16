@@ -51,6 +51,13 @@ missing file must raise an error; do not substitute the build already in memory.
 
 ## Verify mutations against their intended effect
 
+Measure a candidate with `lua_simulate` before mutating anything. It runs one
+hypothetical (item swap, flask toggle, passives, masteries) through the calculator
+and reports the delta against the unchanged build. Nothing is written, so there is
+nothing to undo. It also names an attribute requirement the swap would leave unmet;
+the other read paths quote full DPS for that gear. Mutate only when the change is
+not one `lua_simulate` can express, and then on a scratch build.
+
 ```text
 before = read the relevant live state
 apply one change

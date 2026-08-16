@@ -379,6 +379,7 @@ PoB installation or checkout containing the relevant mod tables.
 | `set_character_level` | Set level and recalculate all stats |
 | `lua_get_stats` | Get calculated stats (`category`: `offense`/`defense`/`all`) |
 | `lua_get_ailments` | Non-damaging ailment magnitude, and whether the DPS calc is crediting it |
+| `lua_simulate` | Try an item swap, flask toggle, passive or mastery change and read the delta, without changing the build |
 | `lua_get_tree` | View passive tree: class, ascendancy, all allocated node IDs |
 | `lua_set_tree` | Replace passive tree allocation (preserves class if omitted) |
 | `update_tree_delta` | Add/remove individual nodes without replacing entire tree |

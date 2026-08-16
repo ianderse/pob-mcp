@@ -161,6 +161,16 @@ Expose atomic tools that map to the PoB API. Names prefixed `lua_` to avoid conf
   - Input: none
   - Output: `{ stats: Record<string, number|string> }`
 
+- `lua_simulate`
+  - Description: Run one hypothetical through PoB's `GetMiscCalculator()` and report the
+    resulting stats against the unmodified build. Nothing is written: the item is parsed
+    but never equipped, and the mastery selections it borrows are restored. Also reports
+    an attribute requirement the simulated gear would leave unmet, which PoB otherwise
+    quotes full DPS for.
+  - Input: `{ itemText?: string, slotName?: string, toggleFlask?: number, addNodes?: number[], removeNodes?: number[], masteryEffects?: Record<number,number>, useFullDPS?: boolean }`
+  - Output: stat deltas as text. `slotName` must be an itemsTab slot name ("Body Armour"),
+    not a base type; `toggleFlask` flips the flask in that slot rather than setting it.
+
 - `lua_get_tree`
   - Description: Return current passive tree data.
   - Input: `{}`
@@ -177,7 +187,7 @@ Expose atomic tools that map to the PoB API. Names prefixed `lua_` to avoid conf
   - Output: status text.
 
 Notes
-- We can later add `lua_calc_with` for what‑if diffs without persisting tree changes using PoB’s `GetMiscCalculator()`.
+- What‑if diffs ship as `lua_simulate`, on top of PoB’s `GetMiscCalculator()`.
 
 ## Integration Steps
 1. Add feature flag
@@ -241,10 +251,9 @@ Notes
 ## Rollout
 - Phase 1 (opt‑in): ship the tools behind `POB_LUA_ENABLED`; keep defaults off.
 - Phase 2 (default‑on beta): enable by default for users with validated `luajit` and fork path.
-- Phase 3: expand to what‑if diffs (`lua_calc_with`) and gem/item edits.
+- Phase 3: expand to what‑if diffs (`lua_simulate`) and gem/item edits.
 
 ## Future Enhancements
-- What‑if APIs: temporary allocation testing without persisting changes.
 - Items/skills ops: structured import and calculation.
 - Stats contract: publish a curated, stable schema for MCP consumers.
 - PoB fork collaboration: upstream an official headless API mode.
