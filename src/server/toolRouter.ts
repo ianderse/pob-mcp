@@ -17,7 +17,7 @@ import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handle
 import { handleCompareTrees, handleGetNearbyNodes, handleFindPath, handleGetPassiveUpgrades, handleSuggestMasteries } from "../handlers/treeHandlers.js";
 import { handleGetBuildIssues, formatIssuesResponse } from "../handlers/buildGoalsHandlers.js";
 import { handleFindBestAnointment } from "../handlers/anointHandlers.js";
-import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaSaveBuild, handleLuaLoadBuild, handleLuaImportCode, handleLuaGetAilments,
+import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaSaveBuild, handleLuaLoadBuild, handleLuaImportCode, handleLuaGetAilments, handleLuaSimulate,
   handleLuaGetStats, handleLuaGetBuildSnapshot, handleLuaGetTree, handleLuaSetTree, handleSearchTreeNodes, handleLuaGetBuildInfo, handleLuaReloadBuild, handleUpdateTreeDelta, handleCreateSpec, handleListSpecs, handleSelectSpec, handleDeleteSpec, handleRenameSpec, handleListItemSets, handleSelectItemSet } from "../handlers/luaHandlers.js";
 import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems, handleSetSocketGroupEnabled, handleSetGemEnabled } from "../handlers/itemSkillHandlers.js";
 import { handleAnalyzeDefenses, handleSuggestOptimalNodes, handleOptimizeTree } from "../handlers/optimizationHandlers.js";
@@ -193,6 +193,17 @@ export async function routeToolCall(
 
     case "lua_get_ailments":
       return await handleLuaGetAilments(luaContext);
+
+    case "lua_simulate":
+      return await handleLuaSimulate(luaContext, {
+        addNodes: args?.addNodes as number[] | undefined,
+        removeNodes: args?.removeNodes as number[] | undefined,
+        masteryEffects: args?.masteryEffects as Record<string, number> | undefined,
+        itemText: args?.itemText as string | undefined,
+        slotName: args?.slotName as string | undefined,
+        toggleFlask: args?.toggleFlask as number | undefined,
+        useFullDPS: args?.useFullDPS as boolean | undefined,
+      });
 
     case "lua_get_stats":
       return await handleLuaGetStats(luaContext, args?.category as string | undefined);

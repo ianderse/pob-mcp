@@ -485,6 +485,22 @@ export function getLuaToolSchemas(): ToolSchema[] {
       },
     },
     {
+      name: "lua_simulate",
+      description: "Answer a 'what if' about the loaded build without changing it: swap an item into a slot, toggle a flask, allocate or unallocate passives, or pick mastery effects, and get the resulting stats with the delta against the current build. This is the tool to reach for before recommending any gear or tree change, because it costs nothing to undo — nothing is written, nothing is saved, and the build the player has open is untouched. It also reports when the simulated gear would leave an attribute requirement unmet, which PoB itself will happily quote full DPS for even though the game would disable the item. What it does NOT do: it does not equip, buy, price or persist anything (use add_item for a real change); it does not check socket colours, links, item level or affix legality, so it will price a physically impossible item as if it existed; and it simulates one change at a time against the current build, not a sequence.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          itemText: { type: "string", description: "Full PoB item text to try in slotName. Requires slotName. The item is parsed and calculated, never equipped." },
+          slotName: { type: "string", description: "Equipment slot the item replaces, exactly as PoB names it: 'Body Armour', 'Weapon 1', 'Ring 1', 'Amulet'. A base type such as 'Chest' or 'Ring' is rejected. Use get_equipped_items for the slot names of this build." },
+          toggleFlask: { type: "number", description: "Flask slot 1-5 to FLIP: an active flask is simulated off, an inactive one on. The slot must hold a flask." },
+          addNodes: { type: "array", items: { type: "number" }, description: "Passive node IDs to allocate for this calculation." },
+          removeNodes: { type: "array", items: { type: "number" }, description: "Passive node IDs to unallocate for this calculation." },
+          masteryEffects: { type: "object", description: "Mastery effect choices as { nodeId: effectId } (see suggest_masteries)." },
+          useFullDPS: { type: "boolean", description: "Total the DPS of every enabled skill instead of the main one." },
+        },
+      },
+    },
+    {
       name: "lua_get_ailments",
       description: "Show non-damaging ailments (Shock, Chill, Scorch, Brittle, Sap) with what the DPS calculation is actually crediting next to what the main skill would inflict on the configured enemy. Call this for any build that shocks or chills: PoB applies a chance-based ailment only when its magnitude is entered by hand, so an uncounted shock silently understates every DPS figure. Magnitude is measured for the MAIN skill against the CURRENT enemy config, and it falls off steeply with enemy life, so re-read it per enemy rather than quoting one number for all content.",
       inputSchema: { type: "object", properties: {} },
