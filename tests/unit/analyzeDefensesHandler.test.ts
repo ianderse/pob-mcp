@@ -33,54 +33,44 @@ interface FakeClientOptions {
   chaosByDelta?: Record<number, { maxHit: number; resist: number }>;
   items?: any[];
   carrierDrifts?: boolean;
-  /** Make loadBuildXml a no-op, i.e. a snapshot restore that silently fails. */
-  restoreFails?: boolean;
 }
 
 function fakeClient(options: FakeClientOptions = {}) {
   const requestedFields: string[][] = [];
-  const equipped: string[] = [];
-  const loaded: string[] = [];
-  let extra: { maxHit: number; resist: number } | null = null;
+  const simulated: string[] = [];
+
+  const withOverrides = (extra: { maxHit: number; resist: number } | null) => ({
+    ...OCC_VORTEX,
+    ...(extra ? { ChaosMaximumHitTaken: extra.maxHit, ChaosResist: extra.resist } : {}),
+  });
 
   const client = {
     getBuildInfo: async () => ({ name: 'occ-vortex' }),
     listSpecs: async () => ({ specs: [] }),
     listItemSets: async () => ({ itemSets: [] }),
     getItems: async () => options.items ?? [RING],
-    exportBuildXml: async () => '<PathOfBuilding>snapshot</PathOfBuilding>',
-    loadBuildXml: async (xml: string) => {
-      loaded.push(xml);
-      if (!options.restoreFails) extra = null;
-      return { ok: true };
-    },
-    addItem: async (itemText: string, slotName?: string) => {
-      equipped.push(`${slotName}:${itemText}`);
-      const match = itemText.match(/\+(\d+)% to Chaos Resistance/);
-      if (!match) {
-        extra = options.carrierDrifts ? { maxHit: 1, resist: 68 } : null;
-        return { ok: true };
-      }
-      // Past the last scripted step the resistance is capped, so the stats
-      // stay where they were rather than snapping back to the baseline.
-      extra = options.chaosByDelta?.[Number(match[1])] ?? extra;
-      return { ok: true };
+    // A mutating sweep would reach for these. Leaving them off the fake means a
+    // regression to the carrier trick fails loudly instead of quietly working.
+    calcWith: async ({ repItem, repSlotName }: { repItem?: string; repSlotName?: string }) => {
+      simulated.push(`${repSlotName}:${repItem}`);
+      const match = repItem?.match(/\+(\d+)% to Chaos Resistance/);
+      const extra = match
+        ? options.chaosByDelta?.[Number(match[1])] ?? null
+        : options.carrierDrifts ? { maxHit: 1, resist: 68 } : null;
+      return { output: withOverrides(extra), base: withOverrides(null) };
     },
     getStats: async (fields?: string[]) => {
       requestedFields.push(fields ?? []);
-      const overrides: Record<string, number> = extra
-        ? { ChaosMaximumHitTaken: extra.maxHit, ChaosResist: extra.resist }
-        : {};
-      const all: Record<string, number> = { ...OCC_VORTEX, ...overrides };
+      const all = withOverrides(null);
       // PoB serves only what it was asked for, and its no-field default set
       // carries no *MaximumHitTaken at all. Reproduce that here, or a handler
       // that forgets the field list still looks like it works.
       const served = fields ?? Object.keys(all).filter((key) => !key.endsWith('MaximumHitTaken'));
-      return Object.fromEntries(served.filter((key) => key in all).map((key) => [key, all[key]]));
+      return Object.fromEntries(served.filter((key) => key in all).map((key) => [key, all[key as keyof typeof all]]));
     },
   };
 
-  return { client, requestedFields, equipped, loaded };
+  return { client, requestedFields, simulated };
 }
 
 const context = (client: unknown) => ({
@@ -117,16 +107,16 @@ describe('handleAnalyzeDefenses', () => {
   });
 
   it('does not sweep unless asked', async () => {
-    const { client, equipped } = fakeClient();
+    const { client, simulated } = fakeClient();
 
     const text = textOf(await handleAnalyzeDefenses(context(client), 'occ-vortex'));
 
-    expect(equipped).toHaveLength(0);
+    expect(simulated).toHaveLength(0);
     expect(text).not.toContain('Resistance Sweep');
   });
 
   it('sweeps the weakest resisted type and stops it at the cap', async () => {
-    const { client, equipped, loaded } = fakeClient({
+    const { client, simulated } = fakeClient({
       chaosByDelta: {
         5: { maxHit: 46910, resist: 73 },
         10: { maxHit: 50663, resist: 75 },
@@ -141,26 +131,47 @@ describe('handleAnalyzeDefenses', () => {
     expect(text).toContain('+11,083 to the lowest resisted max hit');
     // Physical is still the overall floor, and no resistance touches it.
     expect(text).toContain('Physical still owns the overall floor at 18,642');
-    expect(equipped.length).toBeGreaterThan(1);
-    expect(loaded).toContain('<PathOfBuilding>snapshot</PathOfBuilding>');
+    expect(simulated.length).toBeGreaterThan(1);
+  });
+
+  it('measures the sweep without equipping anything', async () => {
+    // The sweep used to append the probe modifier to a real item and restore the
+    // build from a snapshot afterwards. A failed restore left the probe in the
+    // user's live session, which is the silent corruption this tool exists to avoid.
+    const { client, simulated } = fakeClient({
+      chaosByDelta: { 5: { maxHit: 46910, resist: 73 }, 10: { maxHit: 50663, resist: 75 } },
+    });
+    const mutationAttempted: string[] = [];
+    const guarded = {
+      ...client,
+      addItem: async () => { mutationAttempted.push('addItem'); return { ok: true }; },
+      loadBuildXml: async () => { mutationAttempted.push('loadBuildXml'); return { ok: true }; },
+      exportBuildXml: async () => { mutationAttempted.push('exportBuildXml'); return ''; },
+    };
+
+    const text = textOf(await handleAnalyzeDefenses(context(guarded), 'occ-vortex', true));
+
+    expect(text).toContain('Chaos Resistance Sweep');
+    expect(simulated.length).toBeGreaterThan(1);
+    expect(mutationAttempted).toEqual([]);
   });
 });
 
 describe('runResistanceSweep', () => {
   const sweepClient = (options: FakeClientOptions) => fakeClient(options);
 
-  it('restores the build from a snapshot even when a step throws', async () => {
-    const { client, loaded } = sweepClient({});
+  it('leaves nothing behind when a step throws', async () => {
+    const { client } = sweepClient({});
     const exploding: SweepClient = {
       ...client,
-      addItem: async (itemText: string, slotName?: string) => {
-        if (itemText.includes('Resistance')) throw new Error('engine blew up');
-        return client.addItem(itemText, slotName);
+      calcWith: async (params) => {
+        if (params.repItem?.includes('Resistance')) throw new Error('engine blew up');
+        return client.calcWith(params);
       },
     };
 
+    // Nothing to unwind: a simulation that dies mid-flight never touched the build.
     await expect(runResistanceSweep(exploding, 'Chaos')).rejects.toThrow('engine blew up');
-    expect(loaded).toContain('<PathOfBuilding>snapshot</PathOfBuilding>');
   });
 
   it('declines to measure through a carrier that moves the floor by itself', async () => {
@@ -169,20 +180,7 @@ describe('runResistanceSweep', () => {
     const result = await runResistanceSweep(client, 'Chaos');
 
     expect(result.summary).toBeUndefined();
-    expect(result.note).toContain('re-equipping Ring 1 unmodified changed the floor');
-  });
-
-  it('warns when the probe modifier survives the restore', async () => {
-    const { client } = sweepClient({
-      restoreFails: true,
-      chaosByDelta: { 5: { maxHit: 46910, resist: 73 }, 10: { maxHit: 50663, resist: 75 } },
-    });
-
-    const result = await runResistanceSweep(client, 'Chaos');
-
-    expect(result.summary).toBeDefined();
-    expect(result.note).toContain('did not restore cleanly');
-    expect(result.note).toContain('expected 39,580');
+    expect(result.note).toContain('substituting Ring 1 unmodified changed the floor');
   });
 
   it('declines when no equipped item can carry a test modifier', async () => {

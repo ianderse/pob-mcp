@@ -89,7 +89,7 @@ export async function handleAnalyzeDefenses(
       if (!resistedBinding) {
         text += '\n**Resistance Sweep:** skipped. PoB reported no resisted max hit to sweep against.\n';
       } else {
-        const { summary, note } = await runResistanceSweep(luaClient, resistedBinding.type, { buildName });
+        const { summary, note } = await runResistanceSweep(luaClient, resistedBinding.type);
         if (summary) text += `\n${formatResistanceSweep(summary)}\n`;
         // A resistance cannot touch the physical max hit, so say so rather than
         // letting the sweep read as "this is what fixes the character".
