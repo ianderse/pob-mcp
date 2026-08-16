@@ -147,6 +147,63 @@ try {
     throw new Error(`unknown equip slot must fail loudly, got: ${slotErr ? slotErr.message : 'no error'}`);
   }
 
+  // A "what if" is only worth anything if it leaves the build alone, so the
+  // simulation runs against a geared fixture and the state is read back after.
+  await client.loadBuildXml(await readFile(gearedBuildXml, 'utf8'), 'simulate-smoke');
+  const beforeStats = await client.getStats();
+  const beforeItems = await client.getItems();
+  const equippedChest = beforeItems.find((i) => i.slot === 'Body Armour');
+  if (!equippedChest?.name) throw new Error('the geared fixture must have a body armour to swap');
+
+  // Same base as the equipped Quilted Jacket, strictly better on every roll it
+  // carries: the fixture's chest also holds resistances, and dropping those
+  // costs more EHP than a large life roll buys back.
+  const betterChest = ['Rarity: RARE', 'Smoke Jacket', 'Quilted Jacket', 'Item Level: 84',
+    'Quality: 20', 'LevelReq: 72', 'Implicits: 0', '+500 to maximum Life',
+    '+50% to Cold Resistance', '+50% to Lightning Resistance'].join('\n');
+  const swapped = await client.calcWith({ repItem: betterChest, repSlotName: 'Body Armour' });
+  if (!(swapped.output.Life > swapped.base.Life) || !(swapped.output.TotalEHP > swapped.base.TotalEHP)) {
+    throw new Error(`a +500 life chest must raise Life and EHP: ${swapped.base.Life}->${swapped.output.Life}, ${swapped.base.TotalEHP}->${swapped.output.TotalEHP}`);
+  }
+  if (swapped.base.Life !== beforeStats.Life) throw new Error('calc_with must report the loaded build as its baseline');
+
+  // Attribute requirements: PoB quotes full DPS for gear the game would disable.
+  const draining = ['Rarity: RARE', 'Draining Jacket', 'Quilted Jacket', 'Item Level: 84',
+    'Quality: 20', 'LevelReq: 72', 'Implicits: 0', '-100 to Strength'].join('\n');
+  const drained = await client.calcWith({ repItem: draining, repSlotName: 'Body Armour' });
+  if (!(drained.base.ReqStr <= drained.base.Str)) throw new Error('the fixture is supposed to meet its own requirements');
+  if (!(drained.output.ReqStr > drained.output.Str)) {
+    throw new Error(`draining 100 Strength should leave a requirement unmet: Str ${drained.output.Str} vs ReqStr ${drained.output.ReqStr}`);
+  }
+
+  // The flask override flips the slot rather than setting it: Flask 2 is the
+  // fixture's granite flask, so simulating it off has to drop armour.
+  const flaskOff = await client.calcWith({ toggleFlask: 2 });
+  if (!(flaskOff.output.Armour < flaskOff.base.Armour)) {
+    throw new Error(`toggling the granite flask off must lower armour: ${flaskOff.base.Armour} -> ${flaskOff.output.Armour}`);
+  }
+
+  // Bad input must come back as an error, with the bridge and the build intact.
+  for (const [bad, why] of [
+    [{ repItem: betterChest, repSlotName: 'Chest' }, 'a base type is not a slot name'],
+    [{ repItem: betterChest }, 'repItem without a slot'],
+    [{ toggleFlask: 9 }, 'a flask index out of range'],
+    [{ repItem: 'not an item', repSlotName: 'Body Armour' }, 'unparseable item text'],
+  ]) {
+    const rejected = await client.calcWith(bad).then(() => null, (err) => err);
+    if (!rejected) throw new Error(`calc_with accepted ${why}`);
+  }
+  if (!client.isAlive()) throw new Error('a rejected simulation must not kill the bridge');
+
+  const afterStats = await client.getStats();
+  const afterItems = await client.getItems();
+  if (afterStats.Life !== beforeStats.Life || afterStats.TotalEHP !== beforeStats.TotalEHP || afterStats.Armour !== beforeStats.Armour) {
+    throw new Error(`simulation mutated the build: ${JSON.stringify({ beforeStats, afterStats })}`);
+  }
+  if (afterItems.length !== beforeItems.length || afterItems.find((i) => i.slot === 'Body Armour')?.name !== equippedChest.name) {
+    throw new Error('simulation equipped the item it was only supposed to try');
+  }
+
   await client.loadBuildXml(await readFile(gearedBuildXml, 'utf8'), 'weighted-query-smoke');
   const weighted = await client.generateWeightedTradeQuery('Amulet');
   const query = weighted.query;
