@@ -1,6 +1,6 @@
 import type { AilmentReport, PoBLuaApiClient } from "../pobLuaBridge.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
-import { handleGetBuildIssues, ISSUES_FIELDS } from "./buildGoalsHandlers.js";
+import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
 import fs from "fs/promises";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { buildFileName, resolveBuildFile } from "../utils/pathSanitizer.js";
@@ -142,9 +142,14 @@ async function buildPostLoadSummary(context: LuaHandlerContext, luaClient: PoBLu
         summaryLines.push(`**${info.name || name}** | Level ${info.level} ${info.className ?? ''}${info.ascendClassName ? ` (${info.ascendClassName})` : ''}`);
       }
 
-      // ISSUES_FIELDS is a superset of what this summary prints, so one fetch
-      // feeds both halves instead of two round-trips over a single-request bridge.
-      const s = await luaClient.getStats(ISSUES_FIELDS).catch(() => null);
+      // get_build_issues hands back the stats it fetched, and its field set already
+      // covers this summary. Fetching them again here cost a second recalculation
+      // (~24ms) over a bridge that can only serve one request at a time.
+      const issuesResult = await handleGetBuildIssues(
+        { getLuaClient: context.getLuaClient, ensureLuaClient: async () => {} }
+      ).catch(() => null);
+
+      const s = issuesResult?.stats ?? null;
       if (s) {
         const dps = Number(s.CombinedDPS || s.TotalDPS || s.MinionTotalDPS || 0);
         const dpsLabel = (s.MinionTotalDPS && !s.TotalDPS) ? 'Minion DPS' : 'DPS';
@@ -152,10 +157,6 @@ async function buildPostLoadSummary(context: LuaHandlerContext, luaClient: PoBLu
         summaryLines.push(`Resists: F${s.FireResist}% C${s.ColdResist}% L${s.LightningResist}% Ch${s.ChaosResist}%`);
       }
 
-      const issuesResult = await handleGetBuildIssues(
-        { getLuaClient: context.getLuaClient, ensureLuaClient: async () => {} },
-        s ?? undefined
-      ).catch(() => null);
       if (issuesResult) {
         const { issues } = issuesResult;
         const topIssues = issues.filter(i => i.severity === 'error' || i.severity === 'warning').slice(0, 3);
