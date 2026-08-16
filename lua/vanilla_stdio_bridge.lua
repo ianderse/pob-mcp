@@ -287,7 +287,13 @@ handlers.get_config = function()
   if cfg == nil then return { ok = false, error = err or 'operation failed' } end
   return { ok = true, config = cfg, labels = (BuildOps.get_config_labels()) }
 end
-handlers.calc_with = op(BuildOps.calc_with, 'output')
+-- GetMiscCalculator hands back the unmodified build's output alongside the
+-- calculator, so the caller gets its comparison baseline without a second calc.
+handlers.calc_with = function(params)
+  local out, base = BuildOps.calc_with(params or {})
+  if out == nil then return { ok = false, error = base or 'operation failed' } end
+  return { ok = true, output = out, base = base }
+end
 handlers.export_build_xml = op(BuildOps.export_build_xml, 'xml')
 handlers.add_item_text = op(BuildOps.add_item_text, 'item')
 handlers.create_socket_group = op(BuildOps.create_socket_group, 'socketGroup')
