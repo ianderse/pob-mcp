@@ -33,6 +33,8 @@ interface FakeClientOptions {
   chaosByDelta?: Record<number, { maxHit: number; resist: number }>;
   items?: any[];
   carrierDrifts?: boolean;
+  /** Make loadBuildXml a no-op, i.e. a snapshot restore that silently fails. */
+  restoreFails?: boolean;
 }
 
 function fakeClient(options: FakeClientOptions = {}) {
@@ -49,7 +51,7 @@ function fakeClient(options: FakeClientOptions = {}) {
     exportBuildXml: async () => '<PathOfBuilding>snapshot</PathOfBuilding>',
     loadBuildXml: async (xml: string) => {
       loaded.push(xml);
-      extra = null;
+      if (!options.restoreFails) extra = null;
       return { ok: true };
     },
     addItem: async (itemText: string, slotName?: string) => {
@@ -59,7 +61,9 @@ function fakeClient(options: FakeClientOptions = {}) {
         extra = options.carrierDrifts ? { maxHit: 1, resist: 68 } : null;
         return { ok: true };
       }
-      extra = options.chaosByDelta?.[Number(match[1])] ?? null;
+      // Past the last scripted step the resistance is capped, so the stats
+      // stay where they were rather than snapping back to the baseline.
+      extra = options.chaosByDelta?.[Number(match[1])] ?? extra;
       return { ok: true };
     },
     getStats: async (fields?: string[]) => {
@@ -166,6 +170,19 @@ describe('runResistanceSweep', () => {
 
     expect(result.summary).toBeUndefined();
     expect(result.note).toContain('re-equipping Ring 1 unmodified changed the floor');
+  });
+
+  it('warns when the probe modifier survives the restore', async () => {
+    const { client } = sweepClient({
+      restoreFails: true,
+      chaosByDelta: { 5: { maxHit: 46910, resist: 73 }, 10: { maxHit: 50663, resist: 75 } },
+    });
+
+    const result = await runResistanceSweep(client, 'Chaos');
+
+    expect(result.summary).toBeDefined();
+    expect(result.note).toContain('did not restore cleanly');
+    expect(result.note).toContain('expected 39,580');
   });
 
   it('declines when no equipped item can carry a test modifier', async () => {

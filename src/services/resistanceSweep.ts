@@ -102,6 +102,7 @@ export async function runResistanceSweep(
   }
 
   const snapshot = await client.exportBuildXml();
+  let result: SweepResult;
 
   try {
     // Re-equip the carrier unmodified first. If that alone moves the floor, the
@@ -109,54 +110,48 @@ export async function runResistanceSweep(
     await client.addItem(carrier.raw, carrier.slot);
     const control = await measure(client, element);
     if (!control || control.floor !== baseline.floor) {
-      return {
+      result = {
         note: `Sweep skipped: re-equipping ${carrier.slot} unmodified changed the floor ` +
           `(${Math.round(baseline.floor).toLocaleString()} → ${control ? Math.round(control.floor).toLocaleString() : 'unavailable'}), ` +
           'so nothing measured through it would be trustworthy.',
       };
+    } else {
+      const steps: SweepStep[] = [];
+      for (let delta = step; delta <= maxDelta; delta += step) {
+        await client.addItem(`${carrier.raw}\n+${delta}% to ${element} Resistance`, carrier.slot);
+        const measured = await measure(client, element);
+        if (!measured) break;
+
+        steps.push({ delta, resist: measured.resist, floor: measured.floor, bindingType: measured.bindingType });
+
+        const previousResist = steps.length > 1 ? steps[steps.length - 2].resist : baseline.resist;
+        // Handing the floor over, or capping out, both end the useful range.
+        if (measured.bindingType !== element || measured.resist === previousResist) break;
+      }
+
+      result = steps.length === 0
+        ? { note: 'Sweep produced no measurements.' }
+        : {
+          summary: summariseResistanceSweep(
+            element,
+            { resist: baseline.resist, floor: baseline.floor, bindingType: baseline.bindingType },
+            steps
+          ),
+        };
     }
-
-    const steps: SweepStep[] = [];
-    for (let delta = step; delta <= maxDelta; delta += step) {
-      await client.addItem(`${carrier.raw}\n+${delta}% to ${element} Resistance`, carrier.slot);
-      const measured = await measure(client, element);
-      if (!measured) break;
-
-      steps.push({ delta, resist: measured.resist, floor: measured.floor, bindingType: measured.bindingType });
-
-      const previousResist = steps.length > 1 ? steps[steps.length - 2].resist : baseline.resist;
-      // Handing the floor over, or capping out, both end the useful range.
-      if (measured.bindingType !== element || measured.resist === previousResist) break;
-    }
-
-    if (steps.length === 0) {
-      return { note: 'Sweep produced no measurements.' };
-    }
-
-    return {
-      summary: summariseResistanceSweep(
-        element,
-        { resist: baseline.resist, floor: baseline.floor, bindingType: baseline.bindingType },
-        steps
-      ),
-    };
   } finally {
     await client.loadBuildXml(snapshot, options.buildName ?? 'restored build');
   }
-}
 
-/**
- * Confirm the snapshot restore landed. A probe item left behind in the user's
- * live session is exactly the silent corruption this tool is meant to avoid.
- */
-export async function verifyRestored(
-  client: SweepClient,
-  expectedResistedFloor: number
-): Promise<string | undefined> {
-  const stats = await client.getStats(fieldList);
-  const binding = analyzeMaxHits(stats).resistedBinding;
-  if (binding && binding.maxHit === expectedResistedFloor) return undefined;
-  return `WARNING: the build did not restore cleanly after the sweep (floor ${
-    binding ? Math.round(binding.maxHit).toLocaleString() : 'unavailable'
-  }, expected ${Math.round(expectedResistedFloor).toLocaleString()}). Reload the build before trusting any further reading.`;
+  // Read the build back after the restore. A probe modifier left behind in the
+  // user's live session is exactly the silent corruption this tool exists to
+  // avoid, and only a measurement can tell whether the reload landed.
+  const restored = await measure(client, element);
+  if (restored && restored.floor === baseline.floor) return result;
+
+  const warning = `WARNING: the build did not restore cleanly after the sweep (floor ${
+    restored ? Math.round(restored.floor).toLocaleString() : 'unavailable'
+  }, expected ${Math.round(baseline.floor).toLocaleString()}). Reload the build before trusting any further reading.`;
+
+  return { ...result, note: [result.note, warning].filter(Boolean).join('\n\n') };
 }

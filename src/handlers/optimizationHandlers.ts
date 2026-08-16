@@ -10,7 +10,7 @@ import {
   formatDefensiveAnalysis,
   formatResistanceSweep,
 } from "../defensiveAnalyzer.js";
-import { runResistanceSweep, verifyRestored } from "../services/resistanceSweep.js";
+import { runResistanceSweep } from "../services/resistanceSweep.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { resolveBuildFile } from "../utils/pathSanitizer.js";
 import { loadBuildIfDifferent, readNamedBuild } from "../utils/namedBuild.js";
@@ -90,15 +90,16 @@ export async function handleAnalyzeDefenses(
         text += '\n**Resistance Sweep:** skipped. PoB reported no resisted max hit to sweep against.\n';
       } else {
         const { summary, note } = await runResistanceSweep(luaClient, resistedBinding.type, { buildName });
-        const restoreWarning = await verifyRestored(luaClient, resistedBinding.maxHit);
-        text += `\n${summary ? formatResistanceSweep(summary) : note ?? 'Sweep produced no result.'}\n`;
+        if (summary) text += `\n${formatResistanceSweep(summary)}\n`;
         // A resistance cannot touch the physical max hit, so say so rather than
         // letting the sweep read as "this is what fixes the character".
-        if (binding && binding.type === 'Physical') {
+        if (summary && binding && binding.type === 'Physical') {
           text += `\nPhysical still owns the overall floor at ${Math.round(binding.maxHit).toLocaleString()}. ` +
             'This sweep ranks resistance purchases against each other, not against the thing that kills you first.\n';
         }
-        if (restoreWarning) text += `\n${restoreWarning}\n`;
+        // Carries the skip reason and any failed-restore warning.
+        if (note) text += `\n${note}\n`;
+        if (!summary && !note) text += '\nSweep produced no result.\n';
       }
     }
 
