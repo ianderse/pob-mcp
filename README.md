@@ -151,15 +151,30 @@ npm run build
 
 The Lua bridge uses PoB's actual calculation engine for accurate stats.
 
-#### 1. Install LuaJIT
+#### 1. Install a PoB-compatible LuaJIT
+
+PoB's Lua source uses compound assignment operators (`count += 1` in
+`Modules/Main.lua`), which **stock LuaJIT cannot parse**. A stock interpreter
+fails with a parse error before it resolves any module, so no `LUA_PATH` change
+will help:
+
+```
+_SimpleGraphic.def.lua:460: PLoadModule() error loading 'Modules/Main.lua':
+Modules/Main.lua:342: '=' expected near '+'
+```
+
+Use a LuaJIT built against the `lua51.dll` that ships with Path of Building, and
+point `POB_CMD` at it:
+
 ```bash
-# macOS
+POB_CMD=/path/to/pob-luajit/luajit
+```
+
+```bash
+# macOS / Linux: stock LuaJIT is only enough for checkouts predating the
+# compound-assignment operators
 brew install luajit
-
-# Ubuntu/Debian
 sudo apt-get install luajit
-
-# Windows: download from https://luajit.org/ and add to PATH
 ```
 
 #### 2. Clone PathOfBuilding
