@@ -1,11 +1,11 @@
-// Smoke test for the repo-owned adapter against an unmodified PoB checkout.
-// Usage: POB_PATH=/path/to/PathOfBuilding/src node tests/smoke/bridge.mjs
+// Smoke test for the repo-owned adapter against an unmodified PoB.
+// Usage: node tests/smoke/bridge.mjs   (set POB_PATH only to force a checkout)
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { PoBLuaApiClient } from '../../build/pobLuaBridge.js';
+import { gearedBuildXml, smokePoBSrc } from './pobSource.mjs';
 
-const cwd = process.env.POB_PATH || process.env.POB_FORK_PATH;
-if (!cwd) throw new Error('POB_PATH must point to a stock PoB src directory.');
+const cwd = smokePoBSrc();
 
 const client = new PoBLuaApiClient({
   cwd,
@@ -56,7 +56,7 @@ try {
   if (restored.ascendClassId !== tree.ascendClassId || restored.nodes.join(',') !== tree.nodes.join(',')) {
     throw new Error('tree mutation did not restore the original allocation');
   }
-  await client.loadBuildXml(await readFile(resolve(cwd, '../spec/TestBuilds/3.13/OccVortex.xml'), 'utf8'), 'weighted-query-smoke');
+  await client.loadBuildXml(await readFile(gearedBuildXml, 'utf8'), 'weighted-query-smoke');
   const weighted = await client.generateWeightedTradeQuery('Amulet');
   const query = weighted.query;
   if (!query || typeof query !== 'object' || query.query?.status?.option !== 'available' || query.query?.filters?.type_filters?.filters?.category?.option !== 'accessory.amulet' || !Array.isArray(query.query?.stats?.[0]?.filters) || query.query.stats[0].filters.length === 0) {

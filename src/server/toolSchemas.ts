@@ -415,6 +415,11 @@ export function getLuaToolSchemas(): any[] {
             type: "number",
             description: "Ascendancy class ID (0=None, 1-3 class-specific). Scion: 1=Ascendant | Marauder: 1=Juggernaut, 2=Berserker, 3=Chieftain | Ranger: 1=Raider, 2=Deadeye, 3=Pathfinder | Witch: 1=Occultist, 2=Elementalist, 3=Necromancer | Duelist: 1=Slayer, 2=Gladiator, 3=Champion | Templar: 1=Inquisitor, 2=Hierophant, 3=Guardian | Shadow: 1=Assassin, 2=Trickster, 3=Saboteur",
           },
+          masteryEffects: {
+            type: "object",
+            description: "Map of mastery node ID -> chosen effect ID (from get_mastery_options). A Mastery node with no effect selection is silently dropped by the tree import, so provide one entry per mastery node you want allocated. Existing mastery selections already on the build are preserved automatically and only need to be listed here if you want to change them.",
+            additionalProperties: { type: "number" },
+          },
         },
         required: ["nodes"],
       },
@@ -434,6 +439,11 @@ export function getLuaToolSchemas(): any[] {
             type: "array",
             items: { type: "string" },
             description: "Node IDs to remove from the current allocation",
+          },
+          mastery_effects: {
+            type: "object",
+            additionalProperties: { type: "number" },
+            description: "Effect to select for each Mastery node being added, as {\"<nodeId>\": <effectId>}. Required to allocate a Mastery: Path of Building refuses to allocate a Mastery node that has no effect chosen. Use suggest_masteries or search_tree_nodes to find effect IDs.",
           },
         },
       },
