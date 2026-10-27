@@ -13,6 +13,7 @@ import os from "os";
 import fs from "fs/promises";
 import { XMLParser } from "fast-xml-parser";
 // Import services
+import { defaultBuildsDirectory } from "./utils/pobLayout.js";
 import { BuildService } from "./services/buildService.js";
 import { TreeService } from "./services/treeService.js";
 import { WatchService } from "./services/watchService.js";
@@ -86,12 +87,7 @@ class PoBMCPServer {
     });
 
     // Default Path of Building directory (can be customized)
-    // Auto-detect based on platform
-    const defaultPoBPath = process.platform === 'darwin'
-      ? path.join(os.homedir(), "Path of Building", "Builds")  // macOS
-      : path.join(os.homedir(), "Documents", "Path of Building", "Builds");  // Windows/Linux
-
-    this.pobDirectory = process.env.POB_DIRECTORY || defaultPoBPath;
+    this.pobDirectory = process.env.POB_DIRECTORY || defaultBuildsDirectory();
 
     // Initialize services
     this.buildService = new BuildService(this.pobDirectory);

@@ -1,16 +1,18 @@
-// End-to-end MCP smoke test against a stock PoB checkout.
-// Usage: POB_PATH=/path/to/PathOfBuilding/src node tests/smoke/mcp.mjs
+// End-to-end MCP smoke test against an unmodified PoB.
+// Usage: node tests/smoke/mcp.mjs   (set POB_PATH only to force a checkout)
 import { cp, mkdtemp, rm } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { gearedBuildXml, smokePoBSrc } from './pobSource.mjs';
 
-const pobPath = process.env.POB_PATH || process.env.POB_FORK_PATH;
-if (!pobPath) throw new Error('POB_PATH must point to a stock PoB src directory.');
+// The server resolves the engine itself; fail here so a missing PoB reads as
+// a missing PoB rather than as a tool call timing out.
+smokePoBSrc();
 const buildsDir = await mkdtemp(join(tmpdir(), 'pob-mcp-smoke-'));
 const weightedSmoke = process.env.POE_WEIGHTED_SMOKE === 'true';
 await cp(resolve('example-build.xml'), join(buildsDir, 'example.xml'));
-await cp(resolve(pobPath, '../spec/TestBuilds/3.13/OccVortex.xml'), join(buildsDir, 'occ-vortex.xml'));
+await cp(gearedBuildXml, join(buildsDir, 'occ-vortex.xml'));
 const child = spawn('node', [resolve('build/index.js')], {
   env: { ...process.env, POB_DIRECTORY: buildsDir, POB_LUA_ENABLED: 'true', ...(weightedSmoke ? { POE_TRADE_ENABLED: 'true' } : {}) },
   stdio: ['pipe', 'pipe', 'pipe'],

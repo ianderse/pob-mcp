@@ -112,7 +112,11 @@ npm run build
 }
 ```
 
-#### Full Configuration (With Lua Bridge)
+#### With the Lua Bridge
+
+If PoB is installed (macOS), this is the whole configuration. `POB_PATH`, `POB_DIRECTORY`
+and `POB_CMD` are detected from the installed app.
+
 ```json
 {
   "mcpServers": {
@@ -120,24 +124,28 @@ npm run build
       "command": "node",
       "args": ["/absolute/path/to/pob-mcp-server/build/index.js"],
       "env": {
-        "POB_DIRECTORY": "/path/to/your/Path of Building/Builds",
-        "POB_LUA_ENABLED": "true",
-        "POB_PATH": "/path/to/PathOfBuilding/src",
-        "POB_CMD": "/usr/local/bin/luajit",
-        "POB_TIMEOUT_MS": "10000"
+        "POB_LUA_ENABLED": "true"
       }
     }
   }
 }
 ```
 
+Set `POB_PATH` explicitly only when driving a PathOfBuilding git checkout instead of an
+installed app, or when the app lives somewhere unusual:
+
+```json
+        "POB_PATH": "/path/to/PathOfBuilding/src",
+        "POB_CMD": "/opt/homebrew/bin/luajit"
+```
+
 ### Environment Variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `POB_DIRECTORY` | OS-default Builds dir | Path to your PoB builds directory |
+| `POB_DIRECTORY` | detected Builds dir | Path to your PoB builds directory |
 | `POB_LUA_ENABLED` | `false` | Set `"true"` to enable Lua bridge |
-| `POB_PATH` | `~/Projects/PathOfBuilding/src` | Path to a stock PathOfBuilding checkout's `src/` directory (`POB_FORK_PATH` is accepted as a legacy alias) |
+| `POB_PATH` | installed PoB app, else `~/Projects/PathOfBuilding/src` | `src/` of a stock PathOfBuilding checkout. Usually unnecessary: an installed PoB is detected automatically (`POB_FORK_PATH` is a legacy alias) |
 | `POB_CMD` | `luajit` | LuaJIT binary path |
 | `POB_TIMEOUT_MS` | `10000` | Lua request timeout (ms) |
 | `POB_DEBUG` | `false` | Set `"true"` for verbose Lua bridge logging |
@@ -151,6 +159,24 @@ npm run build
 
 The Lua bridge uses PoB's actual calculation engine for accurate stats.
 
+#### If you already have Path of Building installed (macOS)
+
+Install LuaJIT and you are done:
+
+```bash
+brew install luajit
+```
+
+The server locates the engine inside the installed app, so there is no checkout to clone
+and no Lua modules to install. It uses the writable `src/` copy the app maintains under
+`~/Library/Application Support/PathOfBuildingMac`, which means the engine always matches
+the PoB you actually run, and the app's own C modules, which are the ones PoB ships no
+non-Windows build of in the repo.
+
+Skip to step 4 to verify.
+
+#### Working from a PathOfBuilding checkout instead
+
 #### 1. Install LuaJIT
 ```bash
 # macOS
@@ -162,7 +188,24 @@ sudo apt-get install luajit
 # Windows: download from https://luajit.org/ and add to PATH
 ```
 
-#### 2. Clone PathOfBuilding
+#### 2. Install PoB's Lua C modules (macOS and Linux)
+
+PoB commits its C modules to `runtime/` as Windows `.dll` builds only, so a checkout
+cannot supply them anywhere else. Without this the bridge appears to hang and then times
+out, because PoB reports `module 'lua-utf8' not found` and waits for a keypress that
+never comes.
+
+```bash
+luarocks --lua-version=5.1 --local install luautf8
+
+# Homebrew LuaJIT needs to be pointed at explicitly:
+luarocks --lua-version=5.1 --lua-dir=$(brew --prefix luajit) --local install luautf8
+```
+
+The bridge searches `~/.luarocks/lib/lua/5.1`, so `--local` is enough. Windows users can
+skip this: the bundled DLLs are used.
+
+#### 3. Clone PathOfBuilding
 ```bash
 git clone https://github.com/PathOfBuildingCommunity/PathOfBuilding.git
 ```
@@ -170,18 +213,21 @@ Note the full path to the `src/` directory — that's your `POB_PATH`.
 
 > No fork or patches are required. The server ships its own stdio adapter (`lua/vanilla_stdio_bridge.lua` + `lua/pob_ops.lua`) that loads the stock `HeadlessWrapper.lua` as a library and drives PoB's real calculation engine directly. Every Lua-bridge tool — stats, tree editing, gems, items, config, specs, save/export, anointments, weighted trade queries — works against an unmodified checkout. Call `lua_get_capabilities` at runtime for the authoritative action list.
 
-To verify a checkout locally after building this project:
+To verify locally after building this project:
 
 ```bash
-POB_PATH=/path/to/PathOfBuilding/src npm run test:smoke
+npm run test:smoke
 ```
+
+The smoke tests resolve the engine the same way the server does, so an installed
+PoB needs no configuration. Set `POB_PATH` only to point them at a checkout.
 
 This runs both the adapter contract and MCP stdio transport checks: tool discovery, capabilities, build load, snapshot, stats, items, skills, reversible tree mutation, config, anointment ranking, and build info.
 
 For the deep end-to-end workflow suite:
 
 ```bash
-POB_PATH=/path/to/PathOfBuilding/src npm run test:smoke:full
+npm run test:smoke:full
 ```
 
 This verifies blank-build gem editing, build discovery and file persistence, loading, character-level mutation and restoration, tree search, build validation, configuration/snapshot save-and-restore, and defensive/boss-readiness analysis.
@@ -197,7 +243,7 @@ This verifies MCP discovery plus live league, stat, item-search, price-check, re
 To also exercise the authenticated weighted BIS search (requires your `POESESSID`):
 
 ```bash
-POB_PATH=/path/to/PathOfBuilding/src POE_SESSION_ID=<your POESESSID> npm run test:smoke:weighted
+POE_SESSION_ID=<your POESESSID> npm run test:smoke:weighted
 ```
 
 To verify live crafting-data integration (requires network access):
@@ -208,13 +254,13 @@ npm run test:smoke:crafting
 
 This verifies that the crafting advisor obtains current currency rates and base-mod data for a known item base through MCP.
 
-#### 3. Verify
+#### 4. Verify
 ```bash
 luajit -v
 ls /path/to/PathOfBuilding/src/HeadlessWrapper.lua
 ```
 
-#### 4. Update Claude Desktop config and restart Claude Desktop
+#### 5. Update Claude Desktop config and restart Claude Desktop
 
 ---
 
@@ -553,6 +599,13 @@ Issues and pull requests are welcome!
                     <img src="https://avatars.githubusercontent.com/u/22574458?v=4" width="100;" alt="mcagnion"/>
                     <br />
                     <sub><b>Mickael Cagnion</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/rchasman">
+                    <img src="https://avatars.githubusercontent.com/u/1267219?v=4" width="100;" alt="rchasman"/>
+                    <br />
+                    <sub><b>Roey D. Chasman</b></sub>
                 </a>
             </td>
 		</tr>

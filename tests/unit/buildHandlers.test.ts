@@ -316,7 +316,7 @@ describe('BuildHandlers', () => {
       const result = await handleCompareBuilds(context, 'build1.xml', 'build2.xml');
 
       expect(requestedFields).toContain('CombinedDPS');
-      expect(result.content[0].text).toContain('1.500.000');
+      expect(result.content[0].text).toContain((1_500_000).toLocaleString());
       expect(result.content[0].text).not.toMatch(/DPS \(combined\).*N\/A/);
     });
 
