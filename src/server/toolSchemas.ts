@@ -389,6 +389,11 @@ export function getLuaToolSchemas(): any[] {
       },
     },
     {
+      name: "lua_get_ailments",
+      description: "Show non-damaging ailments (Shock, Chill, Scorch, Brittle, Sap) with what the DPS calculation is actually crediting next to what the main skill would inflict on the configured enemy. Call this for any build that shocks or chills: PoB applies a chance-based ailment only when its magnitude is entered by hand, so an uncounted shock silently understates every DPS figure. Magnitude is measured for the MAIN skill against the CURRENT enemy config, and it falls off steeply with enemy life, so re-read it per enemy rather than quoting one number for all content.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
       name: "lua_get_stats",
       description: "Get comprehensive calculated stats from the currently loaded build (requires lua_load_build first). Use category='offense' for DPS details, category='defense' for survivability, category='all' only when you need everything at once. Avoid calling multiple times with different categories — pick the right one.",
       inputSchema: {

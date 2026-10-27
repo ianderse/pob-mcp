@@ -102,6 +102,140 @@ function M.get_main_output()
   return output
 end
 
+-- PoB colour codes are display-only: "^8" for grey, "^xRRGGBB" for literal.
+local function stripColourCodes(text)
+  if type(text) ~= 'string' then return text end
+  return (text:gsub('%^[xX]%x%x%x%x%x%x', ''):gsub('%^%d', ''))
+end
+
+local function leadingNumber(text)
+  return tonumber(tostring(stripColourCodes(text)):match('%-?%d+%.?%d*') or '')
+end
+
+-- PoB only *applies* a non-damaging ailment to the enemy when the source is
+-- guaranteed (a ShockBase/Override/Minimum mod) or when the player has filled
+-- in the matching "Effect of X" config. A chance-to-shock skill produces
+-- neither, so output.CurrentShock stays 0 and every downstream number silently
+-- ignores the ailment. The magnitude the skill would actually inflict is
+-- computed in CalcOffence, but only into the CALCS-mode breakdown table, never
+-- into output. Read it back out so callers can see both halves.
+--
+-- breakdown[<Ailment>DPS].rowList is an effect-by-enemy-threshold curve. The
+-- one row whose threshold carries a colour-coded tag is the enemy currently
+-- configured; the rest are reference points.
+local function readAilmentBreakdown(breakdown, ailment)
+  local rows = breakdown and breakdown[ailment .. 'DPS'] and breakdown[ailment .. 'DPS'].rowList
+  if type(rows) ~= 'table' then return nil, nil end
+  local table_, atConfiguredEnemy = {}, nil
+  for _, row in ipairs(rows) do
+    local threshold = leadingNumber(row.thresh)
+    local effect = leadingNumber(row.effect)
+    if threshold and effect then
+      local isConfiguredEnemy = type(row.thresh) == 'string' and row.thresh:find('%^') ~= nil
+      table_[#table_ + 1] = {
+        ailmentThreshold = threshold,
+        effect = effect,
+        note = stripColourCodes(row.effect):match('%((.-)%)'),
+        isConfiguredEnemy = isConfiguredEnemy or nil,
+      }
+      if isConfiguredEnemy then atConfiguredEnemy = effect end
+    end
+  end
+  if #table_ == 0 then return nil, nil end
+  return table_, atConfiguredEnemy
+end
+
+-- PoB names the enemy-ailment config vars five different ways
+-- (conditionShockEffect but conditionEnemyChilledEffect but
+-- conditionScorchedEffect...), so guessing them from the ailment name is wrong
+-- for most of them. Derive both vars from the option list itself: the effect
+-- control is a 'count' gated on the enemy condition it belongs to, and that
+-- gate names the ailment.
+local ailmentConfigIndex
+local function getAilmentConfigIndex()
+  if ailmentConfigIndex then return ailmentConfigIndex end
+  ailmentConfigIndex = {}
+  local ok, varList = pcall(LoadModule, "Modules/ConfigOptions")
+  if not ok or type(varList) ~= 'table' then return ailmentConfigIndex end
+  for _, varData in ipairs(varList) do
+    local gate = varData.var and varData.type == 'count' and varData.ifOption
+    local suffix = type(gate) == 'string' and gate:match('^conditionEnemy(%a+)$')
+    -- More than one count control hangs off the same gate (ShockStacks shares
+    -- conditionEnemyShocked with the effect field), so match the label too.
+    local isEffectControl = suffix
+      and stripColourCodes(varData.label or ''):match('^Effect of') ~= nil
+    if isEffectControl then
+      -- "Shocked" -> Shock, "Scorched" -> Scorch, "Brittle" -> Brittle.
+      -- Longest match wins so a future ailment cannot shadow a shorter name.
+      local best
+      for name in pairs((data and data.nonDamagingAilment) or {}) do
+        if suffix:sub(1, #name) == name and (not best or #name > #best) then best = name end
+      end
+      if best then
+        ailmentConfigIndex[best] = { effectVar = varData.var, enabledVar = gate }
+      end
+    end
+  end
+  return ailmentConfigIndex
+end
+
+function M.get_ailments()
+  local output, err = M.get_main_output()
+  if not output then return nil, err end
+  local configInput = build.configTab and build.configTab.input or {}
+  local configIndex = getAilmentConfigIndex()
+  -- BuildOutput populates two environments; the breakdown only exists in the
+  -- CALCS-mode one, and get_main_output hands back the MAIN-mode output.
+  local env = build.calcsTab.calcsEnv
+  local breakdown = env and env.player and env.player.breakdown or nil
+
+  -- Freeze is the one non-damaging ailment measured in seconds rather than as
+  -- an effect magnitude, and CalcPerform's ailment loop skips it for that
+  -- reason. It is also the only entry with no default magnitude, so filter on
+  -- the data rather than hardcoding a list that would drift.
+  local names = {}
+  for name, ailment in pairs((data and data.nonDamagingAilment) or {}) do
+    if ailment.default ~= nil then names[#names + 1] = name end
+  end
+  table.sort(names)
+
+  local result = {}
+  for _, name in ipairs(names) do
+    local chanceOnHit = tonumber(output[name .. 'ChanceOnHit']) or 0
+    local chanceOnCrit = tonumber(output[name .. 'ChanceOnCrit']) or 0
+    if chanceOnHit > 0 or chanceOnCrit > 0 or (tonumber(output['Current' .. name]) or 0) > 0 then
+      local thresholdTable, calculated = readAilmentBreakdown(breakdown, name)
+      local applied = tonumber(output['Current' .. name]) or 0
+      -- Below the game's minimum the ailment does not land at all, so a small
+      -- calculatedEffect must not be read as "a small amount of shock".
+      local minimum = data.nonDamagingAilment[name].min
+      local config = configIndex[name] or {}
+      result[#result + 1] = {
+        name = name,
+        chanceOnHit = chanceOnHit,
+        chanceOnCrit = chanceOnCrit,
+        effectMod = tonumber(output[name .. 'EffectMod']),
+        duration = tonumber(output[name .. 'Duration']),
+        minimumEffect = minimum,
+        maximumEffect = tonumber(output['Maximum' .. name]),
+        appliedEffect = applied,
+        calculatedEffect = calculated,
+        -- Scorch, Brittle and Sap have a minimum of 0, so a zero magnitude
+        -- would otherwise read as "lands" and raise a warning about nothing.
+        landsOnConfiguredEnemy = (calculated ~= nil and calculated > 0
+          and calculated >= (minimum or 0)) or nil,
+        creditedInCalc = applied > 0,
+        effectConfigVar = config.effectVar,
+        enabledConfigVar = config.enabledVar,
+        enabledOnEnemy = config.enabledVar ~= nil
+          and configInput[config.enabledVar] == true or nil,
+        thresholdTable = thresholdTable,
+      }
+    end
+  end
+  return { ailments = result }
+end
+
 function M.export_stats(fields)
   local output, err = M.get_main_output()
   if not output then

@@ -36,6 +36,37 @@ export interface PoBLuaApiOptions {
   timeoutMs?: number; // per-request timeout
 }
 
+/**
+ * A non-damaging ailment as the engine sees it. `appliedEffect` is what the
+ * DPS calculation is actually crediting; `calculatedEffect` is what the skill
+ * would inflict on the configured enemy. They differ whenever the ailment is
+ * chance-based, because PoB only applies guaranteed or hand-configured ones.
+ */
+export interface AilmentReport {
+  name: string;
+  chanceOnHit: number;
+  chanceOnCrit: number;
+  effectMod?: number;
+  duration?: number;
+  /** Below this the ailment does not land at all. */
+  minimumEffect?: number;
+  maximumEffect?: number;
+  appliedEffect: number;
+  calculatedEffect?: number;
+  landsOnConfiguredEnemy?: boolean;
+  creditedInCalc: boolean;
+  /** PoB's own config var names, derived from its option list rather than guessed. */
+  effectConfigVar?: string;
+  enabledConfigVar?: string;
+  enabledOnEnemy?: boolean;
+  thresholdTable?: Array<{
+    ailmentThreshold: number;
+    effect: number;
+    note?: string;
+    isConfiguredEnemy?: boolean;
+  }>;
+}
+
 export class PoBLuaApiClient {
   private proc: ChildProcessWithoutNullStreams | null = null;
   private options: PoBLuaApiOptions;
@@ -539,6 +570,16 @@ async setTree(params: {
     const res = await this.send({ action: "get_mastery_options" });
     if (!res.ok) throw new Error(res.error || "get_mastery_options failed");
     return res.result;
+  }
+
+  async getAilments(): Promise<{ ailments: AilmentReport[] }> {
+    const res = await this.send({ action: "get_ailments" });
+    if (!res.ok) throw new Error(res.error || "get_ailments failed");
+    const result = res.result;
+    if (!result || typeof result !== "object" || !Array.isArray((result as { ailments?: unknown }).ailments)) {
+      throw new Error("get_ailments returned an unexpected shape");
+    }
+    return result as { ailments: AilmentReport[] };
   }
 
   async evaluateAnointCandidates(params: { slot: string; focus?: 'dps' | 'defence' | 'both'; limit?: number }): Promise<{

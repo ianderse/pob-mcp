@@ -27,6 +27,7 @@ try {
   if (rejected.result?.isError !== true) throw new Error(`MCP errors must set isError: ${JSON.stringify(rejected)}`);
   const invalidChain = await request('tools/call', { name: 'calculate_trading_profit', arguments: { league: 'Standard', currency_chain: ['Chaos Orb'] } });
   if (invalidChain.result?.isError !== true) throw new Error(`handler errors must set isError: ${JSON.stringify(invalidChain)}`);
+  if (!names.has('lua_get_ailments')) throw new Error('missing MCP tool: lua_get_ailments');
   // The stock-checkout adapter supports the full tool surface
   for (const name of ['lua_get_capabilities', 'lua_get_build_snapshot', 'lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats', 'lua_get_tree', 'lua_set_tree', 'lua_get_build_info', 'get_equipped_items', 'get_skill_setup', 'find_best_anointment', 'add_item', 'toggle_flask', 'set_config', 'add_gem', 'create_spec', 'toggle_socket_group', 'suggest_masteries', 'lua_save_build']) {
     if (!names.has(name)) throw new Error(`missing MCP tool: ${name}`);
@@ -37,6 +38,7 @@ try {
     ['lua_load_build', { build_name: 'example.xml' }],
     ['lua_get_build_snapshot', {}],
     ['lua_get_stats', {}],
+    ['lua_get_ailments', {}],
     ['get_equipped_items', {}],
     ['get_skill_setup', { main_only: false }],
     ['lua_get_tree', { include_node_ids: true }],
@@ -49,6 +51,9 @@ try {
   ]) {
     const response = await request('tools/call', { name, arguments: args });
     if (response.error || response.result?.isError) throw new Error(`${name} failed: ${JSON.stringify(response.error ?? response.result)}`);
+    if (name === 'lua_get_ailments' && !response.result.content?.[0]?.text?.includes('=== Non-Damaging Ailments ===')) {
+      throw new Error(`lua_get_ailments returned an unexpected response: ${JSON.stringify(response.result)}`);
+    }
     if (name === 'lua_get_build_snapshot') {
       const text = response.result?.content?.[0]?.text || '';
       if (!text.includes('Current PoB Build Snapshot') || !text.includes('Equipped Items') || !text.includes('Skills')) {

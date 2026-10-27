@@ -1,4 +1,4 @@
-import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import type { AilmentReport, PoBLuaApiClient } from "../pobLuaBridge.js";
 import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
 import fs from "fs/promises";
 import path from "path";
@@ -367,6 +367,116 @@ export async function handleLuaGetStats(context: LuaHandlerContext, category?: s
         },
       ],
     };
+  });
+}
+
+/**
+ * Non-damaging ailments, showing what the DPS calculation is crediting next to
+ * what the skill would actually inflict. Those two disagree for every
+ * chance-based ailment, because PoB applies only guaranteed or hand-configured
+ * ones, and nothing else in the tool surface makes that visible.
+ */
+export async function handleLuaGetAilments(context: LuaHandlerContext) {
+  return wrapHandler('get ailments', async () => {
+    await context.ensureLuaClient();
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized');
+    }
+
+    const { ailments } = await luaClient.getAilments();
+    const lines: string[] = ['=== Non-Damaging Ailments ===', ''];
+
+    if (ailments.length === 0) {
+      lines.push('This build inflicts no non-damaging ailments.');
+      return { content: [{ type: "text" as const, text: lines.join('\n') }] };
+    }
+
+    const inflicts = (a: AilmentReport) => a.chanceOnHit + a.chanceOnCrit > 0;
+    const uncredited = ailments.filter(
+      (a) => !a.creditedInCalc && a.landsOnConfiguredEnemy,
+    );
+    // A missing calculatedEffect must not read as a healthy build. Without this
+    // the row shows a real ailment chance next to 0% applied and says nothing,
+    // which is the exact silent failure this tool exists to remove.
+    const unreadable = ailments.filter(
+      (a) => !a.creditedInCalc && a.calculatedEffect == null && inflicts(a),
+    );
+
+    for (const a of ailments) {
+      lines.push(`**${a.name}**`);
+      lines.push(`  Chance: ${a.chanceOnHit}% on hit, ${a.chanceOnCrit}% on crit`);
+      if (a.effectMod != null) lines.push(`  Effect modifier: ${a.effectMod.toFixed(2)}x`);
+      const ignoringSomethingReal = !a.creditedInCalc && a.landsOnConfiguredEnemy;
+      lines.push(
+        `  Applied by the calculation: ${a.appliedEffect}%` +
+          (ignoringSomethingReal ? '  ← contributing nothing' : ''),
+      );
+      if (a.calculatedEffect != null) {
+        const lands = a.landsOnConfiguredEnemy
+          ? ''
+          : `  (below the ${a.minimumEffect}% minimum, so it does not land)`;
+        lines.push(`  Would inflict on the configured enemy: ${a.calculatedEffect}%${lands}`);
+      } else if (unreadable.includes(a)) {
+        lines.push('  Would inflict on the configured enemy: could not be read from the calculation');
+      }
+      if (a.thresholdTable?.length) {
+        const cap = a.thresholdTable.find((r) => r.note === 'maximum');
+        if (cap) {
+          lines.push(
+            `  Reaches the ${cap.effect}% maximum against an ailment threshold of ${cap.ailmentThreshold.toLocaleString()} or less`,
+          );
+        }
+      }
+      lines.push('');
+    }
+
+    // Two scope limits worth stating, because both invite a wrong reading:
+    // magnitude is the main skill's alone, and it collapses as enemy life rises.
+    if (ailments.some((a) => a.calculatedEffect != null)) {
+      lines.push(
+        'Magnitude is for your main skill against the enemy currently configured. ' +
+          'Ailments from other socket groups are not included, and the value falls steeply ' +
+          'as enemy life rises, so do not reuse one figure across bosses and map trash.',
+      );
+      lines.push('');
+    }
+
+    if (uncredited.length > 0 || unreadable.length > 0) {
+      lines.push('⚠️  Not counted in your DPS');
+      for (const a of uncredited) {
+        lines.push(
+          `  ${a.name} would land for ${a.calculatedEffect}% but the calculation is using ${a.appliedEffect}%.`,
+        );
+      }
+      for (const a of unreadable) {
+        lines.push(
+          `  ${a.name} has a ${a.chanceOnHit}%/${a.chanceOnCrit}% chance to apply but the calculation is using ${a.appliedEffect}%, ` +
+            'and its magnitude could not be read. Treat this build\'s damage as unverified until it is set by hand.',
+        );
+      }
+      lines.push('');
+      lines.push(
+        'PoB only applies a chance-based ailment when you enter its magnitude yourself, ' +
+          'so every downstream number stays understated until you do. To fix:',
+      );
+      for (const a of [...uncredited, ...unreadable]) {
+        // PoB names these vars inconsistently per ailment, so the engine reports
+        // them rather than the handler deriving them.
+        const parts: string[] = [];
+        if (a.enabledConfigVar && !a.enabledOnEnemy) parts.push(`${a.enabledConfigVar}: true`);
+        if (a.effectConfigVar) {
+          parts.push(`${a.effectConfigVar}: ${a.calculatedEffect ?? '<magnitude>'}`);
+        }
+        lines.push(
+          parts.length > 0
+            ? `  set_config ${parts.join(', ')}`
+            : `  ${a.name}: no config var found for this ailment`,
+        );
+      }
+    }
+
+    return { content: [{ type: "text" as const, text: lines.join('\n').trimEnd() }] };
   });
 }
 

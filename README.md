@@ -309,6 +309,7 @@ With every optional integration enabled, the server registers **99 tools** acros
 | `lua_get_build_info` | Get current build metadata (class, level, etc.) |
 | `set_character_level` | Set level and recalculate all stats |
 | `lua_get_stats` | Get calculated stats (`category`: `offense`/`defense`/`all`) |
+| `lua_get_ailments` | Non-damaging ailment magnitude, and whether the DPS calc is crediting it |
 | `lua_get_tree` | View passive tree: class, ascendancy, all allocated node IDs |
 | `lua_set_tree` | Replace passive tree allocation (preserves class if omitted) |
 | `update_tree_delta` | Add/remove individual nodes without replacing entire tree |
