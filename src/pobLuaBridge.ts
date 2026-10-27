@@ -2,6 +2,7 @@ import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 import { EventEmitter } from "events";
 import path from "path";
 import os from "os";
+import zlib from "zlib";
 import { resolvePoBLayout } from "./utils/pobLayout.js";
 
 /** Lua bridge request envelope */
@@ -330,6 +331,33 @@ export class PoBLuaApiClient {
     const res = await this.send({ action: "load_build_xml", params: { xml, name } });
     if (!res.ok) throw new Error(res.error || "load_build_xml failed");
     return res;
+  }
+
+  /**
+   * Decodes a PoB import/export code (URL-safe base64 + zlib deflate — the
+   * format PoB's desktop Import tab produces/consumes) and loads the
+   * resulting build XML. Decoding happens here, not in the Lua bridge,
+   * because the headless engine's own Inflate/Deflate are stubs that always
+   * return "" — the real implementation lives in the native SimpleGraphic
+   * host the desktop app links against, which headless mode has none of.
+   */
+  async importCode(code: string, name = "Imported Build"): Promise<any> {
+    const b64 = code.trim().replace(/-/g, "+").replace(/_/g, "/");
+    const compressed = Buffer.from(b64, "base64");
+
+    let xml: string;
+    try {
+      xml = zlib.inflateSync(compressed).toString("utf8");
+    } catch (zlibErr) {
+      try {
+        xml = zlib.inflateRawSync(compressed).toString("utf8");
+      } catch {
+        const msg = zlibErr instanceof Error ? zlibErr.message : String(zlibErr);
+        throw new Error(`Failed to decode import code: ${msg}`);
+      }
+    }
+
+    return this.loadBuildXml(xml, name);
   }
 
   async getStats(fields?: string[]): Promise<Record<string, any>> {

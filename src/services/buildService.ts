@@ -3,6 +3,8 @@ import fs from "fs/promises";
 import path from "path";
 import type { PoBBuild, CachedBuild, ParsedConfiguration, ConfigInput, ConfigSet, Flask, FlaskAnalysis, Jewel, JewelAnalysis } from "../types.js";
 import { resolveBuildFile } from "../utils/pathSanitizer.js";
+import { parseItem, itemLabel } from "./itemParser.js";
+import { TIMELESS_SEED_PHRASES } from "../data/itemFormat.generated.js";
 
 const CACHE_TTL_MS = 60_000;  // 60 seconds
 const CACHE_MAX_SIZE = 20;
@@ -149,13 +151,36 @@ export class BuildService {
         : [];
 
       const equippedSlots = slots.filter((s: any) => s.itemId && itemMap.has(s.itemId));
+      const unrecognised: string[] = [];
       if (equippedSlots.length > 0) {
         const setLabel = itemSets.length > 1 ? ` (Set ${activeItemSetId} of ${itemSets.length})` : '';
         summary += `=== Items${setLabel} ===\n`;
         for (const slot of equippedSlots) {
-          const text = itemMap.get(slot.itemId!)!;
-          const firstLine = text.split("\n").find(l => l.trim()) || "Unknown Item";
-          summary += `${slot.name}: ${firstLine}\n`;
+          const parsed = parseItem(itemMap.get(slot.itemId!)!);
+          summary += `${slot.name}: ${itemLabel(parsed)}\n`;
+          for (const mod of parsed.mods) {
+            summary += `    ${mod.text}\n`;
+          }
+          for (const note of parsed.notes) {
+            summary += `    note: ${note}\n`;
+          }
+          for (const u of parsed.unknown) {
+            unrecognised.push(`${itemLabel(parsed)} — ${u.reason}: ${u.detail}\n      ${u.line}`);
+          }
+        }
+        summary += "\n";
+      }
+
+      // Anything the item parser could not account for. Surfacing it is the
+      // point: a silent gap here is how an unfamiliar key turns into a quietly
+      // wrong answer instead of a visible one.
+      if (unrecognised.length > 0) {
+        summary += "=== Unrecognised item text ===\n";
+        summary += "These lines were not understood — most likely a metadata key this\n";
+        summary += "PoB checkout is newer than. Re-run `npm run generate:item-format`\n";
+        summary += "against an up-to-date checkout.\n";
+        for (const line of unrecognised) {
+          summary += `  ${line}\n`;
         }
         summary += "\n";
       }
@@ -585,43 +610,20 @@ export class BuildService {
   }
 
   private parseFlaskItem(itemText: string, slotNumber: number, isActive: boolean): Flask | null {
+    const parsed = parseItem(itemText);
+    if (parsed.name === '?') return null;
+
     const lines = itemText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length < 2) return null;
+    const rarity = parsed.rarity as Flask['rarity'];
+    const isUnique = rarity === 'UNIQUE';
 
-    const rarity = lines[0].replace('Rarity: ', '') as Flask['rarity'];
-    const name = lines[1];
+    // Magic and rare flasks fold the base into the name, so the parser leaves
+    // `base` empty for them and we recover it from the name instead.
+    const baseType = parsed.base || this.extractFlaskBase(parsed.name);
 
-    // Determine base type
-    let baseType = '';
-    let isUnique = rarity === 'UNIQUE';
-
-    if (isUnique) {
-      // For unique flasks, line 2 is the base type
-      baseType = lines[2] || name;
-    } else {
-      // For magic/rare, extract base from name or use line 2
-      baseType = lines[2] || this.extractFlaskBase(name);
-    }
-
-    // Parse quality and level requirement
-    let quality = 0;
-    let levelRequirement = 0;
-    let variant: string | undefined;
-
-    for (const line of lines) {
-      if (line.startsWith('Quality:')) {
-        quality = parseInt(line.replace('Quality: ', ''), 10) || 0;
-      } else if (line.startsWith('LevelReq:')) {
-        levelRequirement = parseInt(line.replace('LevelReq: ', ''), 10) || 0;
-      } else if (line.startsWith('Selected Variant:')) {
-        variant = line.replace('Selected Variant: ', '');
-      }
-    }
-
-    // Parse prefix and suffix
+    // Prefix/suffix hold PoB's internal mod ids, not display text.
     let prefix: string | undefined;
     let suffix: string | undefined;
-
     for (const line of lines) {
       if (line.startsWith('Prefix:') && !line.includes('None')) {
         prefix = line.replace(/Prefix:\s*{[^}]*}/, '').trim();
@@ -630,53 +632,22 @@ export class BuildService {
       }
     }
 
-    // Extract mods (lines that don't match metadata patterns)
-    const mods: string[] = [];
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-
-      // Skip metadata lines
-      if (
-        line.startsWith('Rarity:') ||
-        line.startsWith('Quality:') ||
-        line.startsWith('LevelReq:') ||
-        line.startsWith('Implicits:') ||
-        line.startsWith('Crafted:') ||
-        line.startsWith('Prefix:') ||
-        line.startsWith('Suffix:') ||
-        line.startsWith('Variant:') ||
-        line.startsWith('Selected Variant:') ||
-        line.startsWith('<ModRange') ||
-        line.includes('{variant:') ||
-        line.includes('{range:')
-      ) {
-        continue;
-      }
-
-      // Skip item name lines (first few lines after rarity)
-      if (i <= 2) continue;
-
-      // This is likely a mod
-      if (line.length > 0) {
-        mods.push(line);
-      }
-    }
-
     return {
       id: `flask_${slotNumber}`,
       slotNumber,
       isActive,
       rarity,
-      name,
+      name: parsed.name,
       baseType,
-      quality,
-      levelRequirement,
+      quality: parsed.quality ?? 0,
+      levelRequirement: Number(parsed.meta.get('LevelReq') ?? 0) || 0,
       prefix,
       suffix,
-      mods,
+      mods: parsed.mods.map(m => m.text),
       isUnique,
-      variant,
+      variant: parsed.selectedVariants.length > 0
+        ? String(parsed.selectedVariants[parsed.selectedVariants.length - 1])
+        : undefined,
     };
   }
 
@@ -791,7 +762,14 @@ export class BuildService {
       return null;
     }
 
-    const itemSet = build.Items.ItemSet;
+    // Items.ItemSet is an array whenever a build has more than one gear set,
+    // which is almost always. Reading it as a single object found no slots at
+    // all, so every such build reported zero jewels.
+    const itemSetRaw = build.Items.ItemSet;
+    const itemSets: any[] = Array.isArray(itemSetRaw) ? itemSetRaw : [itemSetRaw];
+    const activeItemSetId = String((build.Items as any)?.activeItemSet ?? '1');
+    const itemSet = itemSets.find((is: any) => String(is?.id) === activeItemSetId) ?? itemSets[0];
+    if (!itemSet) return null;
     const slots = itemSet.Slot ? (Array.isArray(itemSet.Slot) ? itemSet.Slot : [itemSet.Slot]) : [];
 
     // Build a map of items by ID so slots referencing an itemId can be resolved
@@ -807,15 +785,23 @@ export class BuildService {
         }
       }
     }
-    const socketMappings = itemSet.SocketIdURL ? (Array.isArray(itemSet.SocketIdURL) ? itemSet.SocketIdURL : [itemSet.SocketIdURL]) : [];
-
-    // Build a map of itemId -> socket info
+    // Jewels socketed into the passive tree live in the *tree spec*, as
+    // `<Sockets><Socket nodeId itemId/></Sockets>` on the active <Spec> — not in
+    // the item set. The item set's <SocketIdURL> lists node ids with no itemId,
+    // so reading sockets from there found no jewel in the tree at all.
     const socketMap = new Map<string, { nodeId: string; name: string }>();
-    for (const socket of socketMappings) {
-      if (socket.itemId && socket.nodeId) {
-        socketMap.set(socket.itemId, {
-          nodeId: socket.nodeId,
-          name: socket.name || `Jewel ${socket.nodeId}`,
+    const activeSpec = this.getActiveSpec(build);
+    const specSockets = activeSpec?.Sockets?.Socket
+      ? (Array.isArray(activeSpec.Sockets.Socket)
+          ? activeSpec.Sockets.Socket
+          : [activeSpec.Sockets.Socket])
+      : [];
+    for (const socket of specSockets) {
+      // itemId 0 means the socket is allocated but empty.
+      if (socket?.itemId && String(socket.itemId) !== '0' && socket.nodeId) {
+        socketMap.set(String(socket.itemId), {
+          nodeId: String(socket.nodeId),
+          name: `Jewel ${socket.nodeId}`,
         });
       }
     }
@@ -835,26 +821,26 @@ export class BuildService {
       notables: [] as string[],
     };
 
-    // Parse jewels from slots
+    // Jewels come from two places: sockets on the passive tree, and abyssal
+    // sockets in gear. Collect both, keyed by item id so a jewel is not counted
+    // twice if it appears in each.
+    const candidates = new Map<string, string>();
+    for (const itemId of socketMap.keys()) {
+      const text = jewelItemMap.get(itemId);
+      if (text) candidates.set(itemId, text);
+    }
     for (const slot of slots) {
       if (!slot.name) continue;
+      const itemText = slot.Item ?? (slot.itemId ? jewelItemMap.get(slot.itemId) : undefined);
+      if (!itemText || !itemText.includes('Jewel')) continue;
+      candidates.set(String(slot.itemId ?? `slot_${slot.name}`), itemText);
+    }
 
-      // Get item text either from inline Item or by looking up itemId
-      let itemText = slot.Item;
-      if (!itemText && slot.itemId) {
-        itemText = jewelItemMap.get(slot.itemId);
-      }
-
-      if (!itemText) continue;
-
-      // Check if this is a jewel slot (by item text containing "Jewel")
-      if (!itemText.includes('Jewel')) continue;
-
-      const jewel = this.parseJewelItem(itemText, slot.itemId);
+    for (const [itemId, itemText] of candidates) {
+      const jewel = this.parseJewelItem(itemText, itemId);
       if (jewel) {
-        // Check if jewel is socketed
-        if (slot.itemId && socketMap.has(slot.itemId)) {
-          const socketInfo = socketMap.get(slot.itemId)!;
+        const socketInfo = socketMap.get(itemId);
+        if (socketInfo) {
           jewel.socketNodeId = socketInfo.nodeId;
           jewel.socketName = socketInfo.name;
         }
@@ -914,25 +900,20 @@ export class BuildService {
   }
 
   private parseJewelItem(itemText: string, itemId?: string): Jewel | null {
-    const lines = itemText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length < 2) return null;
+    const parsed = parseItem(itemText);
+    if (parsed.name === '?') return null;
 
-    const rarity = lines[0].replace('Rarity: ', '') as Jewel['rarity'];
-    const name = lines[1];
-    const baseType = lines[2] || name;
+    const lines = itemText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const rarity = parsed.rarity as Jewel['rarity'];
+    const name = parsed.name;
+    const baseType = parsed.base || name;
 
     // Detect jewel types
     const isAbyssJewel = baseType.includes('Abyss Jewel') || name.includes('Abyss');
     const isClusterJewel = baseType.includes('Cluster Jewel');
     const isTimelessJewel = baseType.includes('Timeless Jewel');
 
-    // Parse level requirement
-    let levelRequirement = 0;
-    for (const line of lines) {
-      if (line.startsWith('LevelReq:')) {
-        levelRequirement = parseInt(line.replace('LevelReq: ', ''), 10) || 0;
-      }
-    }
+    const levelRequirement = Number(parsed.meta.get('LevelReq') ?? 0) || 0;
 
     // Parse prefix and suffix
     let prefix: string | undefined;
@@ -988,58 +969,31 @@ export class BuildService {
 
     if (isTimelessJewel) {
       timelessType = name;
+      radius = parsed.meta.get('Radius');
+      variant = parsed.selectedVariant !== undefined
+        ? String(parsed.selectedVariant)
+        : undefined;
 
-      for (const line of lines) {
-        if (line.startsWith('Radius:')) {
-          radius = line.replace('Radius: ', '');
-        } else if (line.startsWith('Selected Variant:')) {
-          variant = line.replace('Selected Variant: ', '');
-        } else if (line.includes('Bathed in the blood of')) {
-          // Extract conqueror and seed
-          const match = line.match(/Bathed in the blood of \(?(\d+)-?(\d+)?\)? sacrificed in the name of (\w+)/);
-          if (match) {
-            timelessSeed = parseInt(match[1], 10);
-            timelessConqueror = match[3];
-          }
-        }
+      // Each jewel family words its seed line differently — Lethal Pride's
+      // "Commanded leadership over N warriors under Kaom", Brutal Restraint's
+      // "Denoted service of N dekhara in the akhara of Nasima", and so on. The
+      // phrases come from PoB so a new family cannot go unread.
+      for (const mod of parsed.mods) {
+        const phrase = TIMELESS_SEED_PHRASES.find(p => mod.text.startsWith(p));
+        if (!phrase) continue;
+        const seed = mod.text.slice(phrase.length).match(/\d+/);
+        const conqueror = mod.text.trim().match(/([A-Z][a-z]+)$/);
+        if (seed) timelessSeed = parseInt(seed[0], 10);
+        if (conqueror) timelessConqueror = conqueror[1];
+        break;
       }
     }
 
-    // Extract mods
-    const mods: string[] = [];
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-
-      // Skip metadata lines
-      if (
-        line.startsWith('Rarity:') ||
-        line.startsWith('LevelReq:') ||
-        line.startsWith('Implicits:') ||
-        line.startsWith('Crafted:') ||
-        line.startsWith('Prefix:') ||
-        line.startsWith('Suffix:') ||
-        line.startsWith('Cluster Jewel') ||
-        line.startsWith('Variant:') ||
-        line.startsWith('Selected Variant:') ||
-        line.startsWith('Radius:') ||
-        line.startsWith('Limited to:') ||
-        line.startsWith('League:') ||
-        line.startsWith('<ModRange') ||
-        line.includes('{crafted}') ||
-        line.includes('{variant:') ||
-        line.includes('{range:')
-      ) {
-        continue;
-      }
-
-      // Skip item name lines
-      if (i <= 2) continue;
-
-      // This is likely a mod
-      if (line.length > 0 && !line.startsWith('Adds ') && !line.includes('Added Passive')) {
-        mods.push(line);
-      }
-    }
+    // Cluster jewel text describes the passives it adds; those lines are the
+    // jewel's own mods but are reported through the cluster fields instead.
+    const mods = parsed.mods
+      .map(m => m.text)
+      .filter(text => !text.startsWith('Adds ') && !text.includes('Added Passive'));
 
     return {
       id: itemId || `jewel_${Date.now()}`,

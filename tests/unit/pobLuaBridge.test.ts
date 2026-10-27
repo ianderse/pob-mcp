@@ -1,6 +1,13 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import zlib from 'zlib';
 import { MockPoBProcess, createMockSpawn } from '../mocks/pobProcess.mock.js';
 import { SAMPLE_BUILD_XML, SAMPLE_ITEMS } from '../mocks/responses.mock.js';
+
+/** Encodes XML the way PoB's desktop Import tab does: zlib deflate, then URL-safe base64. */
+function toPobImportCode(xml: string, { raw = false } = {}): string {
+  const compressed = raw ? zlib.deflateRawSync(xml) : zlib.deflateSync(xml);
+  return compressed.toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
+}
 
 // Mock child_process before importing the module
 const mockSpawn = createMockSpawn();
@@ -165,6 +172,60 @@ describe('PoBLuaApiClient', () => {
       mockProcess.registerError('load_build_xml', 'invalid_xml');
 
       await expect(client.loadBuildXml('<invalid>')).rejects.toThrow('Failed to parse XML');
+    });
+  });
+
+  describe('importCode', () => {
+    beforeEach(async () => {
+      await client.start();
+      mockProcess = mockSpawn.getLastProcess()!;
+    });
+
+    it('should decode a URL-safe base64+zlib code and load the resulting XML', async () => {
+      const code = toPobImportCode(SAMPLE_BUILD_XML);
+      await client.importCode(code);
+
+      const lastRequest = mockProcess.getLastRequest();
+      expect(lastRequest).toEqual({
+        action: 'load_build_xml',
+        params: { xml: SAMPLE_BUILD_XML, name: 'Imported Build' },
+      });
+    });
+
+    it('should accept a custom name', async () => {
+      const code = toPobImportCode(SAMPLE_BUILD_XML);
+      await client.importCode(code, 'Custom Import');
+
+      const lastRequest = mockProcess.getLastRequest();
+      expect(lastRequest?.params?.name).toBe('Custom Import');
+    });
+
+    it('should tolerate surrounding whitespace from a pasted code', async () => {
+      const code = toPobImportCode(SAMPLE_BUILD_XML);
+      await client.importCode(`  ${code}\n`);
+
+      const lastRequest = mockProcess.getLastRequest();
+      expect(lastRequest?.params?.xml).toBe(SAMPLE_BUILD_XML);
+    });
+
+    it('should fall back to raw deflate if the zlib-wrapped decode fails', async () => {
+      const code = toPobImportCode(SAMPLE_BUILD_XML, { raw: true });
+      await client.importCode(code);
+
+      const lastRequest = mockProcess.getLastRequest();
+      expect(lastRequest?.params?.xml).toBe(SAMPLE_BUILD_XML);
+    });
+
+    it('should throw a clear decode error for garbage input, without contacting the bridge', async () => {
+      await expect(client.importCode('not-a-valid-import-code')).rejects.toThrow(/Failed to decode import code/);
+      expect(mockProcess.getAllRequests()).toHaveLength(0);
+    });
+
+    it('should propagate bridge errors after a successful decode', async () => {
+      mockProcess.registerError('load_build_xml', 'invalid_xml');
+      const code = toPobImportCode(SAMPLE_BUILD_XML);
+
+      await expect(client.importCode(code)).rejects.toThrow('Failed to parse XML');
     });
   });
 

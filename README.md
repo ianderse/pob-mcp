@@ -303,6 +303,7 @@ With every optional integration enabled, the server registers **99 tools** acros
 | `lua_get_build_snapshot` | Compact current-state view: core stats, tree count, equipped items, and main gems |
 | `lua_new_build` | Create a blank build for a given class/ascendancy |
 | `lua_load_build` | Load a build file into the engine |
+| `lua_import_code` | Decode a PoB import/export code (e.g. from pobb.in or the desktop app's Generate button) and load it into the engine |
 | `lua_save_build` | Save the current in-memory build to a `.xml` file |
 | `lua_reload_build` | Reload the current build from disk |
 | `lua_get_build_info` | Get current build metadata (class, level, etc.) |
@@ -581,6 +582,20 @@ Issues and pull requests are welcome!
                 </a>
             </td>
             <td align="center">
+                <a href="https://github.com/rchasman">
+                    <img src="https://avatars.githubusercontent.com/u/1267219?v=4" width="100;" alt="rchasman"/>
+                    <br />
+                    <sub><b>Roey D. Chasman</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/notquitedrdeath">
+                    <img src="https://avatars.githubusercontent.com/u/890462?v=4" width="100;" alt="notquitedrdeath"/>
+                    <br />
+                    <sub><b>Tim Death</b></sub>
+                </a>
+            </td>
+            <td align="center">
                 <a href="https://github.com/J-Gierend">
                     <img src="https://avatars.githubusercontent.com/u/39157646?v=4" width="100;" alt="J-Gierend"/>
                     <br />
@@ -595,6 +610,15 @@ Issues and pull requests are welcome!
                 </a>
             </td>
             <td align="center">
+                <a href="https://github.com/Kloggzer">
+                    <img src="https://avatars.githubusercontent.com/u/19823711?v=4" width="100;" alt="Kloggzer"/>
+                    <br />
+                    <sub><b>Marius K</b></sub>
+                </a>
+            </td>
+		</tr>
+		<tr>
+            <td align="center">
                 <a href="https://github.com/mcagnion">
                     <img src="https://avatars.githubusercontent.com/u/22574458?v=4" width="100;" alt="mcagnion"/>
                     <br />
@@ -602,10 +626,10 @@ Issues and pull requests are welcome!
                 </a>
             </td>
             <td align="center">
-                <a href="https://github.com/rchasman">
-                    <img src="https://avatars.githubusercontent.com/u/1267219?v=4" width="100;" alt="rchasman"/>
+                <a href="https://github.com/exception0x876">
+                    <img src="https://avatars.githubusercontent.com/u/676813?v=4" width="100;" alt="exception0x876"/>
                     <br />
-                    <sub><b>Roey D. Chasman</b></sub>
+                    <sub><b>exception0x876</b></sub>
                 </a>
             </td>
 		</tr>
