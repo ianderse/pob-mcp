@@ -303,6 +303,7 @@ With every optional integration enabled, the server registers **99 tools** acros
 | `lua_get_build_snapshot` | Compact current-state view: core stats, tree count, equipped items, and main gems |
 | `lua_new_build` | Create a blank build for a given class/ascendancy |
 | `lua_load_build` | Load a build file into the engine |
+| `lua_import_code` | Decode a PoB import/export code (e.g. from pobb.in or the desktop app's Generate button) and load it into the engine |
 | `lua_save_build` | Save the current in-memory build to a `.xml` file |
 | `lua_reload_build` | Reload the current build from disk |
 | `lua_get_build_info` | Get current build metadata (class, level, etc.) |

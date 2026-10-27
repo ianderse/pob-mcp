@@ -94,35 +94,11 @@ export async function handleLuaSaveBuild(context: LuaHandlerContext, buildName: 
   });
 }
 
-export async function handleLuaLoadBuild(
-  context: LuaHandlerContext,
-  buildName?: string,
-  buildXml?: string,
-  name?: string
-) {
-  return wrapHandler('load build', async () => {
-    await context.ensureLuaClient();
-
-    const luaClient = context.getLuaClient();
-    if (!luaClient) {
-      throw new Error('Lua client not initialized');
-    }
-
-    // If build_name is provided, read the file
-    let xml = buildXml;
-    if (buildName) {
-      const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
-      xml = await fs.readFile(buildPath, 'utf-8');
-      // Use the build filename as the name if not specified
-      if (!name) {
-        name = buildName.replace(/\.xml$/i, '');
-      }
-    } else if (!xml) {
-      throw new Error('Either build_name or build_xml must be provided');
-    }
-
-    await luaClient.loadBuildXml(xml, name);
-
+/**
+ * Post-load summary shared by every "a build just got loaded into the Lua
+ * bridge" handler: spec/item-set counts, core stats, and top issues.
+ */
+async function buildPostLoadSummary(context: LuaHandlerContext, luaClient: PoBLuaApiClient, name?: string): Promise<string> {
     // Check for multiple specs / item sets and inform the user (sequential — bridge is single-request)
     const extraLines: string[] = [];
     try {
@@ -193,13 +169,75 @@ export async function handleLuaLoadBuild(
     } catch { /* auto-context is best-effort */ }
     const summary = summaryLines.join('\n');
 
-    const loadText = `✅ Build "${name || 'MCP Build'}" loaded.${extra}` + (summary ? '\n---\n' + summary : '');
+    return extra + (summary ? '\n---\n' + summary : '');
+}
+
+export async function handleLuaLoadBuild(
+  context: LuaHandlerContext,
+  buildName?: string,
+  buildXml?: string,
+  name?: string
+) {
+  return wrapHandler('load build', async () => {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized');
+    }
+
+    // If build_name is provided, read the file
+    let xml = buildXml;
+    if (buildName) {
+      const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
+      xml = await fs.readFile(buildPath, 'utf-8');
+      // Use the build filename as the name if not specified
+      if (!name) {
+        name = buildName.replace(/\.xml$/i, '');
+      }
+    } else if (!xml) {
+      throw new Error('Either build_name or build_xml must be provided');
+    }
+
+    await luaClient.loadBuildXml(xml, name);
+    const summary = await buildPostLoadSummary(context, luaClient, name);
 
     return {
       content: [
         {
           type: "text" as const,
-          text: loadText,
+          text: `✅ Build "${name || 'MCP Build'}" loaded.${summary}`,
+        },
+      ],
+    };
+  });
+}
+
+export async function handleLuaImportCode(
+  context: LuaHandlerContext,
+  code: string,
+  name?: string
+) {
+  return wrapHandler('import build code', async () => {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized');
+    }
+
+    if (!code || !code.trim()) {
+      throw new Error('code is required');
+    }
+
+    await luaClient.importCode(code.trim(), name);
+    const summary = await buildPostLoadSummary(context, luaClient, name);
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: `✅ Build "${name || 'Imported Build'}" imported from code.${summary}\n\nUse lua_save_build to persist it to a file.`,
         },
       ],
     };
