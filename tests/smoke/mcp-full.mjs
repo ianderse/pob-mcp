@@ -1,9 +1,9 @@
 // Deep end-to-end MCP smoke test: full tool surface against an unmodified PoB.
 // Usage: node tests/smoke/mcp-full.mjs   (set POB_PATH only to force a checkout)
 import { cp, mkdtemp, rm } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { startMcpServer } from './mcpClient.mjs';
 import { smokePoBSrc } from './pobSource.mjs';
 
 // The server resolves the engine itself; fail here so a missing PoB reads as
@@ -11,26 +11,7 @@ import { smokePoBSrc } from './pobSource.mjs';
 smokePoBSrc();
 const buildsDir = await mkdtemp(join(tmpdir(), 'pob-mcp-full-'));
 await cp(resolve('example-build.xml'), join(buildsDir, 'example.xml'));
-const child = spawn('node', [resolve('build/index.js')], {
-  env: { ...process.env, POB_DIRECTORY: buildsDir, POB_LUA_ENABLED: 'true' },
-  stdio: ['pipe', 'pipe', 'pipe'],
-});
-let buffer = ''; let nextId = 1; const pending = new Map();
-child.stdout.setEncoding('utf8');
-child.stdout.on('data', (chunk) => {
-  buffer += chunk;
-  for (;;) {
-    const newline = buffer.indexOf('\n'); if (newline < 0) return;
-    const message = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1);
-    pending.get(message.id)?.(message); pending.delete(message.id);
-  }
-});
-const request = (method, params) => new Promise((resolveRequest, reject) => {
-  const id = nextId++; pending.set(id, resolveRequest);
-  child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
-  setTimeout(() => { if (pending.delete(id)) reject(new Error(`timed out: ${method}`)); }, 60_000);
-});
-const notify = (method, params) => child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+const { child, request, notify } = startMcpServer({ POB_DIRECTORY: buildsDir });
 const call = async (name, args = {}) => {
   const response = await request('tools/call', { name, arguments: args });
   if (response.error || response.result?.isError) throw new Error(`${name} failed: ${JSON.stringify(response.error ?? response.result)}`);
