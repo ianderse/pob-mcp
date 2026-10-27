@@ -6,6 +6,10 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "generate:item-format": "node scripts/generate-item-format.mjs",
+    "generate:item-format:check": "node scripts/generate-item-format.mjs --check",
+    "generate:item-oracle": "node scripts/generate-item-oracle.mjs",
+    "generate:item-oracle:check": "node scripts/generate-item-oracle.mjs --check",
     "start": "node build/index.js",
     "dev": "tsc --watch",
     "test": "jest",
