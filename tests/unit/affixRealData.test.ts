@@ -67,9 +67,17 @@ withPoB('classifying against the installed data', () => {
     );
 
     expect(result.affixes.find((affix) => affix.affix === "Pixie's")!.lines).toHaveLength(2);
-    expect(result.prefixCount).toBe(2);
-    expect(result.suffixCount).toBe(1);
-    expect(result.openSuffixes).toBe(2);
+    expect(result.affixes).toHaveLength(3);
+    // Legacy tables also contain a fire-resistance prefix. Without base tags
+    // these readings are ambiguous, so no remaining-slot count is justified.
+    if (result.affixes.some(affix => affix.alternatives.length > 0)) {
+      expect(result.openPrefixes).toBeNull();
+      expect(result.openSuffixes).toBeNull();
+    } else {
+      expect(result.prefixCount).toBe(2);
+      expect(result.suffixCount).toBe(1);
+      expect(result.openSuffixes).toBe(2);
+    }
   });
 
   it('never splits a real hybrid into two affixes', () => {

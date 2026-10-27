@@ -38,6 +38,7 @@ export interface WatchContext {
  * Context for Lua-related operations
  */
 export interface LuaContext {
+  buildService?: Pick<BuildService, 'invalidateBuild'>;
   pobDirectory: string;
   luaEnabled: boolean;
   getLuaClient: () => PoBLuaApiClient | null;
@@ -172,6 +173,7 @@ export class ContextBuilder {
    */
   buildLuaContext(): LuaContext {
     return {
+      buildService: this.deps.buildService,
       pobDirectory: this.deps.pobDirectory,
       luaEnabled: this.deps.luaEnabled,
       getLuaClient: this.deps.getLuaClient,

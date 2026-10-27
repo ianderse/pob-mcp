@@ -193,7 +193,7 @@ function projectEntry(table: LuaTable, id: string, source: ModEntry["source"]): 
  * Both files emit exactly one entry per line, so we parse line by line and keep only the
  * projection. Parsing the file as one literal would hold every tradeHash in memory at once.
  */
-export function parseModFile(text: string, source: ModEntry["source"]): ModEntry[] {
+export function parseModFile(text: string, source: ModEntry["source"], affixesOnly = false): ModEntry[] {
   return text.split("\n").reduce<ModEntry[]>((entries, line, index) => {
     const trimmed = line.trim();
     if (trimmed === "" || trimmed.startsWith("--") || trimmed === "return {" || trimmed === "}") return entries;
@@ -202,6 +202,10 @@ export function parseModFile(text: string, source: ModEntry["source"]): ModEntry
     const id = keyed ? unescapeLua(keyed[1]) : `master:${entries.length}`;
     const body = keyed ? trimmed.slice(keyed[0].length) : trimmed;
     const table = new LuaLiteralParser(body.replace(/,$/, "")).parseTable();
+    // ModItem.lua predates the split into ModExplicit/ModCorrupted/etc.
+    // Its non-affix entries must not be treated as rollable prefixes or suffixes.
+    const type = readString(table, "type");
+    if (affixesOnly && type && type !== 'Prefix' && type !== 'Suffix') return entries;
 
     return [...entries, projectEntry(table, id, source)];
   }, []);
@@ -224,14 +228,16 @@ export class ModDataUnavailableError extends Error {}
  */
 function loadFile(fileName: string, source: ModEntry["source"]): ModEntry[] {
   const layout = resolvePoBLayout(process.env.POB_PATH || process.env.POB_FORK_PATH);
-  const filePath = path.join(layout.src, "Data", fileName);
+  let filePath = path.join(layout.src, "Data", fileName);
+  const legacy = fileName === 'ModExplicit.lua' && !fs.existsSync(filePath);
+  if (legacy) filePath = path.join(layout.src, 'Data', 'ModItem.lua');
 
   const stat = ((): fs.Stats => {
     try {
       return fs.statSync(filePath);
     } catch {
       throw new ModDataUnavailableError(
-        `Path of Building's ${fileName} was not found at ${filePath}. Affix data needs an installed Path of Building or a checkout; point POB_PATH at one.`
+        `Path of Building's ${fileName}${fileName === 'ModExplicit.lua' ? ' (or legacy ModItem.lua)' : ''} was not found at ${filePath}. Affix data needs an installed Path of Building or a checkout; point POB_PATH at one.`
       );
     }
   })();
@@ -239,7 +245,7 @@ function loadFile(fileName: string, source: ModEntry["source"]): ModEntry[] {
   const cached = cache.get(filePath);
   if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) return cached.entries;
 
-  const entries = parseModFile(fs.readFileSync(filePath, "utf8"), source);
+  const entries = parseModFile(fs.readFileSync(filePath, "utf8"), source, legacy);
   cache.set(filePath, { mtimeMs: stat.mtimeMs, size: stat.size, entries });
   return entries;
 }

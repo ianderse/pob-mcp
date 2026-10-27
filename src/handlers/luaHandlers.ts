@@ -4,8 +4,10 @@ import fs from "fs/promises";
 import path from "path";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { buildFileName, resolveBuildFile } from "../utils/pathSanitizer.js";
+import type { BuildService } from "../services/buildService.js";
 
 export interface LuaHandlerContext {
+  buildService?: Pick<BuildService, 'invalidateBuild'>;
   pobDirectory: string;
   luaEnabled: boolean;
   getLuaClient: () => PoBLuaApiClient | null;
@@ -66,7 +68,7 @@ export async function handleLuaNewBuild(context: LuaHandlerContext, className?: 
   });
 }
 
-export async function handleLuaSaveBuild(context: LuaHandlerContext, buildName: string) {
+export async function handleLuaSaveBuild(context: LuaHandlerContext, buildName: string, overwrite = false) {
   return wrapHandler('save build', async () => {
     await context.ensureLuaClient();
 
@@ -81,7 +83,8 @@ export async function handleLuaSaveBuild(context: LuaHandlerContext, buildName: 
 
     const fileName = buildFileName(buildName);
     const filePath = resolveBuildFile(fileName, context.pobDirectory);
-    const result = await luaClient.saveBuild(filePath);
+    const result = await luaClient.saveBuild(filePath, overwrite);
+    context.buildService?.invalidateBuild(buildName);
 
     return {
       content: [
@@ -188,8 +191,10 @@ export async function handleLuaLoadBuild(
 
     // If build_name is provided, read the file
     let xml = buildXml;
+    let sourcePath: string | undefined;
     if (buildName) {
       const buildPath = resolveBuildFile(buildName, context.pobDirectory);
+      sourcePath = buildPath;
       xml = await fs.readFile(buildPath, 'utf-8');
       // Use the build filename as the name if not specified
       if (!name) {
@@ -199,7 +204,7 @@ export async function handleLuaLoadBuild(
       throw new Error('Either build_name or build_xml must be provided');
     }
 
-    await luaClient.loadBuildXml(xml, name);
+    await luaClient.loadBuildXml(xml, name, sourcePath);
     const summary = await buildPostLoadSummary(context, luaClient, name);
 
     return {
@@ -712,7 +717,7 @@ export async function handleLuaReloadBuild(context: LuaHandlerContext, buildName
     const buildPath = resolveBuildFile(fileName, context.pobDirectory);
     const xml = await fs.readFile(buildPath, 'utf-8');
     const name = fileName.replace(/\.xml$/i, '');
-    await luaClient.loadBuildXml(xml, name);
+    await luaClient.loadBuildXml(xml, name, buildPath);
 
     return {
       content: [{ type: "text" as const, text: `✅ Build "${fileName}" reloaded from disk.` }],

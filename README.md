@@ -64,7 +64,7 @@ Works against a **stock [PathOfBuildingCommunity](https://github.com/PathOfBuild
 ### Build Export & Persistence
 - **Export**: Copy builds to XML files with optional notes
 - **Save Tree**: Write optimized passive tree back to an existing build file
-- **Snapshots**: Versioned build history with tags, stat metadata, and one-click rollback
+- **Snapshots**: Versioned build history with tags, stat metadata, and one-click rollback; restoring the active source also reloads the engine
 
 ### Currency & Market Data (poe.ninja)
 - **Exchange Rates**: Real-time currency prices in Chaos Orb equivalent
@@ -155,6 +155,21 @@ installed app, or when the app lives somewhere unusual:
 | `POE_CACHE_TTL` | `300` | Trade API response cache TTL in seconds |
 | `POE_RATE_LIMIT_PER_SECOND` | `4` | Trade API requests per second |
 
+### Saving and restoring builds
+
+`lua_save_build` writes atomically. Saving back to the file loaded into the bridge
+is allowed. To replace a different existing file, pass `overwrite: true` explicitly;
+otherwise choose a new name. Saved-file stats are invalidated immediately, and names
+with or without `.xml` share the same cache entry.
+
+`save_tree` preserves unrelated XML elements and writes mastery selections in PoB's
+native format. Snapshot restore reloads the engine when that exact source file is
+active. If the reload fails, the response states that the file was restored but
+live stats are not yet synchronized. Another active build is left untouched.
+
+Affix tools support both current `Data/ModExplicit.lua` and legacy `Data/ModItem.lua`
+installations. Unmatched or ambiguous explicit lines leave remaining slots unknown.
+
 ### Setting Up the Lua Bridge
 
 The Lua bridge uses PoB's actual calculation engine for accurate stats.
@@ -231,6 +246,15 @@ npm run test:smoke:full
 ```
 
 This verifies blank-build gem editing, build discovery and file persistence, loading, character-level mutation and restoration, tree search, build validation, configuration/snapshot save-and-restore, and defensive/boss-readiness analysis.
+
+For persistence regression checks against the real engine:
+
+```bash
+npm run test:smoke:persistence
+```
+
+This checks overwrite protection, cache refresh, snapshot reload, XML notes and
+mastery preservation, and rejection of incomplete native imports.
 
 To exercise the live Trade API integration (requires network access):
 

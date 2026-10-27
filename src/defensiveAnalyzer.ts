@@ -120,7 +120,7 @@ export function analyzeDefenses(stats: Record<string, any>): DefensiveAnalysis {
       category: 'layers',
       issue: `Only ${defensiveLayerCount} of 3 defensive layers active (avoidance / mitigation / recovery)`,
       solutions: [
-        'Avoidance: add evasion, spell suppression (50%), dodge, or block',
+        'Avoidance: add evasion, spell suppression (100% chance cap), dodge, or block',
         'Mitigation: add armour (Determination aura), endurance charges, or physical reduction',
         'Recovery: add life regeneration, life leech, or gain-on-hit',
       ],
@@ -227,7 +227,7 @@ function analyzeLifePool(stats: Record<string, any>): LifePoolAnalysis {
 
 /**
  * Analyze avoidance layer:
- *   - Spell suppression (50%+ = full cap)
+ *   - Spell suppression (chance caps at 100%)
  *   - Evasion (gives % chance to evade attacks)
  *   - Dodge (attack/spell dodge)
  *   - Block
@@ -253,7 +253,7 @@ function analyzeAvoidance(stats: Record<string, any>): AvoidanceAnalysis {
     : 0;
 
   const parts: string[] = [];
-  if (spellSuppression >= 50) parts.push(`spell suppression ${spellSuppression}%`);
+  if (spellSuppression >= 100) parts.push(`spell suppression ${spellSuppression}%`);
   else if (spellSuppression > 0) parts.push(`partial suppression ${spellSuppression}%`);
   if (estimatedEvadeChance >= 20) parts.push(`~${estimatedEvadeChance}% evade`);
   if (dodge >= 20) parts.push(`${dodge}% dodge`);
@@ -261,7 +261,7 @@ function analyzeAvoidance(stats: Record<string, any>): AvoidanceAnalysis {
   if (block >= 30) parts.push(`${block}% block`);
 
   // A meaningful avoidance layer means at least one solid avoidance mechanic:
-  //   - 50% spell suppression (full cap)
+  //   - 50% spell suppression (a meaningful partial layer, not the cap)
   //   - OR evasion giving ≥30% evade chance
   //   - OR dodge/spell dodge ≥30%
   //   - OR block ≥30%
@@ -504,19 +504,19 @@ function generateAvoidanceRecommendations(analysis: AvoidanceAnalysis): Recommen
       issue: 'No significant avoidance layer (no evasion, spell suppression, dodge, or block)',
       solutions: [
         'Evasion: equip evasion-based armour and run Grace aura',
-        'Spell Suppression: 50% suppression halves spell damage taken — available on tree (Shadow/Ranger side)',
+        'Spell Suppression: reach 100% chance to reliably reduce spell-hit damage — available on tree (Shadow/Ranger side)',
         'Block: use a shield or staff and invest in block nodes',
         'Dodge: Acrobatics keystone gives 30% attack/spell dodge (but disables block)',
       ],
       impact: 'Without avoidance, every hit lands at full effect — requires pure mitigation + recovery to survive',
     });
-  } else if (analysis.spellSuppression > 0 && analysis.spellSuppression < 50) {
+  } else if (analysis.spellSuppression > 0 && analysis.spellSuppression < 100) {
     recs.push({
       priority: 'low',
       category: 'avoidance',
-      issue: `Spell suppression is ${analysis.spellSuppression}% — not at 50% cap`,
+      issue: `Spell suppression is ${analysis.spellSuppression}% — not at 100% chance cap`,
       solutions: [
-        'Cap spell suppression at 50% for full benefit',
+        'Cap spell suppression chance at 100% for reliable suppression',
         'Additional suppression nodes or gear can reach the cap',
       ],
     });
@@ -647,8 +647,8 @@ export function formatDefensiveAnalysis(analysis: DefensiveAnalysis): string {
   // Avoidance
   output += '**Avoidance Layer:**\n';
   if (analysis.avoidance.spellSuppression > 0) {
-    const suppIcon = analysis.avoidance.spellSuppression >= 50 ? '✓' : '⚠';
-    output += `${suppIcon} Spell Suppression: ${analysis.avoidance.spellSuppression}%${analysis.avoidance.spellSuppression >= 50 ? ' (capped)' : ' (below 50% cap)'}\n`;
+    const suppIcon = analysis.avoidance.spellSuppression >= 100 ? '✓' : '⚠';
+    output += `${suppIcon} Spell Suppression: ${analysis.avoidance.spellSuppression}%${analysis.avoidance.spellSuppression >= 100 ? ' (capped)' : ' (below 100% chance cap)'}\n`;
   }
   if (analysis.avoidance.estimatedEvadeChance > 0) {
     output += `  Evasion: ${analysis.avoidance.evasionRating.toLocaleString()} (~${analysis.avoidance.estimatedEvadeChance}% evade)\n`;

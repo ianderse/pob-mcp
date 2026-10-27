@@ -3,6 +3,9 @@ import { EventEmitter } from "events";
 import path from "path";
 import os from "os";
 import zlib from "zlib";
+import fs from "fs/promises";
+import { randomUUID } from "crypto";
+import { atomicWriteFile } from "./utils/atomicWrite.js";
 import { resolvePoBLayout } from "./utils/pobLayout.js";
 
 /** Lua bridge request envelope */
@@ -68,6 +71,10 @@ export interface AilmentReport {
 }
 
 export class PoBLuaApiClient {
+  private loadedFilePath?: string;
+  private buildGeneration = 0;
+
+  getLoadedFilePath(): string | undefined { return this.loadedFilePath; }
   private proc: ChildProcessWithoutNullStreams | null = null;
   private options: PoBLuaApiOptions;
   private buffer = "";
@@ -103,6 +110,7 @@ export class PoBLuaApiClient {
     this.killed = false;
     this.ready = false;
     this.buffer = "";
+    this.loadedFilePath = undefined;
 
     const layout = resolvePoBLayout(this.options.cwd);
     this.options.cwd = layout.src;
@@ -349,18 +357,40 @@ export class PoBLuaApiClient {
   async newBuild(params?: { className?: string; ascendancy?: string }): Promise<any> {
     const res = await this.send({ action: "new_build", params: params || {} });
     if (!res.ok) throw new Error(res.error || "new_build failed");
+    this.loadedFilePath = undefined;
+    this.buildGeneration++;
     return res;
   }
 
-  async saveBuild(filePath: string): Promise<any> {
-    const res = await this.send({ action: "save_build", params: { path: filePath } });
-    if (!res.ok) throw new Error(res.error || "save_build failed");
-    return res.result;
+  async saveBuild(filePath: string, overwrite = false): Promise<any> {
+    const destination = path.resolve(filePath);
+    const mayReplace = overwrite || this.loadedFilePath === destination;
+    const generation = this.buildGeneration;
+    const temporary = path.join(path.dirname(destination), `.pob-save-${randomUUID()}.tmp`);
+    try {
+      const res = await this.send({ action: "save_build", params: { path: temporary } });
+      if (!res.ok) throw new Error(res.error || "save_build failed");
+      const xml = await fs.readFile(temporary, 'utf8');
+      await atomicWriteFile(destination, xml, mayReplace);
+      if (this.buildGeneration === generation) this.loadedFilePath = destination;
+      return { ...res.result as any, path: destination };
+    } catch (error: any) {
+      if (error.code === 'EEXIST') {
+        throw new Error(`Refusing to overwrite existing build "${destination}". Pass overwrite: true to replace it, or choose a new name.`);
+      }
+      throw error;
+    } finally {
+      await fs.unlink(temporary).catch((error: any) => { if (error.code !== 'ENOENT') throw error; });
+    }
   }
 
-  async loadBuildXml(xml: string, name = "API Build"): Promise<any> {
+  async loadBuildXml(xml: string, name = "API Build", sourcePath?: string): Promise<any> {
+    // A failed import may already have closed the previous native build.
+    this.loadedFilePath = undefined;
+    this.buildGeneration++;
     const res = await this.send({ action: "load_build_xml", params: { xml, name } });
     if (!res.ok) throw new Error(res.error || "load_build_xml failed");
+    this.loadedFilePath = sourcePath ? path.resolve(sourcePath) : undefined;
     return res;
   }
 

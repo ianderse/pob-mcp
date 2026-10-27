@@ -173,6 +173,11 @@ handlers.load_build_xml = function(params)
   if not _G.loadBuildFromXML then return { ok = false, error = 'headless wrapper not initialized' } end
   local ok, err = pcall(_G.loadBuildFromXML, params.xml, (params.name and tostring(params.name)) or 'API Build')
   if not ok then return { ok = false, error = tostring(err) } end
+  -- PoB can close the build or stop at a conversion popup without throwing.
+  -- Shutdown clears savers, so stale build fields alone do not prove a load.
+  if not build or not build.savers or not build.spec then
+    return { ok = false, error = 'PoB did not initialize the build; check the XML and supported build version' }
+  end
   return { ok = true, build_id = 1 }
 end
 

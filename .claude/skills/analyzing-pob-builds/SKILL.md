@@ -170,9 +170,12 @@ reports the main skill only; other groups or minions need their own evidence.
 ## Preserve the user's work
 
 Run experiments in a separate bridge process or a uniquely named scratch copy.
-Check `list_builds` before choosing the name; `lua_save_build` can overwrite an
-existing file. Preserve any unsaved state before loading another build. Restoring
-a file is not proof the current engine has reloaded it.
+Check `list_builds` before choosing the name. `lua_save_build` permits saving to
+its known source file; replacing another existing file requires `overwrite: true`.
+Preserve any unsaved state before loading another build. Snapshot restore reloads
+the matching live source. If its response reports a
+failed reload or a different live source, load the restored file before reading
+live stats.
 
 After an experiment, restore selections and configuration and compare the live
 baseline. Keep the original file unchanged unless the user requested persistence.

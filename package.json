@@ -21,10 +21,11 @@
     "test:smoke:full": "node tests/smoke/mcp-full.mjs",
     "test:smoke:weighted": "POE_WEIGHTED_SMOKE=true node tests/smoke/mcp.mjs",
     "test:smoke:trade": "node tests/smoke/trade-mcp.mjs",
-    "test:smoke:crafting": "node tests/smoke/crafting-mcp.mjs"
+    "test:smoke:crafting": "node tests/smoke/crafting-mcp.mjs",
+    "test:smoke:persistence": "node tests/smoke/persistence.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "bottleneck": "^2.19.5",
     "chokidar": "^4.0.3",
     "fast-xml-parser": "^5.10.1"

@@ -57,14 +57,14 @@ export class BuildService {
   }
 
   async readBuild(buildName: string): Promise<PoBBuild> {
+    const buildPath = resolveBuildFile(buildName, this.pobDirectory);
     // Check cache — evict if stale
-    const cached = this.buildCache.get(buildName);
+    const cached = this.buildCache.get(buildPath);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
       return cached.data;
     }
 
     // Cache miss or expired — read from file
-    const buildPath = resolveBuildFile(buildName, this.pobDirectory);
     const content = await fs.readFile(buildPath, "utf-8");
     const parsed = this.parser.parse(content);
     const buildData = parsed.PathOfBuilding;
@@ -76,8 +76,16 @@ export class BuildService {
       if (oldest) this.buildCache.delete(oldest[0]);
     }
 
-    this.buildCache.set(buildName, { data: buildData, timestamp: Date.now() });
+    this.buildCache.set(buildPath, { data: buildData, timestamp: Date.now() });
     return buildData;
+  }
+
+  async readBuildXml(buildName: string): Promise<string> {
+    return fs.readFile(this.resolveBuildPath(buildName), 'utf8');
+  }
+
+  resolveBuildPath(buildName: string): string {
+    return resolveBuildFile(buildName, this.pobDirectory);
   }
 
   generateBuildSummary(build: PoBBuild): string {
@@ -255,7 +263,7 @@ export class BuildService {
   }
 
   invalidateBuild(buildName: string): void {
-    this.buildCache.delete(buildName);
+    this.buildCache.delete(this.resolveBuildPath(buildName));
   }
 
   /**

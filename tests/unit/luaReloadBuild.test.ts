@@ -38,6 +38,6 @@ describe('handleLuaReloadBuild', () => {
   it('strips the suffix for the name handed to the bridge', async () => {
     await handleLuaReloadBuild(context, 'Luminary.XML');
 
-    expect(loadBuildXml).toHaveBeenCalledWith(expect.any(String), 'Luminary');
+    expect(loadBuildXml).toHaveBeenCalledWith(expect.any(String), 'Luminary', '/builds/Luminary.XML');
   });
 });

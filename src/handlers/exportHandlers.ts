@@ -32,7 +32,7 @@ export async function handleExportBuild(
     outputDirectory: args.output_directory,
     overwrite: args.overwrite,
     notes: args.notes,
-  });
+  }, await buildService.readBuildXml(args.build_name));
 
   // Generate brief summary (not full build details to keep response small)
   const className = buildData.Build?.className || "Unknown";
@@ -180,7 +180,24 @@ export async function handleRestoreSnapshot(
   // Invalidate cache for this build
   buildService.invalidateBuild(args.build_name);
 
+  let reloadFailed = false;
+  if (context.luaClient) {
+    const buildPath = buildService.resolveBuildPath(args.build_name);
+    if (context.luaClient.getLoadedFilePath() === buildPath) {
+      try {
+        await context.luaClient.loadBuildXml(result.restoredXml, args.build_name.replace(/\.xml$/i, ''), buildPath);
+        message += '\n\nLive PoB build reloaded from the restored snapshot.';
+      } catch (error) {
+        reloadFailed = true;
+        message += `\n\nThe file was restored, but the live reload FAILED: ${error instanceof Error ? error.message : String(error)}. Reload this build before using live stats.`;
+      }
+    } else {
+      message += '\n\nThe live build has a different or unknown source and was left unchanged. Use lua_load_build to analyze the restored file.';
+    }
+  }
+
   return {
+    isError: reloadFailed,
     content: [
       {
         type: "text" as const,

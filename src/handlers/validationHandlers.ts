@@ -2,6 +2,7 @@ import type { BuildService } from "../services/buildService.js";
 import type { ValidationService } from "../services/validationService.js";
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import { wrapHandler } from "../utils/errorHandling.js";
+import { resolveBuildFile } from "../utils/pathSanitizer.js";
 import { readNamedBuild } from "../utils/namedBuild.js";
 
 export interface ValidationHandlerContext {
@@ -48,7 +49,7 @@ export async function handleValidateBuild(
           } catch { /* no build loaded — safe to load */ }
 
           if (!otherBuildInMemory) {
-            await luaClient.loadBuildXml(namedBuildXml, buildName);
+            await luaClient.loadBuildXml(namedBuildXml, buildName, resolveBuildFile(buildName, context.pobDirectory!));
           }
         }
         // A different in-memory build is never replaced, to protect unsaved work,

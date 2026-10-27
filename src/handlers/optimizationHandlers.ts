@@ -52,7 +52,7 @@ export async function handleAnalyzeDefenses(
     if (needsLoad) {
       const buildPath = resolveBuildFile(buildName, context.pobDirectory);
       const buildXml = await fs.readFile(buildPath, 'utf-8');
-      await luaClient.loadBuildXml(buildXml, buildName);
+      await luaClient.loadBuildXml(buildXml, buildName, buildPath);
     }
 
     // Get stats from PoB
@@ -117,7 +117,7 @@ export async function handleSuggestOptimalNodes(
     // assume a build is already loaded in the Lua bridge (in-memory workflow)
     if (buildName) {
       const buildXml = await readNamedBuild(buildName, context.pobDirectory);
-      await luaClient.loadBuildXml(buildXml, buildName);
+      await luaClient.loadBuildXml(buildXml, buildName, resolveBuildFile(buildName, context.pobDirectory));
     }
 
     const points = pointsAvailable || 10;
@@ -277,7 +277,7 @@ export async function handleOptimizeTree(
     // Load build from disk if it exists, otherwise use the currently loaded Lua build
     if (buildName) {
       const buildXml = await readNamedBuild(buildName, context.pobDirectory);
-      await luaClient.loadBuildXml(buildXml, buildName);
+      await luaClient.loadBuildXml(buildXml, buildName, resolveBuildFile(buildName, context.pobDirectory));
     }
 
     const points = maxPoints || 10;

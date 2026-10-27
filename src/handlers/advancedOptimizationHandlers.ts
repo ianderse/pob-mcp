@@ -11,6 +11,7 @@ import {
   formatSkillOptimization,
   type SkillGroup,
 } from "../skillLinkOptimizer.js";
+import { resolveBuildFile } from "../utils/pathSanitizer.js";
 import { readNamedBuild } from "../utils/namedBuild.js";
 import { activeSkillSet, asArray } from "../utils/xmlCollections.js";
 
@@ -56,7 +57,7 @@ export async function handleAnalyzeItems(
         } catch { /* no build loaded yet */ }
         if (needsLoad) {
           const xml = await readNamedBuild(buildName, context.pobDirectory);
-          await luaClient.loadBuildXml(xml, buildName);
+          await luaClient.loadBuildXml(xml, buildName, resolveBuildFile(buildName, context.pobDirectory));
         }
       }
 
@@ -177,7 +178,7 @@ export async function handleOptimizeSkillLinks(
       // Load build if buildName provided
       if (buildName) {
         const xml = await readNamedBuild(buildName, context.pobDirectory);
-        await luaClient.loadBuildXml(xml, buildName);
+        await luaClient.loadBuildXml(xml, buildName, resolveBuildFile(buildName, context.pobDirectory));
       }
 
       try {

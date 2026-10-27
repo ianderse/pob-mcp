@@ -210,7 +210,7 @@ export function getToolSchemas(): ToolSchema[] {
     },
     {
       name: "classify_item_affixes",
-      description: "Resolve an item's explicit mod lines back to the affixes that produced them, using Path of Building's own ModExplicit/ModMaster tables. Reports matched prefix and suffix counts, remaining slots when the classification is complete and unambiguous, affix ranges and minimum item levels, and which lines belong to one hybrid affix. USE THIS BEFORE recommending any craft or reroll: one affix can print several lines, and counting those lines separately inverts the answer (a hybrid energy shield prefix also prints stun recovery, which reads like a suffix). LIMITS: explicit mods only. Unmatched lines may be unrecognized explicit affixes that still occupy slots. Remaining slots are reported as unknown when any lines are unmatched or ambiguous. An item whose lines admit more than one reading is flagged as ambiguous rather than guessed. Slot counts assume a rare, which holds three prefixes and three suffixes; a magic item holds one of each.",
+      description: "Resolve an item's explicit mod lines back to the affixes that produced them, using Path of Building's ModExplicit (legacy ModItem) and ModMaster tables. Reports matched prefix and suffix counts, remaining slots when the classification is complete and unambiguous, affix ranges and minimum item levels, and which lines belong to one hybrid affix. USE THIS BEFORE recommending any craft or reroll: one affix can print several lines, and counting those lines separately inverts the answer (a hybrid energy shield prefix also prints stun recovery, which reads like a suffix). LIMITS: explicit mods only. Unmatched lines may be unrecognized explicit affixes that still occupy slots. Remaining slots are reported as unknown when any lines are unmatched or ambiguous. An item whose lines admit more than one reading is flagged as ambiguous rather than guessed. Slot counts assume a rare, which holds three prefixes and three suffixes; a magic item holds one of each.",
       inputSchema: {
         type: "object",
         properties: {
@@ -252,7 +252,7 @@ export function getToolSchemas(): ToolSchema[] {
     },
     {
       name: "find_affix_tiers",
-      description: "Look up every tier of a rollable affix in Path of Building's ModExplicit table: prefix or suffix, minimum item level, the value range per entry, and the base tags it can roll on. Displays affix names and item levels without inventing T1/T2 labels from filtered result order. Use it to price an affix before pricing an item, since a top-tier rare suffix often replaces a costly unique built around the same stat. LIMITS: slot filtering uses PoB's base tags, not slot names. Body armour bases carry str_armour / dex_armour / int_armour and their hybrids; influenced variants add a suffix like _elder or _shaper; a plain 'armour' tag exists too and does not cover the attribute-specific ones. Pass several tags when unsure. Mods whose spawn weights are all zero are excluded unless include_unobtainable is set.",
+      description: "Look up every tier of a rollable affix in Path of Building's ModExplicit table (ModItem on older installs): prefix or suffix, minimum item level, the value range per entry, and the base tags it can roll on. Displays affix names and item levels without inventing T1/T2 labels from filtered result order. Use it to price an affix before pricing an item, since a top-tier rare suffix often replaces a costly unique built around the same stat. LIMITS: slot filtering uses PoB's base tags, not slot names. Body armour bases carry str_armour / dex_armour / int_armour and their hybrids; influenced variants add a suffix like _elder or _shaper; a plain 'armour' tag exists too and does not cover the attribute-specific ones. Pass several tags when unsure. Mods whose spawn weights are all zero are excluded unless include_unobtainable is set.",
       inputSchema: {
         type: "object",
         properties: {
@@ -336,13 +336,18 @@ export function getLuaToolSchemas(): any[] {
     },
     {
       name: "lua_save_build",
-      description: "Save the currently loaded in-memory Lua bridge build to a file. Required before using file-based tools (validate_build, analyze_build, etc.) on an in-memory build.",
+      description: "Save the currently loaded in-memory Lua bridge build atomically. Saving back to its source file is allowed; replacing another existing file requires overwrite=true. Required before using file-based tools (validate_build, analyze_build, etc.) on an in-memory build.",
       inputSchema: {
         type: "object",
         properties: {
           build_name: {
             type: "string",
             description: "Output filename (e.g., 'MyBuild.xml'). .xml extension added automatically if missing.",
+          },
+          overwrite: {
+            type: "boolean",
+            description: "Explicitly allow replacing a different existing build file (default: false).",
+            default: false,
           },
         },
         required: ["build_name"],

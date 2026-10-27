@@ -159,7 +159,7 @@ export async function routeToolCall(
 
     case "lua_save_build":
       if (!args) throw new Error("Missing arguments");
-      return await handleLuaSaveBuild(luaContext, args.build_name as string);
+      return await handleLuaSaveBuild(luaContext, args.build_name as string, args.overwrite === true);
 
     case "lua_load_build":
       if (!args) throw new Error("Missing arguments");
