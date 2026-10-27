@@ -52,29 +52,29 @@ export async function handleValidateBuild(
           }
         }
         // A different in-memory build is never replaced, to protect unsaved work,
-        // but its stats are not the requested build's, so skip them and let the
-        // XML below speak for the build that was actually asked about.
+        // but neither its stats nor its flask immunities belong to the requested
+        // build. Let the XML below supply both when another build is loaded.
         if (!otherBuildInMemory) {
           luaStats = await luaClient.getStats();
-        }
 
-        // Get flask immunities from Lua bridge (more reliable than XML slot parsing)
-        try {
-          const items = await (luaClient as any).getItems();
-          if (Array.isArray(items)) {
-            const flaskItems = items.filter((it: any) =>
-              it.slot && it.slot.startsWith('Flask') && it.raw
-            );
-            const allFlaskText = flaskItems.map((it: any) => (it.raw || '').toLowerCase()).join(' ');
-            luaFlaskImmunities = {
-              bleed: allFlaskText.includes('bleed') || allFlaskText.includes('corrupted blood'),
-              freeze: allFlaskText.includes('freeze') || allFlaskText.includes('chill'),
-              poison: allFlaskText.includes('poison'),
-              curse: allFlaskText.includes('curse'),
-            };
+          // Get flask immunities from the same build as the live stats.
+          try {
+            const items = await (luaClient as any).getItems();
+            if (Array.isArray(items)) {
+              const flaskItems = items.filter((it: any) =>
+                it.slot && it.slot.startsWith('Flask') && it.raw
+              );
+              const allFlaskText = flaskItems.map((it: any) => (it.raw || '').toLowerCase()).join(' ');
+              luaFlaskImmunities = {
+                bleed: allFlaskText.includes('bleed') || allFlaskText.includes('corrupted blood'),
+                freeze: allFlaskText.includes('freeze') || allFlaskText.includes('chill'),
+                poison: allFlaskText.includes('poison'),
+                curse: allFlaskText.includes('curse'),
+              };
+            }
+          } catch {
+            // Flask immunity check via Lua unavailable — fall back to XML parsing
           }
-        } catch {
-          // Flask immunity check via Lua unavailable — fall back to XML parsing
         }
       } catch {
         // Lua stats unavailable

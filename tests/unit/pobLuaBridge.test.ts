@@ -68,6 +68,34 @@ describe('PoBLuaApiClient', () => {
       await expect(client.start()).rejects.toThrow(/Timed out|Failed to find valid ready banner/);
     });
 
+    it('should explain a missing PoB Lua C module rather than reporting a timeout', async () => {
+      client = new PoBLuaApiClient({ timeoutMs: 1000 });
+
+      // PoB prints the load failure to stdout and never emits a ready banner
+      mockSpawn.mockImplementationOnce(() => {
+        const proc = new MockPoBProcess();
+        const emit = proc.stdout.emit.bind(proc.stdout);
+        (proc.stdout as any).emit = (event: string, data?: unknown) => {
+          if (event === 'data' && typeof data === 'string' && data.includes('"ready":true')) {
+            return emit(
+              'data',
+              'Loading main script...\n' +
+                "Error loading main script: Modules/Common.lua:29: module 'lua-utf8' not found:\n"
+            );
+          }
+          return emit(event, data as never);
+        };
+        return proc;
+      });
+
+      const error = await client.start().catch((e: Error) => e);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("module 'lua-utf8'");
+      expect((error as Error).message).toContain('luarocks');
+      expect((error as Error).message).toContain('luautf8');
+    });
+
     it('should handle multiple non-JSON lines before ready banner', async () => {
       mockSpawn.mockImplementationOnce(() => {
         const proc = new MockPoBProcess();
