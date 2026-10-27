@@ -205,7 +205,8 @@ export async function routeToolCall(
       return await handleUpdateTreeDelta(
         luaContext,
         args.add_nodes as string[] | undefined,
-        args.remove_nodes as string[] | undefined
+        args.remove_nodes as string[] | undefined,
+        args.mastery_effects as Record<string, number> | undefined
       );
 
     case "create_spec":
@@ -723,7 +724,12 @@ export async function routeToolCall(
 
     case "plan_leveling":
       return await handlePlanLeveling(
-        { getLuaClient: deps.getLuaClient, ensureLuaClient: deps.ensureLuaClient },
+        {
+          getLuaClient: deps.getLuaClient,
+          ensureLuaClient: deps.ensureLuaClient,
+          readBuild: (name: string) =>
+            deps.contextBuilder.buildHandlerContext().buildService.readBuild(name),
+        },
         args || {}
       );
 
