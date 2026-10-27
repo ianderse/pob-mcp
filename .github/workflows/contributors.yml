@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+concurrency:
+  group: contributors-readme
+  cancel-in-progress: false
 
 jobs:
   contributors:
@@ -12,6 +17,20 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: akhilmhdh/contributors-readme-action@v2.3.10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Update contributors from commits and merged PRs
+        run: node scripts/update-contributors.mjs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit contributor changes
+        run: |
+          if git diff --quiet -- README.md; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md
+          git commit -m 'docs(contributor): update README contributors'
+          git push origin HEAD:main
