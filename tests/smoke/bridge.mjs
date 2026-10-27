@@ -33,6 +33,22 @@ try {
   if (!info?.className || !Array.isArray(tree?.nodes) || typeof stats.Life !== 'number' || !Array.isArray(items) || !Array.isArray(skillSetup?.groups)) {
     throw new Error('unexpected adapter response shape');
   }
+  // Seven handlers call getStats() with no field list, so the default set decides
+  // what they can report. It carried no damage stat at all, which made every one
+  // of them describe a build as if it dealt none.
+  await client.createSocketGroup({ label: 'dps', slot: 'Weapon 1' });
+  const dpsGroup = (await client.getSkills()).groups.length;
+  await client.addGem({ groupIndex: dpsGroup, gemName: 'Arc', level: 20, quality: 0 });
+  await client.setMainSelection({ mainSocketGroup: dpsGroup });
+  const defaults = await client.getStats();
+  for (const field of ['TotalDPS', 'CombinedDPS', 'AverageDamage']) {
+    if (typeof defaults[field] !== 'number') {
+      throw new Error(`getStats() with no fields must include ${field}: ${JSON.stringify(defaults)}`);
+    }
+  }
+  if (!(defaults.TotalDPS > 0)) throw new Error(`expected a positive TotalDPS, got ${defaults.TotalDPS}`);
+  if (typeof defaults.Life !== 'number') throw new Error('the defensive defaults must survive too');
+
   const changed = await client.setTree({ ...tree, ascendClassId: 0, nodes: [] });
   // Upstream keeps the class start allocated even when given an empty node list.
   if (changed.ascendClassId !== 0 || changed.nodes.length >= tree.nodes.length) throw new Error('tree mutation was not applied');

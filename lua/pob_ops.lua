@@ -37,7 +37,12 @@ function M.export_stats(fields)
   if not output then
     return nil, err
   end
+  -- Callers that pass no field list get this set, so it has to answer "how is
+  -- this build doing" on both axes. Damage was missing entirely, which made
+  -- every such caller report a build as if it dealt none.
   local wanted = fields or {
+    "TotalDPS", "CombinedDPS", "FullDPS", "AverageDamage", "Speed",
+    "CritChance", "CritMultiplier",
     "Life", "EnergyShield", "Armour", "Evasion",
     "FireResist", "ColdResist", "LightningResist", "ChaosResist",
     "BlockChance", "SpellBlockChance",
