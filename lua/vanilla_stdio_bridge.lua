@@ -18,8 +18,18 @@ dofile('HeadlessWrapper.lua')
 
 local BuildOps = dofile(ADAPTER_DIR .. 'pob_ops.lua')
 
+-- json.encode raises on cycles, NaN and functions. An uncaught raise here kills
+-- the process and takes the caller's loaded build with it, so a payload we
+-- cannot serialise must degrade into an error response, never a crash.
 local function reply(value)
-  io.write(json.encode(value), '\n')
+  local ok, encoded = pcall(json.encode, value)
+  if not ok then
+    encoded = json.encode({
+      ok = false,
+      error = 'response could not be serialised: ' .. tostring(encoded),
+    })
+  end
+  io.write(encoded, '\n')
   io.flush()
 end
 
@@ -179,15 +189,22 @@ handlers.set_tree = function(params)
 end
 
 handlers.update_tree_delta = function(params)
-  local ok2, err = BuildOps.update_tree_delta(params or {})
-  if not ok2 then return { ok = false, error = err } end
-  return { ok = true, tree = (BuildOps.get_tree()) }
+  local result, err = BuildOps.update_tree_delta(params or {})
+  if not result then return { ok = false, error = err } end
+  return { ok = true, tree = result.tree, droppedNodes = result.droppedNodes }
 end
 
 handlers.set_config = function(params)
-  local ok2, err = BuildOps.set_config(params or {})
-  if not ok2 then return { ok = false, error = err } end
-  return { ok = true, config = (BuildOps.get_config()) }
+  local result, err = BuildOps.set_config(params or {})
+  if not result then return { ok = false, error = err } end
+  -- Report per-key outcomes so the caller can tell an applied change from a
+  -- rejected one instead of assuming success.
+  return {
+    ok = true,
+    applied = result.applied,
+    rejected = result.rejected,
+    config = (BuildOps.get_config()),
+  }
 end
 
 handlers.set_main_selection = function(params)
@@ -214,7 +231,11 @@ handlers.get_tree = op(BuildOps.get_tree, 'tree')
 handlers.get_items = op(BuildOps.get_items, 'items')
 handlers.get_skills = op(BuildOps.get_skills, 'skills')
 handlers.get_build_info = op(BuildOps.get_build_info, 'info')
-handlers.get_config = op(BuildOps.get_config, 'config')
+handlers.get_config = function()
+  local cfg, err = BuildOps.get_config()
+  if cfg == nil then return { ok = false, error = err or 'operation failed' } end
+  return { ok = true, config = cfg, labels = (BuildOps.get_config_labels()) }
+end
 handlers.calc_with = op(BuildOps.calc_with, 'output')
 handlers.export_build_xml = op(BuildOps.export_build_xml, 'xml')
 handlers.add_item_text = op(BuildOps.add_item_text, 'item')
@@ -222,6 +243,7 @@ handlers.create_socket_group = op(BuildOps.create_socket_group, 'socketGroup')
 handlers.add_gem = op(BuildOps.add_gem, 'gem')
 handlers.search_nodes = op(BuildOps.search_nodes, 'results')
 handlers.get_mastery_options = op(BuildOps.get_mastery_options, 'result')
+handlers.get_ailments = op(BuildOps.get_ailments, 'result')
 handlers.save_build = op(BuildOps.save_build, 'result')
 handlers.list_specs = op(BuildOps.list_specs, 'result')
 handlers.select_spec = op(BuildOps.select_spec, 'result')

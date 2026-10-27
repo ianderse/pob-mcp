@@ -1,254 +1,180 @@
 ---
 name: analyzing-pob-builds
-description: Use when analyzing a Path of Exile build through the pob MCP server: evaluating gear, affixes, crafts, anointments, passive nodes, or comparing defensive options. Also use when a pob tool reports success but stats do not move, when recommending a bench craft, or when ranking upgrades by survivability.
-allowed-tools: Read, Bash, Grep, Glob
+description: Use when analyzing a Path of Exile build through the pob MCP server, comparing upgrades, or verifying changes to items, gems, passives, and configuration.
 ---
 
 # Analyzing PoB Builds
 
-## Overview
+Verify the state PoB calculated before recommending a change. Keep saved-file
+stats, live engine stats, and assumptions separate.
 
-The pob MCP server has **silent failure modes**: tools report success for operations that did nothing, and some read paths serve cached values that ignore your last mutation. Separately, Path of Exile's item rules gate which advice is even *possible* (affix slot types, item level, keystone lockouts). Advice that ignores either produces confident, wrong answers.
+## Choose the right read path
 
-**Core principle: verify the effect, never the return value.** A tool saying "Item added" or "Added: 1 node(s)" is not evidence anything changed.
-
-## The Read Path Is Not The Write Path
-
-`get_build_stats` and `get_build_issues` read cached values from the build XML. They will happily return stats for a build you never loaded, or return byte-identical output after a mutation that did land.
-
-| Need | Use | Never use |
-|---|---|---|
-| Stats after any mutation | `lua_get_build_snapshot` or `lua_get_stats` | `get_build_stats` |
-| Confirm a build is loaded | `lua_load_build`, read the banner | assume |
-| Max hits, attributes, req values | `get_build_stats` **after** `lua_save_build` | mid-session reads |
-
-**Symptom you must not explain away:** two consecutive reads returning identical values to eight decimal places after you changed something. That is a cache, not a null result.
-
-## Before Any Analysis
-
-1. `lua_load_build`, confirm the banner shows the expected name, level and class. An unloaded engine silently serves a level 1 blank character.
-2. `lua_reload_build` if the user has touched PoB since you last read. Check the file mtime if unsure.
-3. Read the config. Defaults are not user choices, so check `ConfigOptions.lua` before inferring intent.
-4. Note allocated **keystones**. A damage-type lockout invalidates entire categories of mod.
-
-## Verifying A Mutation
-
-```
-before = lua_get_build_snapshot()
-<mutate>
-after  = lua_get_build_snapshot()
-assert after != before          # or: assert the specific field moved
-```
-
-If the field did not move, the mutation failed regardless of what the tool said. Common causes: wrong parameter name, a value the engine rejected, or an operation PoB itself refuses.
-
-**Parameter names are not guessable.** `add_item` takes `slot_name` (not `slot`); `set_gem_level` takes `group_index`/`gem_index`; `set_config` takes `config_name`. Grep `src/server/toolSchemas.ts` when unsure, a wrong name can produce a cheerful success message and no effect.
-
-### Three mutations that lie in ways the snapshot will not catch
-
-**`customMods` cannot be read or written through the config API.** It is a multi-line
-`<Input string="...">` and both `get_config` and `set_config` drop it silently: every
-value you write produces the identical DPS, and the getter returns nothing. Read the
-true value straight out of the XML:
-
-```
-XML.match(/<Input string="([^"]*)"\s+name="customMods"\s*\/>/)
-```
-
-Apply payload modifiers through a **carrier item** instead: append the lines to an
-equipped item's raw text and re-add it. Always measure the *unmodified* carrier first
-and assert it reproduces the baseline exactly, or you are measuring the carrier.
-
-**`remove_gem` renumbers everything after it.** A `remove(3)` then `remove(6)` pair
-removes the wrong second gem, and the DPS still moves, so the result looks plausible.
-Look gems up by name each time and read the socket group back afterwards:
-
-```
-idx = gems.findIndex(g => g.name === "Innervate") + 1
-...mutate...
-assert readback contains the gem you expected and not the one you did not
-```
-
-Order matters too: level-and-quality passes that address gems by index must run
-*before* any swap, or they will level the gem you just inserted. A level 20 Empower
-is the tell.
-
-**Animate Guardian gear lives in a second `ItemSet` that is never applied.** PoB
-stores it as `<ItemSet id="2" title="Animated Guardian">` while `<Items activeItemSet="1">`.
-Nothing from it reaches any figure, on your build or on an imported one. Anyone
-comparing DPS against a top build is comparing two numbers that both exclude it.
-
-## Item Analysis Recipe
-
-Do these in order. Skipping a step produces advice the user cannot act on.
-
-**1. Classify every mod as prefix or suffix** against `Data/ModExplicit.lua` (`type = "Prefix"|"Suffix"`) and `Data/ModMaster.lua` for bench crafts.
-
-**2. Reconcile hybrids.** One affix can print several lines. If your count exceeds 3 prefixes or 3 suffixes, you have split a hybrid, find it before continuing.
-
-```
-LocalIncreasedEnergyShieldPercentAndStunRecovery  Prefix "Pixie's"
-  -> (6-13)% increased Energy Shield
-  -> (6-7)% increased Stun and Block Recovery
-```
-
-Counting that stun line as a suffix turns "one open suffix" into "full, nothing possible", the exact inversion of the right answer.
-
-**3. Match slot types.** A craft can only occupy a slot of its own type.
-
-| Prefix | Suffix |
+| Need | Tool or source |
 |---|---|
-| flat life / mana / energy shield | **all resistances** |
-| % increased ES / spell damage | attributes (Str/Dex/Int) |
-| adds X to Y damage | attack/cast speed, crit chance, crit multi |
-| | life/mana regen, suppression |
+| Saved XML PlayerStat values | `get_build_stats(build_name)` |
+| Current engine stats | `lua_get_stats(category="offense" or "defense")` |
+| Current resistance, pool, reservation, and damage issues | `get_build_issues` |
+| Compact current build, items, skills, and tree count | `lua_get_build_snapshot` |
+| Elemental and physical maximum hits | `lua_get_stats(category="defense")` |
+| Exact fields missing from a formatted response | `PoBLuaApiClient.getStats(fields)` in an isolated script |
 
-You cannot recraft a prefix into a resistance. Check the slot type of the mod being *replaced*, not just the one being added.
+`get_build_stats` reads XML through BuildService and its file cache. A live edit
+does not update that saved XML until the build is saved. `get_build_issues` reads
+live Lua stats; it is not an XML-cache reader. Its checks cover a selected field
+list, so it is not a substitute for every detailed analysis.
 
-**4. Gate by item level.** Read `Item Level` off the item and filter `ModMaster.lua` to `level <= ilvl`. An ilvl 45 body armour cannot take the ilvl 50 resistance tier; an ilvl 23 ring is stuck two tiers down.
+The default `lua_get_stats` category uses a bounded default field list, omits
+zeros, and limits displayed rows. Missing output is not proof of a zero stat.
+Request the relevant category or exact bridge fields before drawing conclusions.
+Two identical reads can be legitimate. Compare the state the change was supposed
+to affect before diagnosing a cache or a failed mutation.
 
-**5. Check attribute requirements** after any swap: `Str`/`Dex`/`Int` against `ReqStr`/`ReqDex`/`ReqInt`. PoB reports full stats for a character whose gear would be disabled in game.
+Source: `src/handlers/buildHandlers.ts`, `src/handlers/buildGoalsHandlers.ts`,
+`src/handlers/luaHandlers.ts`, and `lua/pob_ops.lua`.
 
-**6. Price the affix before you price the item.** Search `ModExplicit.lua` for the stat
-you actually need and read its tier, `type`, `level` and `weightKey` slot list. One T1
-suffix routinely matches a several-hundred-chaos unique built around the same stat:
-`of Bameth` is +(31&ndash;35)% chaos resistance at ilvl 81 on rings, amulets, belts and
-armour. A recommendation that only ranks uniques has skipped the cheapest answer,
-and rares are the only items whose affixes the player chooses.
+## Establish the baseline
 
-Two corollaries worth stating in any write-up:
+1. Identify the requested build, active passive spec, item set, and main skill.
+   Use `list_specs`, `list_item_sets`, and `get_skill_setup` when selection matters.
+2. Load the intended file, or inspect the current in-memory build if the user is
+   working there. Starting the bridge alone does not load the user's character.
+3. Read configuration and record the enemy scenario. A default value does not
+   establish what the user intends to model.
+4. Read relevant keystones and attribute requirements before proposing gear.
+5. Record the live fields needed for the comparison. Use the same scenario,
+   selections, and field list on both sides.
 
-- **A resistance stops paying the moment it is no longer the lowest number.** Sweep it
-  in steps and find where the binding constraint changes hands, then recommend
-  stopping there. Buying past that point reads as progress and measures as nothing.
-- **A one-hander swap is not a dual-wield swap.** Replacing the main hand keeps the
-  off-hand's resistances and gem levels; dropping the shield for a second weapon can
-  invert the sign. Measure them as separate options, because players conflate them.
+Reloading discards live edits. Use `lua_reload_build` only when the disk file is
+the intended source and any unsaved state has been preserved. An explicitly named
+missing file must raise an error; do not substitute the build already in memory.
 
-## Ranking Defensive Options
+## Verify mutations against their intended effect
 
-**`TotalEHP` is the wrong metric for resistance decisions.** It averages across damage types, so patching your strongest element scores about the same as patching your weakest.
-
-Rank by the **weakest elemental max hit** instead:
-
+```text
+before = read the relevant live state
+apply one change
+read the changed item, gem, node, or config value back
+read the same live stats again
+compare against the expected effect
 ```
+
+A stat can stay unchanged after a valid edit. For example, a condition may be
+inactive or another constraint may bind. Read back the changed state before
+calling the operation a no-op. A snapshot's node count alone cannot distinguish
+two allocations containing the same number of nodes; use `lua_get_tree` when IDs
+or mastery selections matter.
+
+Use parameter names from the current tool schema. Examples: `add_item` uses
+`slot_name`, `set_gem_level` uses `group_index` and `gem_index`, and `set_config`
+uses `config_name` and `value`. Do not infer names from another tool.
+
+`set_config` validates keys and values against the loaded PoB's ConfigOptions.
+Read whether it reports Updated or NOT Updated, then verify the effect. The bridge
+returns per-key `applied` and `rejected` results. An MCP response without `isError`
+alone does not prove that a config write was accepted.
+
+`customMods` is not categorically unsupported. When the loaded ConfigOptions
+contains it, the current bridge accepts its text and includes it in config reads.
+Test the modifier on a scratch build and confirm both the readback and live delta.
+A syntactically accepted string may still contain a modifier PoB does not parse.
+Do not replace an existing custom-mod block without preserving its full contents.
+
+`remove_gem` renumbers later gems. Find each target by name again after a removal
+or process known indices in descending order. Read the socket group back afterward.
+For multi-step comparisons, confirm the baseline before each variant.
+
+## Classify items before recommending crafts
+
+Use `classify_item_affixes`, `list_craftable_mods`, and `find_affix_tiers` when they
+are advertised by the connected server. Otherwise inspect the corresponding data
+from the same PoB installation as the engine. Do not assume an unadvertised tool
+exists. Some PoB versions use `Data/ModExplicit.lua`; older versions use
+`Data/ModItem.lua`. Bench entries are in `Data/ModMaster.lua`.
+
+1. Pass only explicit lines to the classifier. Keep implicits, enchants, and
+   unique-item text separate.
+2. Group hybrids before counting slots. Several printed lines can be one affix.
+3. Treat unmatched or ambiguous lines as incomplete knowledge. They may occupy
+   slots; they do not establish room for a craft. Verify the item in game when
+   the tool cannot give a complete classification.
+4. Match the craft's prefix/suffix type, item class, required item level, and
+   existing mod-group conflicts. A list of crafts for a base does not certify
+   that a specific equipped item can accept every entry.
+5. Inspect the affix name, value range, required level, and base restrictions.
+   A filtered list's first or last entry is not evidence of its in-game T-number.
+6. Recheck attributes after a swap. For exact live requirement fields not exposed
+   by the tool output, request `Str`, `Dex`, `Int`, `ReqStr`, `ReqDex`, and `ReqInt`
+   through the bridge. A calculated gain is not usable if equipment requirements
+   are unmet in game.
+
+Multiple saved item sets do not all contribute simultaneously. Check the active
+set and any minion-specific equipment settings before asserting what an Animate
+Guardian or another minion contributes. A set title alone does not prove that its
+gear is modeled as a minion loadout.
+
+Price specific rare affixes as well as uniques when shopping is requested. Keep
+league, price date, listing assumptions, and measured build deltas alongside the
+recommendation. Do not assume a rare is cheaper without checking.
+
+## Compare defensive changes for the relevant damage
+
+For a resistance comparison, inspect the individual elemental maximum hits in
+addition to TotalEHP:
+
+```text
 min(FireMaximumHitTaken, ColdMaximumHitTaken, LightningMaximumHitTaken)
 ```
 
-Measured example: `+28% Lightning Res` beat `+28% Cold Res` on TotalEHP (+293 vs +288) while moving the weak link by **zero**. Cold raised the floor 27%. TotalEHP ranked them backwards.
+This measures the weakest elemental hit the configured model survives. It is not
+a complete survival score: physical damage, chaos damage, recovery, damage over
+time, and the chosen enemy scenario can change the priority.
 
-**Test combinations, not single changes.** Two individually-positive crafts can be jointly negative by creating a new floor. Sweep the combinations and rank on the weakest link.
+Sweep candidate values and combinations using the real calculator when a result
+is sensitive to a threshold. Increasing a resistance may still improve other
+metrics after another element becomes the weakest one. State which metric stops
+improving and which damage types the comparison excludes.
 
-## Before Recommending A Passive Node
+Replacing a weapon while retaining a shield is a different comparison from
+switching to dual wield. Measure the full intended equipment change.
 
-`calc_with` simulates a node **without requiring connectivity**, so a suggestion is not proof of reachability.
+## Check passive reachability and mastery effects
 
-- `isBlighted == true` and zero connections → **anoint only**, no path exists at any point cost
-- `ascendancyName` set and not the build's own → unreachable
-- Otherwise BFS from the allocated set to get the real point cost
+Lower-level `calc_with` results measure a hypothetical allocation; they do not
+establish a legal path or a point cost. Current upgrade suggestions filter some
+foreign ascendancy and anoint-only candidates, but still verify the actual path.
+Use `find_path_to_node` and inspect the resulting allocation before recommending
+points. Blight notables without tree connections require anointing.
 
-Treat upgrade-scan output as *value of the node*, never *value per point*.
+Match masteries by selected effect ID as well as node ID. When adding one, supply
+`mastery_effects` and inspect the returned tree. Read any dropped-node report.
+A reported simulation delta is not proof that a subsequent allocation succeeded.
 
-Match masteries by **effect ID, not node ID**. The same effect is offered on several nodes, so checking one node ID reports a taken effect as missing.
+## Use PoB's ailment report
 
-## Ailments Are Credited At Zero Until You Configure Them
+`lua_get_ailments` reports the main skill's calculated non-damaging ailments for
+the currently configured enemy. It distinguishes `appliedEffect` from
+`calculatedEffect`, reports the minimum magnitude needed to land, and exposes a
+threshold table when available. Freeze is outside this magnitude report.
 
-PoB applies a non-damaging ailment to the enemy only when the source is
-**guaranteed** or when you have typed its magnitude into the matching
-`Effect of X` config. A chance-to-shock skill satisfies neither, so the enemy
-is flagged as shocked, every "against shocked enemies" modifier fires, and the
-shock itself multiplies damage by **nothing**.
+A chance-based ailment can have zero effect credited in DPS until its magnitude
+and enemy condition are configured. Use the exact enable/effect config keys the
+report names; their spelling differs across ailments. Check that the calculated
+magnitude can land, apply the intended scenario, then read the report and stats
+again. Say when the magnitude could not be read.
 
-The gap is invisible from the outside. `output.CurrentShock` reads 0, raising
-shock effect or the shock cap moves no number, and the DPS figure looks
-settled.
+Recheck after gear or enemy changes. Do not supply a universal shock fixed-point
+formula or reuse one percentage across maps, bosses, skills, and minions. The tool
+reports the main skill only; other groups or minions need their own evidence.
 
-```
-lua_get_ailments   -> appliedEffect vs calculatedEffect
-```
+## Preserve the user's work
 
-`appliedEffect` is what the calculation credits; `calculatedEffect` is what the
-skill would inflict on the configured enemy. When they disagree, set
-`conditionShockEffect` (or the chill/scorch/sap/brittle equivalent) before
-ranking anything, because every downstream comparison is scaled by it.
+Run experiments in a separate bridge process or a uniquely named scratch copy.
+Check `list_builds` before choosing the name; `lua_save_build` can overwrite an
+existing file. Preserve any unsaved state before loading another build. Restoring
+a file is not proof the current engine has reloaded it.
 
-Measured example: a shock build read 125,029 DPS with the effect unset. Its
-real shock was **6% against the configured Pinnacle boss** (ailment threshold
-6,349,995) and reached the 50% cap only at a threshold of **39,743 or below**.
-Same build, same gear, an eightfold spread in what the shock is worth.
-
-Ailment magnitude scales with `(damage / enemyThreshold) ^ 0.4`, so it collapses
-against anything with real life. **One figure never covers both bosses and
-trash.** Quote the value at the threshold you are actually ranking against, and
-read the whole table before saying an ailment build "caps".
-
-### The value is a fixed point, and it moves with the gear
-
-That exponent makes the magnitude self-reinforcing: raising the hit raises the
-ailment, which raises the hit. Solve it rather than reading it once.
-
-```
-effect = 23
-loop:  set conditionShockEffect(effect)
-       hit = LightningHitAverage
-       next = round(50 * (hit/threshold)^0.4 * ShockEffectMod)
-       stop when next == effect
-```
-
-Two consequences for any roadmap you write. **Every damage upgrade raises the
-correct value**, so a figure typed in before the shopping list is stale by the end
-of it. And **any swap that drops ailment-effect gear lowers it**: trading boots
-carrying "increased Effect of Lightning Ailments" moved `ShockEffectMod` 2.97 to
-2.50 and the honest field 32 to 28, a 3% damage cut that is invisible because the
-field is hand-typed and does not follow the gear. Re-solve after each step, and
-say so in the deliverable.
-
-## Common Mistakes
-
-| Mistake | Consequence | Fix |
-|---|---|---|
-| Reading `get_build_stats` after a mutation | Stale numbers, invisible | Use `lua_get_build_snapshot` |
-| Trusting "Added: 1 node(s)" | Node silently dropped | Diff the node count |
-| Counting hybrid lines as separate affixes | Inverts open/full | Reconcile against 3+3 |
-| Recrafting a prefix into a resistance | Impossible advice | Match slot types |
-| Ignoring item level | Craft tier unavailable | Filter ModMaster by ilvl |
-| Ranking by TotalEHP | Patches the wrong element | Rank by weakest max hit |
-| Recommending a Blight notable as a passive | No path exists | Check `isBlighted` |
-| Ignoring keystone lockouts | Values dead mods | Read allocated keystones first |
-| Treating a config default as a user choice | Wrong inference | Check `ConfigOptions.lua` |
-| Reading tree data from a different PoB install | Silently wrong data | Resolve the runtime `src` path |
-| Reading DPS on a shock or chill build | Ailment credited at 0, damage understated | `lua_get_ailments`, then set the effect config |
-| Quoting one ailment magnitude for all content | Bosses and maps differ by an order of magnitude | Read the threshold table |
-| Writing `customMods` through `set_config` | Silently ignored, every value reads the same | Read it from the XML, apply via a carrier item |
-| Chained `remove_gem` calls by index | Removes the wrong gem, plausibly | Look up by name, read the group back |
-| Comparing your DPS to an imported build's | Both exclude any second `ItemSet` | Say so, or model the guardian on both sides |
-| Ranking only uniques | Misses a T1 suffix that costs a fraction | Search `ModExplicit.lua` for the stat first |
-| Typing an ailment magnitude once | Stale after every upgrade | Solve the fixed point, re-solve per step |
-
-## Red Flags, Stop And Verify
-
-- A tool returned success but no stat moved
-- Two reads identical to many decimal places after a change
-- Prefix or suffix count above 3
-- Recommending a craft without having read the item's `Item Level`
-- Ranking defences on `TotalEHP`
-- Recommending a node without having found a path to it
-- Saying "you have no room" without having reconciled hybrids
-- A build invests in shock or chill and the ailment moves DPS by nothing when toggled
-- The same script, run twice, returns a different baseline
-- A recommendation list contains no rare and no affix
-- A gem swap measured a gain you cannot explain from the gem alone
-
-**All of these mean: go back and check the underlying data before answering.**
-
-## Working Safely
-
-Mutations for testing go on a scratch build, never the user's file:
-
-```
-lua_save_build("scratch") -> lua_load_build("scratch.xml") -> mutate -> measure
-```
-
-Then delete the scratch and reload the user's build. Verify their file is untouched: node count, level, and absence of any test item names.
-
-For multi-variant sweeps, drive `build/pobLuaBridge.js` directly from a Node script rather than one MCP call per variant: one run, one table, and the user's session state is never involved.
+After an experiment, restore selections and configuration and compare the live
+baseline. Keep the original file unchanged unless the user requested persistence.
+Delete only scratch files created for this run. Label results as measured in the
+engine, inferred from saved XML, or dependent on an explicit assumption.

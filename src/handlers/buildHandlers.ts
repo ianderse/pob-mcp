@@ -5,7 +5,8 @@ import type { TreeAnalysisResult } from "../types.js";
 import type { HandlerContext } from "../utils/contextBuilder.js";
 import fs from "fs/promises";
 import { wrapHandler } from "../utils/errorHandling.js";
-import { sanitizeBuildName } from "../utils/pathSanitizer.js";
+import { resolveBuildFile } from "../utils/pathSanitizer.js";
+import { BOOTSTRAP_BUILD_NAME } from "../server/bootstrapBuild.js";
 export type { HandlerContext } from "../utils/contextBuilder.js";
 
 export async function handleListBuilds(context: HandlerContext) {
@@ -64,7 +65,7 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
       } catch { /* no build loaded yet — safe to load */ }
 
       if (shouldLoad) {
-        const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
+        const buildPath = resolveBuildFile(buildName, context.pobDirectory);
         const buildXml = await fs.readFile(buildPath, 'utf-8');
         await luaClient.loadBuildXml(buildXml);
       }
@@ -236,7 +237,7 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
   // saved state matches what the user sees in PoB and avoids reporting wrong stats
   // (e.g. resistances from a different gear set than the one the user expects).
   const loadEndgame = async (luaClient: any, buildName: string) => {
-    const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
+    const buildPath = resolveBuildFile(buildName, context.pobDirectory);
     const buildXml = await fs.readFile(buildPath, 'utf-8');
     const displayName = buildName.replace(/\.xml$/i, '').split(/[/\\]/).pop() ?? buildName;
     await luaClient.loadBuildXml(buildXml, displayName);
@@ -259,7 +260,13 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
       }
     } catch { /* ignore */ }
 
-    const stats = await luaClient.getStats();
+    // get_stats defaults to defence-only fields, so the offensive rows below have
+    // to be requested by name — otherwise DPS and crit always render as "N/A".
+    const stats = await luaClient.getStats([
+      'Life', 'EnergyShield', 'TotalEHP', 'Mana',
+      'TotalDPS', 'CombinedDPS', 'MinionTotalDPS', 'CritChance', 'CritMultiplier',
+      'FireResist', 'ColdResist', 'LightningResist', 'ChaosResist',
+    ]);
     return { stats, selectedSpec, selectedItemSet, displayName };
   };
 
@@ -282,7 +289,9 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
       const info = await luaClient.getBuildInfo();
       loadedName = info?.name ?? '';
     } catch { /* no build loaded yet — safe to load */ }
-    if (loadedName) {
+    // The bootstrap build is not user work — a freshly started bridge always holds
+    // it, so treating it as unsaved changes would block compare_builds outright.
+    if (loadedName && loadedName !== BOOTSTRAP_BUILD_NAME) {
       const loaded = basename(loadedName);
       if (loaded !== basename(build1Name) && loaded !== basename(build2Name)) {
         throw new Error(
@@ -444,7 +453,7 @@ export async function handleGetBuildNotes(context: HandlerContext, buildName: st
 
 export async function handleSetBuildNotes(context: HandlerContext, buildName: string, notes: string) {
   return wrapHandler('set build notes', async () => {
-    const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
+    const buildPath = resolveBuildFile(buildName, context.pobDirectory);
     let xml = await fs.readFile(buildPath, 'utf-8');
 
     // XML-escape the notes content so special characters don't corrupt the build file

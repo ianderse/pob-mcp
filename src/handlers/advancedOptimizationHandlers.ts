@@ -11,7 +11,8 @@ import {
   formatSkillOptimization,
   type SkillGroup,
 } from "../skillLinkOptimizer.js";
-import { sanitizeBuildName } from "../utils/pathSanitizer.js";
+import { readNamedBuild } from "../utils/namedBuild.js";
+import { activeSkillSet, asArray } from "../utils/xmlCollections.js";
 
 export interface AdvancedOptimizationContext {
   buildService: BuildService;
@@ -54,13 +55,8 @@ export async function handleAnalyzeItems(
           }
         } catch { /* no build loaded yet */ }
         if (needsLoad) {
-          try {
-            const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
-            const xml = await fs.readFile(buildPath, 'utf-8');
-            await luaClient.loadBuildXml(xml, buildName);
-          } catch {
-            // Build file not found — use whichever build is currently loaded in Lua bridge
-          }
+          const xml = await readNamedBuild(buildName, context.pobDirectory);
+          await luaClient.loadBuildXml(xml, buildName);
         }
       }
 
@@ -180,14 +176,8 @@ export async function handleOptimizeSkillLinks(
     if (luaClient) {
       // Load build if buildName provided
       if (buildName) {
-        const fs2 = await import('fs/promises');
-        try {
-          const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
-          const xml = await fs2.readFile(buildPath, 'utf-8');
-          await luaClient.loadBuildXml(xml, buildName);
-        } catch {
-          // Build file not found — use whichever build is currently loaded in Lua bridge
-        }
+        const xml = await readNamedBuild(buildName, context.pobDirectory);
+        await luaClient.loadBuildXml(xml, buildName);
       }
 
       try {
@@ -235,12 +225,9 @@ export async function handleOptimizeSkillLinks(
       );
 
       // Extract skills from XML
-      if (build.Skills?.SkillSet?.Skill) {
-        const skills = Array.isArray(build.Skills.SkillSet.Skill)
-          ? build.Skills.SkillSet.Skill
-          : [build.Skills.SkillSet.Skill];
-
-        skillGroups = skills.map((skill: any, idx) => {
+      const skills = asArray(activeSkillSet(build)?.Skill);
+      if (skills.length > 0) {
+        skillGroups = skills.map((skill: any, idx: number) => {
           const gems = Array.isArray(skill.Gem) ? skill.Gem : skill.Gem ? [skill.Gem] : [];
 
           return {
@@ -316,10 +303,8 @@ export async function handleCreateBudgetBuild(
 
     // Get main skill from first skill group
     let main_skill = 'your main skill';
-    if (build.Skills?.SkillSet?.Skill) {
-      const skills = Array.isArray(build.Skills.SkillSet.Skill)
-        ? build.Skills.SkillSet.Skill
-        : [build.Skills.SkillSet.Skill];
+    {
+      const skills = asArray(activeSkillSet(build)?.Skill);
       const firstSkill = skills[0];
       if (firstSkill?.Gem) {
         const gems = Array.isArray(firstSkill.Gem) ? firstSkill.Gem : [firstSkill.Gem];

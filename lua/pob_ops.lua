@@ -2,15 +2,85 @@
 
 local M = {}
 
+-- PoB's own config option table is the only authoritative list of valid config
+-- vars and their types. Deriving from it means new upstream options work here
+-- without a code change; a hand-maintained allowlist silently drifts instead.
+local configVarIndex
+local function getConfigVarIndex()
+  if configVarIndex then return configVarIndex end
+  local ok, varList = pcall(LoadModule, "Modules/ConfigOptions")
+  if not ok or type(varList) ~= 'table' then return nil end
+  configVarIndex = {}
+  for _, varData in ipairs(varList) do
+    if varData.var then
+      configVarIndex[varData.var] = varData
+    end
+  end
+  return configVarIndex
+end
+
+-- Coerce an incoming JSON value to what PoB's control for this var would store.
+-- Returns value, err.
+local function coerceConfigValue(varData, value)
+  local t = varData.type
+  if t == 'check' then
+    if type(value) == 'boolean' then return value end
+    if value == 'true' or value == 1 then return true end
+    if value == 'false' or value == 0 then return false end
+    return nil, 'expected boolean'
+  elseif t == 'count' or t == 'countAllowZero' or t == 'integer' or t == 'float' then
+    local n = tonumber(value)
+    if not n then return nil, 'expected number' end
+    return n
+  elseif t == 'list' then
+    -- Accept either the stored val or the human-facing label.
+    for _, entry in ipairs(varData.list or {}) do
+      if entry.val == value or tostring(entry.val) == tostring(value) then return entry.val end
+      if entry.label and tostring(entry.label):lower() == tostring(value):lower() then return entry.val end
+    end
+    return nil, 'not a valid option for this list'
+  end
+  -- Unknown control type: store as-is rather than refusing.
+  return value
+end
+
+-- Human-facing label for a stored config value, so callers see "Kill all"
+-- rather than the raw "None" that PoB stores for the bandit quest.
+function M.config_value_label(var, value)
+  local index = getConfigVarIndex()
+  local varData = index and index[var]
+  if not varData or varData.type ~= 'list' then return nil end
+  for _, entry in ipairs(varData.list or {}) do
+    if entry.val == value or tostring(entry.val) == tostring(value) then return entry.label end
+  end
+  return nil
+end
+
 -- Upstream's PassiveSpec:ImportFromNodeList gained a leading className
 -- parameter (9 params incl. self, up from 8). Detect which signature the
 -- loaded checkout has so both old and current PoB versions work.
+--
+-- ImportFromNodeList also refuses to allocate a Mastery node that has no
+-- effect selected in the `mastery` table, silently dropping it instead. Every
+-- tree-mutation entry point (set_tree, update_tree_delta) funnels through
+-- here, so the merge lives at this chokepoint: the spec's current selections
+-- are merged underneath whatever the caller supplies, and caller-supplied
+-- ids/effects are coerced to numbers. That way the invariant holds for every
+-- caller, present and future, instead of each one having to re-implement it.
 function M.import_from_node_list(spec, classId, ascendId, secondaryId, nodes, overrides, mastery, treeVersion)
+  local mergedMastery = {}
+  for k, v in pairs(spec.masterySelections or {}) do mergedMastery[k] = v end
+  if type(mastery) == 'table' then
+    for nodeId, effectId in pairs(mastery) do
+      mergedMastery[tonumber(nodeId) or nodeId] = tonumber(effectId) or effectId
+    end
+  end
+
   local info = debug and debug.getinfo and debug.getinfo(spec.ImportFromNodeList, 'u')
   if info and info.nparams and info.nparams >= 9 then
-    return spec:ImportFromNodeList(nil, classId, ascendId, secondaryId, nodes, overrides or {}, mastery or {}, treeVersion)
+    return spec:ImportFromNodeList(nil, classId, ascendId, secondaryId, nodes, overrides or {}, mergedMastery, treeVersion)
   end
-  return spec:ImportFromNodeList(classId, ascendId, secondaryId, nodes, overrides or {}, mastery or {}, treeVersion)
+  return spec:ImportFromNodeList(classId, ascendId, secondaryId, nodes, overrides or {}, mergedMastery, treeVersion)
 end
 
 local MIN_PLAYER_LEVEL = 1
@@ -32,12 +102,151 @@ function M.get_main_output()
   return output
 end
 
+-- PoB colour codes are display-only: "^8" for grey, "^xRRGGBB" for literal.
+local function stripColourCodes(text)
+  if type(text) ~= 'string' then return text end
+  return (text:gsub('%^[xX]%x%x%x%x%x%x', ''):gsub('%^%d', ''))
+end
+
+local function leadingNumber(text)
+  return tonumber(tostring(stripColourCodes(text)):match('%-?%d+%.?%d*') or '')
+end
+
+-- PoB only *applies* a non-damaging ailment to the enemy when the source is
+-- guaranteed (a ShockBase/Override/Minimum mod) or when the player has filled
+-- in the matching "Effect of X" config. A chance-to-shock skill produces
+-- neither, so output.CurrentShock stays 0 and every downstream number silently
+-- ignores the ailment. The magnitude the skill would actually inflict is
+-- computed in CalcOffence, but only into the CALCS-mode breakdown table, never
+-- into output. Read it back out so callers can see both halves.
+--
+-- breakdown[<Ailment>DPS].rowList is an effect-by-enemy-threshold curve. The
+-- one row whose threshold carries a colour-coded tag is the enemy currently
+-- configured; the rest are reference points.
+local function readAilmentBreakdown(breakdown, ailment)
+  local rows = breakdown and breakdown[ailment .. 'DPS'] and breakdown[ailment .. 'DPS'].rowList
+  if type(rows) ~= 'table' then return nil, nil end
+  local table_, atConfiguredEnemy = {}, nil
+  for _, row in ipairs(rows) do
+    local threshold = leadingNumber(row.thresh)
+    local effect = leadingNumber(row.effect)
+    if threshold and effect then
+      local isConfiguredEnemy = type(row.thresh) == 'string' and row.thresh:find('%^') ~= nil
+      table_[#table_ + 1] = {
+        ailmentThreshold = threshold,
+        effect = effect,
+        note = stripColourCodes(row.effect):match('%((.-)%)'),
+        isConfiguredEnemy = isConfiguredEnemy or nil,
+      }
+      if isConfiguredEnemy then atConfiguredEnemy = effect end
+    end
+  end
+  if #table_ == 0 then return nil, nil end
+  return table_, atConfiguredEnemy
+end
+
+-- PoB names the enemy-ailment config vars five different ways
+-- (conditionShockEffect but conditionEnemyChilledEffect but
+-- conditionScorchedEffect...), so guessing them from the ailment name is wrong
+-- for most of them. Derive both vars from the option list itself: the effect
+-- control is a 'count' gated on the enemy condition it belongs to, and that
+-- gate names the ailment.
+local ailmentConfigIndex
+local function getAilmentConfigIndex()
+  if ailmentConfigIndex then return ailmentConfigIndex end
+  ailmentConfigIndex = {}
+  local ok, varList = pcall(LoadModule, "Modules/ConfigOptions")
+  if not ok or type(varList) ~= 'table' then return ailmentConfigIndex end
+  for _, varData in ipairs(varList) do
+    local gate = varData.var and varData.type == 'count' and varData.ifOption
+    local suffix = type(gate) == 'string' and gate:match('^conditionEnemy(%a+)$')
+    -- More than one count control hangs off the same gate (ShockStacks shares
+    -- conditionEnemyShocked with the effect field), so match the label too.
+    local isEffectControl = suffix
+      and stripColourCodes(varData.label or ''):match('^Effect of') ~= nil
+    if isEffectControl then
+      -- "Shocked" -> Shock, "Scorched" -> Scorch, "Brittle" -> Brittle.
+      -- Longest match wins so a future ailment cannot shadow a shorter name.
+      local best
+      for name in pairs((data and data.nonDamagingAilment) or {}) do
+        if suffix:sub(1, #name) == name and (not best or #name > #best) then best = name end
+      end
+      if best then
+        ailmentConfigIndex[best] = { effectVar = varData.var, enabledVar = gate }
+      end
+    end
+  end
+  return ailmentConfigIndex
+end
+
+function M.get_ailments()
+  local output, err = M.get_main_output()
+  if not output then return nil, err end
+  local configInput = build.configTab and build.configTab.input or {}
+  local configIndex = getAilmentConfigIndex()
+  -- BuildOutput populates two environments; the breakdown only exists in the
+  -- CALCS-mode one, and get_main_output hands back the MAIN-mode output.
+  local env = build.calcsTab.calcsEnv
+  local breakdown = env and env.player and env.player.breakdown or nil
+
+  -- Freeze is the one non-damaging ailment measured in seconds rather than as
+  -- an effect magnitude, and CalcPerform's ailment loop skips it for that
+  -- reason. It is also the only entry with no default magnitude, so filter on
+  -- the data rather than hardcoding a list that would drift.
+  local names = {}
+  for name, ailment in pairs((data and data.nonDamagingAilment) or {}) do
+    if ailment.default ~= nil then names[#names + 1] = name end
+  end
+  table.sort(names)
+
+  local result = {}
+  for _, name in ipairs(names) do
+    local chanceOnHit = tonumber(output[name .. 'ChanceOnHit']) or 0
+    local chanceOnCrit = tonumber(output[name .. 'ChanceOnCrit']) or 0
+    if chanceOnHit > 0 or chanceOnCrit > 0 or (tonumber(output['Current' .. name]) or 0) > 0 then
+      local thresholdTable, calculated = readAilmentBreakdown(breakdown, name)
+      local applied = tonumber(output['Current' .. name]) or 0
+      -- Below the game's minimum the ailment does not land at all, so a small
+      -- calculatedEffect must not be read as "a small amount of shock".
+      local minimum = data.nonDamagingAilment[name].min
+      local config = configIndex[name] or {}
+      result[#result + 1] = {
+        name = name,
+        chanceOnHit = chanceOnHit,
+        chanceOnCrit = chanceOnCrit,
+        effectMod = tonumber(output[name .. 'EffectMod']),
+        duration = tonumber(output[name .. 'Duration']),
+        minimumEffect = minimum,
+        maximumEffect = tonumber(output['Maximum' .. name]),
+        appliedEffect = applied,
+        calculatedEffect = calculated,
+        -- Scorch, Brittle and Sap have a minimum of 0, so a zero magnitude
+        -- would otherwise read as "lands" and raise a warning about nothing.
+        landsOnConfiguredEnemy = (calculated ~= nil and calculated > 0
+          and calculated >= (minimum or 0)) or nil,
+        creditedInCalc = applied > 0,
+        effectConfigVar = config.effectVar,
+        enabledConfigVar = config.enabledVar,
+        enabledOnEnemy = config.enabledVar ~= nil
+          and configInput[config.enabledVar] == true or nil,
+        thresholdTable = thresholdTable,
+      }
+    end
+  end
+  return { ailments = result }
+end
+
 function M.export_stats(fields)
   local output, err = M.get_main_output()
   if not output then
     return nil, err
   end
+  -- Callers that pass no field list get this set, so it has to answer "how is
+  -- this build doing" on both axes. Damage was missing entirely, which made
+  -- every such caller report a build as if it dealt none.
   local wanted = fields or {
+    "TotalDPS", "CombinedDPS", "FullDPS", "AverageDamage", "Speed",
+    "CritChance", "CritMultiplier",
     "Life", "EnergyShield", "Armour", "Evasion",
     "FireResist", "ColdResist", "LightningResist", "ChaosResist",
     "BlockChance", "SpellBlockChance",
@@ -181,16 +390,84 @@ function M.update_tree_delta(params)
   local nodes = {}
   for id,_ in pairs(set) do table.insert(nodes, id) end
   table.sort(nodes)
-  local mastery = current.masteryEffects or {}
+
   local classId = params.classId or current.classId or 0
   local ascendId = params.ascendClassId or current.ascendClassId or 0
   local secId = params.secondaryAscendClassId or current.secondaryAscendClassId or 0
   local tv = params.treeVersion or current.treeVersion
-  M.import_from_node_list(build.spec, tonumber(classId) or 0, tonumber(ascendId) or 0, tonumber(secId) or 0, nodes, {}, mastery, tv)
+  -- import_from_node_list merges the spec's existing mastery selections
+  -- underneath params.masteryEffects itself, so a bare pass-through is enough.
+  M.import_from_node_list(build.spec, tonumber(classId) or 0, tonumber(ascendId) or 0, tonumber(secId) or 0, nodes, {}, params and params.masteryEffects, tv)
   M.get_main_output()
-  return true
+
+  -- Report what PoB actually allocated. Requesting a node is not the same as
+  -- getting it: disconnected nodes and effect-less masteries are dropped.
+  local after = M.get_tree()
+  local allocated = {}
+  for _, id in ipairs(after and after.nodes or {}) do allocated[id] = true end
+  local dropped = {}
+  if params and type(params.addNodes) == 'table' then
+    for _, id in ipairs(params.addNodes) do
+      local n = tonumber(id)
+      if n and not allocated[n] then table.insert(dropped, n) end
+    end
+  end
+  return { tree = after, droppedNodes = dropped }
 end
 
+
+-- PoB's calculation output is a live object graph: actors link back to their
+-- parents and to shared ModStores, so it contains reference cycles. Handing it
+-- straight to json.encode raises "reference cycle", which is an uncaught error
+-- that takes the whole bridge process down. Copy out a JSON-safe projection:
+-- scalars only, cycles broken, depth bounded.
+local SANITIZE_MAX_DEPTH = 4
+local function sanitizeForJson(value, depth, seen)
+  local t = type(value)
+  if t == 'string' or t == 'boolean' then return value end
+  if t == 'number' then
+    -- dkjson also refuses NaN and +/-inf.
+    if value ~= value or value == math.huge or value == -math.huge then return nil end
+    return value
+  end
+  if t ~= 'table' then return nil end
+  if depth >= SANITIZE_MAX_DEPTH then return nil end
+  if seen[value] then return nil end
+  seen[value] = true
+  local out = nil
+  for k, v in pairs(value) do
+    local kt = type(k)
+    if kt == 'string' or kt == 'number' then
+      local clean = sanitizeForJson(v, depth + 1, seen)
+      if clean ~= nil then
+        out = out or {}
+        out[k] = clean
+      end
+    end
+  end
+  seen[value] = nil
+  return out
+end
+
+function M.sanitize_for_json(value)
+  return sanitizeForJson(value, 0, {})
+end
+
+-- A node this build could actually take: on the passive tree proper, or in the
+-- build's own ascendancy. Mastery nodes are excluded because allocating one
+-- without an effect selection is a no-op (see PassiveSpec:ImportFromNodeList).
+function M.is_allocatable(node)
+  if type(node) ~= 'table' then return false end
+  if node.type == 'Mastery' or node.isMastery then return false end
+  if node.type == 'ClassStart' or node.classStartIndex then return false end
+  if node.isProxy then return false end
+  local asc = node.ascendancyName
+  if asc and asc ~= '' then
+    local own = build and build.spec and build.spec.curAscendClassName
+    if not own or own == '' or asc ~= own then return false end
+  end
+  return true
+end
 
 -- params: { addNodes?: number[], removeNodes?: number[], masteryEffects?: {[nodeId]: effectId}, useFullDPS?: boolean }
 function M.calc_with(params)
@@ -201,7 +478,10 @@ function M.calc_with(params)
     override.addNodes = {}
     for _, id in ipairs(params.addNodes) do
       local n = build.spec and build.spec.nodes and build.spec.nodes[tonumber(id)]
-      if n then override.addNodes[n] = true end
+      -- spec.nodes holds every node on the tree, including other classes'
+      -- ascendancies. Simulating one of those is not a meaningful "what if"
+      -- and can take the calculator down, so only consider allocatable nodes.
+      if n and M.is_allocatable(n) then override.addNodes[n] = true end
     end
   end
   if params and type(params.removeNodes) == 'table' then
@@ -228,7 +508,7 @@ function M.calc_with(params)
   if origMastery then
     build.spec.masterySelections = origMastery
   end
-  return out, baseOut
+  return M.sanitize_for_json(out), M.sanitize_for_json(baseOut)
 end
 
 
@@ -253,33 +533,58 @@ function M.get_config()
   return cfg
 end
 
+-- Dropdown options store a val that often differs from what the UI shows: the
+-- bandit quest stores "None" but reads "Kill all". Expose the labels so callers
+-- can display what PoB displays instead of the raw stored value.
+function M.get_config_labels()
+  local cfg, err = M.get_config()
+  if not cfg then return nil, err end
+  local labels = {}
+  for k, v in pairs(cfg) do
+    local label = M.config_value_label(k, v)
+    if label then labels[k] = label end
+  end
+  return labels
+end
+
 function M.set_config(params)
   if not build or not build.configTab then return nil, 'build/config not initialized' end
   if type(params) ~= 'table' then return nil, 'invalid params' end
   local input = build.configTab.input or {}
   build.configTab.input = input
+  local index = getConfigVarIndex()
+  if not index then return nil, 'could not load PoB config options' end
+
+  local applied, rejected = {}, {}
   local changed = false
-  if params.bandit ~= nil then input.bandit = tostring(params.bandit); changed = true end
-  if params.pantheonMajorGod ~= nil then input.pantheonMajorGod = tostring(params.pantheonMajorGod); changed = true end
-  if params.pantheonMinorGod ~= nil then input.pantheonMinorGod = tostring(params.pantheonMinorGod); changed = true end
-  if params.enemyLevel ~= nil then build.configTab.enemyLevel = tonumber(params.enemyLevel) or build.configTab.enemyLevel; changed = true end
-  if params.enemyFireResist ~= nil then input.enemyFireResistance = tonumber(params.enemyFireResist); changed = true end
-  if params.enemyColdResist ~= nil then input.enemyColdResistance = tonumber(params.enemyColdResist); changed = true end
-  if params.enemyLightningResist ~= nil then input.enemyLightningResistance = tonumber(params.enemyLightningResist); changed = true end
-  if params.enemyChaosResist ~= nil then input.enemyChaosResistance = tonumber(params.enemyChaosResist); changed = true end
-  if params.enemyArmour ~= nil then input.enemyArmour = tonumber(params.enemyArmour); changed = true end
-  if params.enemyEvasion ~= nil then input.enemyEvasion = tonumber(params.enemyEvasion); changed = true end
-  if params.usePowerCharges ~= nil then input.usePowerCharges = params.usePowerCharges; changed = true end
-  if params.useFrenzyCharges ~= nil then input.useFrenzyCharges = params.useFrenzyCharges; changed = true end
-  if params.useEnduranceCharges ~= nil then input.useEnduranceCharges = params.useEnduranceCharges; changed = true end
-  if params.conditionShockedGround ~= nil then input.conditionShockedGround = params.conditionShockedGround; changed = true end
-  if params.conditionFortify ~= nil then input.conditionFortify = params.conditionFortify; changed = true end
-  if params.conditionLeeching ~= nil then input.conditionLeeching = params.conditionLeeching; changed = true end
-  if params.buffOnslaught ~= nil then input.buffOnslaught = params.buffOnslaught; changed = true end
-  if params.enemyIsBoss ~= nil then input.enemyIsBoss = tostring(params.enemyIsBoss); changed = true end
+  for key, value in pairs(params) do
+    -- enemyLevel lives on the tab itself, not in the input table.
+    if key == 'enemyLevel' then
+      local n = tonumber(value)
+      if n then
+        build.configTab.enemyLevel = n
+        applied[key] = n
+        changed = true
+      else
+        rejected[key] = 'expected number'
+      end
+    elseif index[key] then
+      local coerced, err = coerceConfigValue(index[key], value)
+      if err then
+        rejected[key] = err
+      else
+        input[key] = coerced
+        applied[key] = coerced
+        changed = true
+      end
+    else
+      rejected[key] = 'unknown config option'
+    end
+  end
+
   if changed and build.configTab.BuildModList then build.configTab:BuildModList() end
   M.get_main_output()
-  return true
+  return { applied = applied, rejected = rejected }
 end
 
 
@@ -986,6 +1291,9 @@ function M.search_nodes(params)
         orbit = node.orbit,
         orbitIndex = node.orbitIndex,
         ascendancyName = node.ascendancyName,
+        -- Blight notables sit off the tree and are reached by anointing, not by
+        -- spending a point; callers need to tell them apart from real nodes.
+        isBlighted = node.isBlighted == true,
       })
       count = count + 1
     end
@@ -1020,9 +1328,10 @@ function M.get_mastery_options()
     if node and node.isMastery and node.masteryEffects then
       local allocated = spec.masterySelections and spec.masterySelections[nodeId]
       local available = {}
-      for effectId, effectData in pairs(node.masteryEffects) do
-        local stat = effectData.sd and table.concat(effectData.sd, ', ') or tostring(effectId)
-        table.insert(available, { effectId = effectId, stat = stat })
+      -- node.masteryEffects is an array of { effect = <id>, stats = {...} }.
+      for _, effectData in ipairs(node.masteryEffects) do
+        local stat = effectData.stats and table.concat(effectData.stats, ', ') or tostring(effectData.effect)
+        table.insert(available, { effectId = effectData.effect, stat = stat })
       end
       table.insert(result, {
         nodeId = nodeId,

@@ -152,6 +152,13 @@ Expose atomic tools that map to the PoB API. Names prefixed `lua_` to avoid conf
 - `lua_get_stats`
   - Description: Return computed stats from PoB calc engine.
   - Input: `{ fields?: string[] } // optional field whitelist`
+
+- `lua_get_ailments`
+  - Description: Non-damaging ailments with the magnitude the calc applies alongside the
+    magnitude the skill would inflict. PoB applies a chance-based ailment only when its
+    effect is configured by hand, so these disagree for most shock and chill builds and
+    every DPS figure is understated until the config is filled in.
+  - Input: none
   - Output: `{ stats: Record<string, number|string> }`
 
 - `lua_get_tree`
