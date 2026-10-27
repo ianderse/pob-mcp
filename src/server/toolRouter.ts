@@ -36,6 +36,7 @@ import { handleCheckBossReadiness } from "../handlers/bossReadinessHandlers.js";
 import { handleSuggestWatchersEye } from "../handlers/jewelAdvisorHandlers.js";
 import { handleSuggestCrafting } from "../handlers/craftingAdvisorHandler.js";
 import { handleFindItemUpgrades as handleFindItemUpgradesNew } from "../handlers/itemShoppingHandler.js";
+import { handleClassifyItemAffixes, handleListCraftableMods, handleFindAffixTiers } from "../handlers/affixHandlers.js";
 
 export interface ToolRouterDependencies {
   toolGate: ToolGate;
@@ -777,6 +778,27 @@ export async function routeToolCall(
       };
       return await handleSuggestCrafting(craftingContext, args as any);
     }
+
+    case "classify_item_affixes":
+      return await handleClassifyItemAffixes({ mod_lines: (args?.mod_lines as string[]) ?? [] });
+
+    case "list_craftable_mods":
+      return await handleListCraftableMods({
+        item_class: String(args?.item_class ?? ""),
+        item_level: Number(args?.item_level ?? 0),
+        affix_type: args?.affix_type === undefined ? undefined : String(args.affix_type),
+        search: args?.search === undefined ? undefined : String(args.search),
+      });
+
+    case "find_affix_tiers":
+      return await handleFindAffixTiers({
+        search: String(args?.search ?? ""),
+        affix_type: args?.affix_type === undefined ? undefined : String(args.affix_type),
+        slot_tags: (args?.slot_tags as string[]) ?? undefined,
+        max_item_level: args?.max_item_level === undefined ? undefined : Number(args.max_item_level),
+        include_unobtainable: Boolean(args?.include_unobtainable),
+        max_results: args?.max_results === undefined ? undefined : Number(args.max_results),
+      });
 
     default:
       throw new Error(`Unknown tool: ${name}`);
