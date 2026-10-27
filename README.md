@@ -555,6 +555,13 @@ Issues and pull requests are welcome!
                     <sub><b>Mickael Cagnion</b></sub>
                 </a>
             </td>
+            <td align="center">
+                <a href="https://github.com/rchasman">
+                    <img src="https://avatars.githubusercontent.com/u/1267219?v=4" width="100;" alt="rchasman"/>
+                    <br />
+                    <sub><b>Roey D. Chasman</b></sub>
+                </a>
+            </td>
 		</tr>
 	<tbody>
 </table>
