@@ -44,11 +44,14 @@ export async function handleClassifyItemAffixes(args: { mod_lines: string[] }) {
     return text([
       "=== Affix Classification ===",
       "",
-      `Prefixes: ${resolution.prefixCount}/3 (${resolution.openPrefixes} open)   Suffixes: ${resolution.suffixCount}/3 (${resolution.openSuffixes} open)`,
+      ...(resolution.openPrefixes === null || resolution.openSuffixes === null
+        ? [`Matched prefixes: ${resolution.prefixCount}/3   Matched suffixes: ${resolution.suffixCount}/3`,
+          'Open affix slots: unknown. Verify the item in game before recommending a craft.']
+        : [`Prefixes: ${resolution.prefixCount}/3 (${resolution.openPrefixes} open)   Suffixes: ${resolution.suffixCount}/3 (${resolution.openSuffixes} open)`]),
       "",
       ...body,
       ...(resolution.unmatched.length
-        ? ["Unmatched lines (implicit, unique, corrupted, enchanted or Eldritch — none of these occupy a prefix or suffix slot):", ...resolution.unmatched.map((line) => `  ${line}`), ""]
+        ? ["Unmatched lines (affix type and slot occupancy unknown):", ...resolution.unmatched.map((line) => `  ${line}`), ""]
         : []),
       ...resolution.warnings.map((warning) => `WARNING: ${warning}`),
     ]);
@@ -130,8 +133,8 @@ export async function handleFindAffixTiers(args: {
     const body = result.groups.flatMap((group) => [
       `${group.type} — ${group.group}`,
       ...group.tiers.map(
-        (tier, index) =>
-          `  T${group.tiers.length - index} ilvl ${tier.level} "${tier.affix}" ${tier.statLines.join(" / ")}` +
+        (tier) =>
+          `  ilvl ${tier.level} "${tier.affix}" ${tier.statLines.join(" / ")}` +
           `${tier.statLines.length > 1 ? " (hybrid: one affix)" : ""}` +
           `\n      rolls on: ${tier.slotTags.length ? tier.slotTags.join(", ") : "nothing (every spawn weight is zero)"}`
       ),
@@ -141,7 +144,8 @@ export async function handleFindAffixTiers(args: {
     return text([
       `=== Affix Tiers matching "${args.search}" ===`,
       "",
-      `${result.groups.length} of ${result.totalGroups} matching affix groups. Tier numbers run T1 = highest, and ilvl is the minimum item level.`,
+      `${result.groups.length} of ${result.totalGroups} matching affix groups. ilvl is the minimum item level.`,
+      'Entries are ordered by required item level. T1/T2 labels are not inferred from result order; these tables provide no authoritative tier-number field.',
       "",
       ...body,
     ]);

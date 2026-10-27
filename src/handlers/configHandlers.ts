@@ -17,16 +17,6 @@ export interface ConfigPresetContext {
 
 const PRESET_DIR_NAME = '.pob-mcp-presets';
 
-// Parameters BuildOps.lua's set_config actually handles (keep in sync)
-const SUPPORTED_CONFIG_PARAMS = new Set([
-  'bandit', 'pantheonMajorGod', 'pantheonMinorGod', 'enemyLevel',
-  'enemyFireResist', 'enemyColdResist', 'enemyLightningResist', 'enemyChaosResist',
-  'enemyArmour', 'enemyEvasion',
-  'usePowerCharges', 'useFrenzyCharges', 'useEnduranceCharges',
-  'conditionShockedGround', 'conditionFortify', 'conditionLeeching',
-  'buffOnslaught', 'enemyIsBoss',
-]);
-
 async function getPresetPath(pobDirectory: string, name: string): Promise<string> {
   const dir = path.join(pobDirectory, PRESET_DIR_NAME);
   await fs.mkdir(dir, { recursive: true });
@@ -110,7 +100,8 @@ export async function handleGetConfig(context: ConfigHandlerContext) {
   }
 
   const config = await luaClient.getConfig();
-  const formatted = formatConfigOutput(config);
+  const labels = await luaClient.getConfigLabels().catch(() => ({}));
+  const formatted = formatConfigOutput(config, labels);
 
   return {
     content: [
@@ -144,20 +135,30 @@ export async function handleSetConfig(
   // Set new value - build params object dynamically
   const params: Record<string, any> = {};
   params[args.config_name] = args.value;
-  await luaClient.setConfig(params);
+  const result = await luaClient.setConfig(params);
 
   // Get updated stats
   const newStats = await luaClient.getStats(['TotalDPS', 'CombinedDPS', 'Life', 'EnergyShield']);
 
-  let output = `=== Configuration Updated ===\n\n`;
+  // PoB reports per-key outcomes, so say what actually happened rather than
+  // assuming the write landed.
+  const rejection = result?.rejected?.[args.config_name];
+  const appliedValue = result?.applied?.[args.config_name];
+
+  let output = rejection
+    ? `=== Configuration NOT Updated ===\n\n`
+    : `=== Configuration Updated ===\n\n`;
   output += `${args.config_name}:\n`;
   if (oldValue !== undefined) {
     output += `  Old Value: ${formatValue(oldValue)}\n`;
   }
-  output += `  New Value: ${formatValue(args.value)}\n\n`;
 
-  if (!SUPPORTED_CONFIG_PARAMS.has(args.config_name)) {
-    output += `⚠️ "${args.config_name}" is not a known set_config parameter — this parameter may not be supported and the change may have had no effect.\n\n`;
+  if (rejection) {
+    output += `  Requested:  ${formatValue(args.value)}\n\n`;
+    output += `❌ Rejected by Path of Building: ${rejection}.\n`;
+    output += `   The build is unchanged. Call get_config to see valid options.\n\n`;
+  } else {
+    output += `  New Value: ${formatValue(appliedValue !== undefined ? appliedValue : args.value)}\n\n`;
   }
 
   if (newStats.TotalDPS != null) {
@@ -217,19 +218,19 @@ export async function handleSetEnemyStats(
   }
   if (args.fire_resist !== undefined) {
     changesSummary.push({ key: "Fire Resist", old: currentConfig.enemyFireResistance, new: args.fire_resist });
-    params.enemyFireResist = args.fire_resist;
+    params.enemyFireResistance = args.fire_resist;
   }
   if (args.cold_resist !== undefined) {
     changesSummary.push({ key: "Cold Resist", old: currentConfig.enemyColdResistance, new: args.cold_resist });
-    params.enemyColdResist = args.cold_resist;
+    params.enemyColdResistance = args.cold_resist;
   }
   if (args.lightning_resist !== undefined) {
     changesSummary.push({ key: "Lightning Resist", old: currentConfig.enemyLightningResistance, new: args.lightning_resist });
-    params.enemyLightningResist = args.lightning_resist;
+    params.enemyLightningResistance = args.lightning_resist;
   }
   if (args.chaos_resist !== undefined) {
     changesSummary.push({ key: "Chaos Resist", old: currentConfig.enemyChaosResistance, new: args.chaos_resist });
-    params.enemyChaosResist = args.chaos_resist;
+    params.enemyChaosResistance = args.chaos_resist;
   }
   if (args.armor !== undefined) {
     changesSummary.push({ key: "Armor", old: currentConfig.enemyArmour, new: args.armor });
@@ -297,18 +298,22 @@ export async function handleSetEnemyStats(
 /**
  * Format configuration output
  */
-function formatConfigOutput(config: any): string {
+function formatConfigOutput(config: any, labels: Record<string, string> = {}): string {
   if (!config || typeof config !== 'object') {
     return "=== Configuration State ===\n\nNo configuration data available.\n";
   }
+
+  // Dropdowns store a val that differs from what PoB shows: the bandit quest
+  // stores "None" but reads "Kill all", which makes a correct setting look unset.
+  const shown = (key: string, fallback = 'None') => labels[key] ?? config[key] ?? fallback;
 
   let output = "=== Configuration State ===\n\n";
 
   // Build settings
   output += "=== Build Settings ===\n";
-  output += `Bandit: ${config.bandit || 'None'}\n`;
-  output += `Pantheon Major God: ${config.pantheonMajorGod || 'None'}\n`;
-  output += `Pantheon Minor God: ${config.pantheonMinorGod || 'None'}\n`;
+  output += `Bandit: ${shown('bandit')}\n`;
+  output += `Pantheon Major God: ${shown('pantheonMajorGod')}\n`;
+  output += `Pantheon Minor God: ${shown('pantheonMinorGod')}\n`;
 
   // Enemy settings
   output += "\n=== Enemy Settings ===\n";

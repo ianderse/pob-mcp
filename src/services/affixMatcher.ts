@@ -72,9 +72,10 @@ export interface AffixResolution {
   affixes: ResolvedAffix[];
   prefixCount: number;
   suffixCount: number;
-  openPrefixes: number;
-  openSuffixes: number;
-  /** Lines no explicit or bench mod explains: implicits, uniques, corruptions, enchants. */
+  /** Remaining slots, or null when unmatched/ambiguous lines prevent a count. */
+  openPrefixes: number | null;
+  openSuffixes: number | null;
+  /** Lines no listed affix explains; these may still occupy affix slots. */
   unmatched: string[];
   warnings: string[];
 }
@@ -203,14 +204,21 @@ export function resolveAffixes(rawLines: string[], entries: ModEntry[]): AffixRe
     ...(prefixCount > MAX_AFFIXES_PER_SLOT ? [`Resolved ${prefixCount} prefixes; an item holds at most ${MAX_AFFIXES_PER_SLOT}. A hybrid was probably split, or the list mixes in implicit/unique/corrupted lines.`] : []),
     ...(suffixCount > MAX_AFFIXES_PER_SLOT ? [`Resolved ${suffixCount} suffixes; an item holds at most ${MAX_AFFIXES_PER_SLOT}. A hybrid was probably split, or the list mixes in implicit/unique/corrupted lines.`] : []),
   ];
+  const unmatched = lines.filter((_line, lineIndex) => !claimed.has(lineIndex));
+  const ambiguous = affixes.some((affix) => affix.alternatives.length > 0);
+  const countsCertain = unmatched.length === 0 && !ambiguous && overflow.length === 0;
 
   return {
     affixes,
     prefixCount,
     suffixCount,
-    openPrefixes: Math.max(MAX_AFFIXES_PER_SLOT - prefixCount, 0),
-    openSuffixes: Math.max(MAX_AFFIXES_PER_SLOT - suffixCount, 0),
-    unmatched: lines.filter((_line, lineIndex) => !claimed.has(lineIndex)),
-    warnings: overflow,
+    openPrefixes: countsCertain ? Math.max(MAX_AFFIXES_PER_SLOT - prefixCount, 0) : null,
+    openSuffixes: countsCertain ? Math.max(MAX_AFFIXES_PER_SLOT - suffixCount, 0) : null,
+    unmatched,
+    warnings: [
+      ...overflow,
+      ...(unmatched.length ? ['Unmatched explicit lines may occupy prefix or suffix slots, including several lines from one hybrid. Open slots are unknown.'] : []),
+      ...(ambiguous ? ['Multiple affix readings are possible. Open slots are unknown.'] : []),
+    ],
   };
 }

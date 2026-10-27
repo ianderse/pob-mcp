@@ -32,7 +32,7 @@ withPoB('affix tools', () => {
   it('names the affix and its item level when pricing a stat', async () => {
     const text = textOf(await handleFindAffixTiers({ search: 'Chaos Resistance', affix_type: 'Suffix', slot_tags: ['ring'], max_results: 1 }));
 
-    expect(text).toContain('T1 ilvl 81 "of Bameth" +(31-35)% to Chaos Resistance');
+    expect(text).toContain('ilvl 81 "of Bameth" +(31-35)% to Chaos Resistance');
     expect(text).toContain('rolls on: armour, ring, amulet, belt, quiver');
   });
 

@@ -93,12 +93,31 @@ describe('resolveAffixes', () => {
     expect(result.affixes[0].minItemLevel).toBeNull();
   });
 
-  it('leaves lines no affix explains out of the counts', () => {
+  it('makes open slots unknown when an explicit line has no matching affix', () => {
     const result = resolveAffixes(['Trigger a Socketed Spell when you Attack'], entries);
 
     expect(result.unmatched).toEqual(['Trigger a Socketed Spell when you Attack']);
     expect(result.prefixCount).toBe(0);
     expect(result.suffixCount).toBe(0);
+    expect(result.openPrefixes).toBeNull();
+    expect(result.openSuffixes).toBeNull();
+    expect(result.warnings.join(' ')).toContain('may occupy prefix or suffix slots');
+  });
+
+  it('does not treat matched affixes as a complete inventory when unknown lines remain', () => {
+    const result = resolveAffixes(['+33% to Chaos Resistance', 'An unlisted explicit modifier'], entries);
+
+    expect(result.suffixCount).toBe(1);
+    expect(result.openPrefixes).toBeNull();
+    expect(result.openSuffixes).toBeNull();
+  });
+
+  it('withholds open-slot counts for ambiguous readings', () => {
+    const result = resolveAffixes(['12% increased Energy Shield', '7% increased Stun and Block Recovery'], entries);
+
+    expect(result.affixes[0].alternatives.length).toBeGreaterThan(0);
+    expect(result.openPrefixes).toBeNull();
+    expect(result.openSuffixes).toBeNull();
   });
 
   it('warns when the resolved count exceeds what an item can hold', () => {
