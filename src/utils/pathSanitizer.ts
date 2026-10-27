@@ -1,6 +1,22 @@
 import path from "path";
 
 /**
+ * PoB build files are always .xml, so a build name means the same thing with or
+ * without the suffix. list_builds reports names with it; callers routinely omit it.
+ */
+export function buildFileName(name: string): string {
+  return /\.xml$/i.test(name) ? name : `${name}.xml`;
+}
+
+/**
+ * Resolve a build name to its file path inside the builds directory.
+ * Normalizes the suffix first, then applies the full traversal checks below.
+ */
+export function resolveBuildFile(name: string, buildsDir: string): string {
+  return sanitizeBuildName(buildFileName(name), buildsDir);
+}
+
+/**
  * Sanitize a build name to prevent path traversal attacks.
  * Returns the resolved absolute path within baseDir.
  * Throws on any path that would escape baseDir.

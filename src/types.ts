@@ -31,6 +31,29 @@ export interface TreeDataCache {
   timestamp: number;
 }
 
+export interface PoBGem {
+  nameSpec?: string;
+  name?: string;
+  level?: string;
+  quality?: string;
+  skillId?: string;
+  // "Metadata/Items/Gems/SupportGem..." for supports, "...SkillGem..." for actives
+  gemId?: string;
+}
+
+export interface PoBSkillSet {
+  id?: string;
+  Skill?: PoBSkill | PoBSkill[];
+}
+
+export interface PoBSkill {
+  enabled?: string;
+  slot?: string;
+  // 1-based index of the active skill used for DPS within this socket group
+  mainActiveSkill?: string;
+  Gem?: PoBGem | PoBGem[];
+}
+
 // Path of Building build interface
 export interface PoBBuild {
   Build?: {
@@ -38,6 +61,7 @@ export interface PoBBuild {
     className?: string;
     ascendClassName?: string;
     bandit?: string;
+    mainSocketGroup?: string;
     PlayerStat?: Array<{stat: string; value: string}> | {stat: string; value: string};
   };
   Tree?: {
@@ -55,12 +79,8 @@ export interface PoBBuild {
     }>;
   };
   Skills?: {
-    SkillSet?: {
-      Skill?: Array<{
-        enabled?: string;
-        Gem?: Array<{nameSpec?: string; name?: string; level?: string; quality?: string}>;
-      }>;
-    };
+    activeSkillSet?: string;
+    SkillSet?: PoBSkillSet | PoBSkillSet[];
   };
   Items?: {
     Item?: Array<{

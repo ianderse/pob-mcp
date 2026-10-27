@@ -1,11 +1,12 @@
-// Smoke test for the repo-owned adapter against an unmodified PoB checkout.
-// Usage: POB_PATH=/path/to/PathOfBuilding/src node tests/smoke/bridge.mjs
+// Smoke test for the repo-owned adapter against an unmodified PoB.
+// Usage: node tests/smoke/bridge.mjs   (set POB_PATH only to force a checkout)
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import zlib from 'node:zlib';
 import { PoBLuaApiClient } from '../../build/pobLuaBridge.js';
+import { gearedBuildXml, smokePoBSrc } from './pobSource.mjs';
 
-const cwd = process.env.POB_PATH || process.env.POB_FORK_PATH;
-if (!cwd) throw new Error('POB_PATH must point to a stock PoB src directory.');
+const cwd = smokePoBSrc();
 
 const client = new PoBLuaApiClient({
   cwd,
@@ -34,6 +35,31 @@ try {
   if (!info?.className || !Array.isArray(tree?.nodes) || typeof stats.Life !== 'number' || !Array.isArray(items) || !Array.isArray(skillSetup?.groups)) {
     throw new Error('unexpected adapter response shape');
   }
+  // Real PoB import/export codes are zlib-deflated then URL-safe base64 — exercise the
+  // decode against the same build XML rather than only the mocked unit tests.
+  const exampleXml = await readFile(resolve('example-build.xml'), 'utf8');
+  const importCode = zlib.deflateSync(exampleXml).toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
+  await client.importCode(importCode, 'import-code-smoke');
+  const importedInfo = await client.getBuildInfo();
+  if (importedInfo?.className !== info.className || importedInfo?.ascendClassName !== info.ascendClassName) {
+    throw new Error(`import_code produced an unexpected build: ${JSON.stringify(importedInfo)}`);
+  }
+  // Seven handlers call getStats() with no field list, so the default set decides
+  // what they can report. It carried no damage stat at all, which made every one
+  // of them describe a build as if it dealt none.
+  await client.createSocketGroup({ label: 'dps', slot: 'Weapon 1' });
+  const dpsGroup = (await client.getSkills()).groups.length;
+  await client.addGem({ groupIndex: dpsGroup, gemName: 'Arc', level: 20, quality: 0 });
+  await client.setMainSelection({ mainSocketGroup: dpsGroup });
+  const defaults = await client.getStats();
+  for (const field of ['TotalDPS', 'CombinedDPS', 'AverageDamage']) {
+    if (typeof defaults[field] !== 'number') {
+      throw new Error(`getStats() with no fields must include ${field}: ${JSON.stringify(defaults)}`);
+    }
+  }
+  if (!(defaults.TotalDPS > 0)) throw new Error(`expected a positive TotalDPS, got ${defaults.TotalDPS}`);
+  if (typeof defaults.Life !== 'number') throw new Error('the defensive defaults must survive too');
+
   const changed = await client.setTree({ ...tree, ascendClassId: 0, nodes: [] });
   // Upstream keeps the class start allocated even when given an empty node list.
   if (changed.ascendClassId !== 0 || changed.nodes.length >= tree.nodes.length) throw new Error('tree mutation was not applied');
@@ -77,7 +103,7 @@ try {
     throw new Error(`configured shock should be credited: ${JSON.stringify(configured)}`);
   }
 
-  await client.loadBuildXml(await readFile(resolve(cwd, '../spec/TestBuilds/3.13/OccVortex.xml'), 'utf8'), 'weighted-query-smoke');
+  await client.loadBuildXml(await readFile(gearedBuildXml, 'utf8'), 'weighted-query-smoke');
   const weighted = await client.generateWeightedTradeQuery('Amulet');
   const query = weighted.query;
   if (!query || typeof query !== 'object' || query.query?.status?.option !== 'available' || query.query?.filters?.type_filters?.filters?.category?.option !== 'accessory.amulet' || !Array.isArray(query.query?.stats?.[0]?.filters) || query.query.stats[0].filters.length === 0) {

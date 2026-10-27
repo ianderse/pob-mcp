@@ -1,36 +1,22 @@
-// End-to-end MCP smoke test against a stock PoB checkout.
-// Usage: POB_PATH=/path/to/PathOfBuilding/src node tests/smoke/mcp.mjs
+// End-to-end MCP smoke test against an unmodified PoB.
+// Usage: node tests/smoke/mcp.mjs   (set POB_PATH only to force a checkout)
 import { cp, mkdtemp, rm } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { startMcpServer } from './mcpClient.mjs';
+import { gearedBuildXml, smokePoBSrc } from './pobSource.mjs';
 
-const pobPath = process.env.POB_PATH || process.env.POB_FORK_PATH;
-if (!pobPath) throw new Error('POB_PATH must point to a stock PoB src directory.');
+// The server resolves the engine itself; fail here so a missing PoB reads as
+// a missing PoB rather than as a tool call timing out.
+smokePoBSrc();
 const buildsDir = await mkdtemp(join(tmpdir(), 'pob-mcp-smoke-'));
 const weightedSmoke = process.env.POE_WEIGHTED_SMOKE === 'true';
 await cp(resolve('example-build.xml'), join(buildsDir, 'example.xml'));
-await cp(resolve(pobPath, '../spec/TestBuilds/3.13/OccVortex.xml'), join(buildsDir, 'occ-vortex.xml'));
-const child = spawn('node', [resolve('build/index.js')], {
-  env: { ...process.env, POB_DIRECTORY: buildsDir, POB_LUA_ENABLED: 'true', ...(weightedSmoke ? { POE_TRADE_ENABLED: 'true' } : {}) },
-  stdio: ['pipe', 'pipe', 'pipe'],
+await cp(gearedBuildXml, join(buildsDir, 'occ-vortex.xml'));
+const { child, request, notify } = startMcpServer({
+  POB_DIRECTORY: buildsDir,
+  ...(weightedSmoke ? { POE_TRADE_ENABLED: 'true' } : {}),
 });
-let buffer = ''; let nextId = 1; const pending = new Map();
-child.stdout.setEncoding('utf8');
-child.stdout.on('data', (chunk) => {
-  buffer += chunk;
-  for (;;) {
-    const newline = buffer.indexOf('\n'); if (newline < 0) return;
-    const message = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1);
-    pending.get(message.id)?.(message); pending.delete(message.id);
-  }
-});
-const request = (method, params) => new Promise((resolveRequest, reject) => {
-  const id = nextId++; pending.set(id, resolveRequest);
-  child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
-  setTimeout(() => { if (pending.delete(id)) reject(new Error(`timed out: ${method}`)); }, 60_000);
-});
-const notify = (method, params) => child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
 let snapshotCount = 0;
 try {
   await request('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'vanilla-smoke', version: '1.0' } });
@@ -41,6 +27,7 @@ try {
   if (rejected.result?.isError !== true) throw new Error(`MCP errors must set isError: ${JSON.stringify(rejected)}`);
   const invalidChain = await request('tools/call', { name: 'calculate_trading_profit', arguments: { league: 'Standard', currency_chain: ['Chaos Orb'] } });
   if (invalidChain.result?.isError !== true) throw new Error(`handler errors must set isError: ${JSON.stringify(invalidChain)}`);
+  if (!names.has('lua_get_ailments')) throw new Error('missing MCP tool: lua_get_ailments');
   // The stock-checkout adapter supports the full tool surface
   for (const name of ['lua_get_capabilities', 'lua_get_build_snapshot', 'lua_start', 'lua_stop', 'lua_load_build', 'lua_get_stats', 'lua_get_tree', 'lua_set_tree', 'lua_get_build_info', 'get_equipped_items', 'get_skill_setup', 'find_best_anointment', 'add_item', 'toggle_flask', 'set_config', 'add_gem', 'create_spec', 'toggle_socket_group', 'suggest_masteries', 'lua_save_build']) {
     if (!names.has(name)) throw new Error(`missing MCP tool: ${name}`);
@@ -51,6 +38,7 @@ try {
     ['lua_load_build', { build_name: 'example.xml' }],
     ['lua_get_build_snapshot', {}],
     ['lua_get_stats', {}],
+    ['lua_get_ailments', {}],
     ['get_equipped_items', {}],
     ['get_skill_setup', { main_only: false }],
     ['lua_get_tree', { include_node_ids: true }],
@@ -63,6 +51,9 @@ try {
   ]) {
     const response = await request('tools/call', { name, arguments: args });
     if (response.error || response.result?.isError) throw new Error(`${name} failed: ${JSON.stringify(response.error ?? response.result)}`);
+    if (name === 'lua_get_ailments' && !response.result.content?.[0]?.text?.includes('=== Non-Damaging Ailments ===')) {
+      throw new Error(`lua_get_ailments returned an unexpected response: ${JSON.stringify(response.result)}`);
+    }
     if (name === 'lua_get_build_snapshot') {
       const text = response.result?.content?.[0]?.text || '';
       if (!text.includes('Current PoB Build Snapshot') || !text.includes('Equipped Items') || !text.includes('Skills')) {

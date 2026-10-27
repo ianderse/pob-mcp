@@ -3,7 +3,7 @@ import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
 import fs from "fs/promises";
 import path from "path";
 import { wrapHandler } from "../utils/errorHandling.js";
-import { sanitizeBuildName } from "../utils/pathSanitizer.js";
+import { buildFileName, resolveBuildFile } from "../utils/pathSanitizer.js";
 
 export interface LuaHandlerContext {
   pobDirectory: string;
@@ -79,8 +79,8 @@ export async function handleLuaSaveBuild(context: LuaHandlerContext, buildName: 
       throw new Error('build_name is required');
     }
 
-    const fileName = buildName.endsWith('.xml') ? buildName : `${buildName}.xml`;
-    const filePath = sanitizeBuildName(fileName, context.pobDirectory);
+    const fileName = buildFileName(buildName);
+    const filePath = resolveBuildFile(fileName, context.pobDirectory);
     const result = await luaClient.saveBuild(filePath);
 
     return {
@@ -94,35 +94,11 @@ export async function handleLuaSaveBuild(context: LuaHandlerContext, buildName: 
   });
 }
 
-export async function handleLuaLoadBuild(
-  context: LuaHandlerContext,
-  buildName?: string,
-  buildXml?: string,
-  name?: string
-) {
-  return wrapHandler('load build', async () => {
-    await context.ensureLuaClient();
-
-    const luaClient = context.getLuaClient();
-    if (!luaClient) {
-      throw new Error('Lua client not initialized');
-    }
-
-    // If build_name is provided, read the file
-    let xml = buildXml;
-    if (buildName) {
-      const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
-      xml = await fs.readFile(buildPath, 'utf-8');
-      // Use the build filename as the name if not specified
-      if (!name) {
-        name = buildName.replace(/\.xml$/i, '');
-      }
-    } else if (!xml) {
-      throw new Error('Either build_name or build_xml must be provided');
-    }
-
-    await luaClient.loadBuildXml(xml, name);
-
+/**
+ * Post-load summary shared by every "a build just got loaded into the Lua
+ * bridge" handler: spec/item-set counts, core stats, and top issues.
+ */
+async function buildPostLoadSummary(context: LuaHandlerContext, luaClient: PoBLuaApiClient, name?: string): Promise<string> {
     // Check for multiple specs / item sets and inform the user (sequential — bridge is single-request)
     const extraLines: string[] = [];
     try {
@@ -193,13 +169,75 @@ export async function handleLuaLoadBuild(
     } catch { /* auto-context is best-effort */ }
     const summary = summaryLines.join('\n');
 
-    const loadText = `✅ Build "${name || 'MCP Build'}" loaded.${extra}` + (summary ? '\n---\n' + summary : '');
+    return extra + (summary ? '\n---\n' + summary : '');
+}
+
+export async function handleLuaLoadBuild(
+  context: LuaHandlerContext,
+  buildName?: string,
+  buildXml?: string,
+  name?: string
+) {
+  return wrapHandler('load build', async () => {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized');
+    }
+
+    // If build_name is provided, read the file
+    let xml = buildXml;
+    if (buildName) {
+      const buildPath = resolveBuildFile(buildName, context.pobDirectory);
+      xml = await fs.readFile(buildPath, 'utf-8');
+      // Use the build filename as the name if not specified
+      if (!name) {
+        name = buildName.replace(/\.xml$/i, '');
+      }
+    } else if (!xml) {
+      throw new Error('Either build_name or build_xml must be provided');
+    }
+
+    await luaClient.loadBuildXml(xml, name);
+    const summary = await buildPostLoadSummary(context, luaClient, name);
 
     return {
       content: [
         {
           type: "text" as const,
-          text: loadText,
+          text: `✅ Build "${name || 'MCP Build'}" loaded.${summary}`,
+        },
+      ],
+    };
+  });
+}
+
+export async function handleLuaImportCode(
+  context: LuaHandlerContext,
+  code: string,
+  name?: string
+) {
+  return wrapHandler('import build code', async () => {
+    await context.ensureLuaClient();
+
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized');
+    }
+
+    if (!code || !code.trim()) {
+      throw new Error('code is required');
+    }
+
+    await luaClient.importCode(code.trim(), name);
+    const summary = await buildPostLoadSummary(context, luaClient, name);
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: `✅ Build "${name || 'Imported Build'}" imported from code.${summary}\n\nUse lua_save_build to persist it to a file.`,
         },
       ],
     };
@@ -586,6 +624,9 @@ export async function handleLuaSetTree(context: LuaHandlerContext, args: any) {
       treeVersion = treeVersion ?? currentTree?.treeVersion;
     }
 
+    // The Lua side (M.import_from_node_list) merges the build's existing
+    // mastery selections underneath whatever we pass here, so an omitted
+    // masteryEffects still preserves masteries already on the build.
     const tree = await luaClient.setTree({
       classId,
       ascendClassId,
@@ -667,8 +708,8 @@ export async function handleLuaReloadBuild(context: LuaHandlerContext, buildName
       targetName = String(info.name);
     }
 
-    const fileName = targetName.endsWith('.xml') ? targetName : `${targetName}.xml`;
-    const buildPath = sanitizeBuildName(fileName, context.pobDirectory);
+    const fileName = buildFileName(targetName);
+    const buildPath = resolveBuildFile(fileName, context.pobDirectory);
     const xml = await fs.readFile(buildPath, 'utf-8');
     const name = fileName.replace(/\.xml$/i, '');
     await luaClient.loadBuildXml(xml, name);
@@ -679,7 +720,7 @@ export async function handleLuaReloadBuild(context: LuaHandlerContext, buildName
   });
 }
 
-export async function handleUpdateTreeDelta(context: LuaHandlerContext, addNodes?: string[], removeNodes?: string[]) {
+export async function handleUpdateTreeDelta(context: LuaHandlerContext, addNodes?: string[], removeNodes?: string[], masteryEffects?: Record<string, number>) {
   return wrapHandler('update tree delta', async () => {
     await context.ensureLuaClient();
     const luaClient = context.getLuaClient();
@@ -689,9 +730,10 @@ export async function handleUpdateTreeDelta(context: LuaHandlerContext, addNodes
       throw new Error('At least one of add_nodes or remove_nodes must be provided.');
     }
 
-    const params: { addNodes?: number[]; removeNodes?: number[] } = {};
+    const params: { addNodes?: number[]; removeNodes?: number[]; masteryEffects?: Record<string, number> } = {};
     if (addNodes?.length)    params.addNodes    = addNodes.map(Number);
     if (removeNodes?.length) params.removeNodes = removeNodes.map(Number);
+    if (masteryEffects && Object.keys(masteryEffects).length) params.masteryEffects = masteryEffects;
 
     const result = await luaClient.updateTreeDelta(params);
     const tree = result?.tree;
@@ -715,8 +757,14 @@ export async function handleUpdateTreeDelta(context: LuaHandlerContext, addNodes
       text += `\n🔴 BLOCKED: ${skippedAsc.length} ascendancy node(s) skipped — would exceed 8-point ascendancy cap (IDs: ${skippedAsc.join(', ')}).`;
     }
 
-    if (addedCount > 0 && !autoPathedNodes?.length && !skippedAsc?.length) {
-      text += `\n⚠️  If total count is lower than expected, some nodes may have been dropped (not connected or invalid IDs).`;
+    // PoB reports exactly which requested nodes it refused, so name them
+    // instead of hedging about the total looking wrong.
+    const dropped: number[] = result?.droppedNodes ?? [];
+    if (dropped.length > 0) {
+      text += `\n\n⚠️  ${dropped.length} requested node(s) were NOT allocated: ${dropped.join(', ')}.`;
+      text += `\n   A node is dropped when it is not connected to your tree, when the ID is invalid,`;
+      text += `\n   or when it is a Mastery node with no effect chosen — pass mastery_effects`;
+      text += `\n   ({"<nodeId>": <effectId>}) to allocate a Mastery.`;
     }
 
     const ascUsed = tree?.ascendancyPointsUsed ?? 0;
