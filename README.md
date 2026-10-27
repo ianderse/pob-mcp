@@ -582,6 +582,20 @@ Issues and pull requests are welcome!
                 </a>
             </td>
             <td align="center">
+                <a href="https://github.com/rchasman">
+                    <img src="https://avatars.githubusercontent.com/u/1267219?v=4" width="100;" alt="rchasman"/>
+                    <br />
+                    <sub><b>Roey D. Chasman</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/notquitedrdeath">
+                    <img src="https://avatars.githubusercontent.com/u/890462?v=4" width="100;" alt="notquitedrdeath"/>
+                    <br />
+                    <sub><b>Tim Death</b></sub>
+                </a>
+            </td>
+            <td align="center">
                 <a href="https://github.com/J-Gierend">
                     <img src="https://avatars.githubusercontent.com/u/39157646?v=4" width="100;" alt="J-Gierend"/>
                     <br />
@@ -596,6 +610,15 @@ Issues and pull requests are welcome!
                 </a>
             </td>
             <td align="center">
+                <a href="https://github.com/Kloggzer">
+                    <img src="https://avatars.githubusercontent.com/u/19823711?v=4" width="100;" alt="Kloggzer"/>
+                    <br />
+                    <sub><b>Marius K</b></sub>
+                </a>
+            </td>
+		</tr>
+		<tr>
+            <td align="center">
                 <a href="https://github.com/mcagnion">
                     <img src="https://avatars.githubusercontent.com/u/22574458?v=4" width="100;" alt="mcagnion"/>
                     <br />
@@ -603,10 +626,10 @@ Issues and pull requests are welcome!
                 </a>
             </td>
             <td align="center">
-                <a href="https://github.com/rchasman">
-                    <img src="https://avatars.githubusercontent.com/u/1267219?v=4" width="100;" alt="rchasman"/>
+                <a href="https://github.com/exception0x876">
+                    <img src="https://avatars.githubusercontent.com/u/676813?v=4" width="100;" alt="exception0x876"/>
                     <br />
-                    <sub><b>Roey D. Chasman</b></sub>
+                    <sub><b>exception0x876</b></sub>
                 </a>
             </td>
 		</tr>
