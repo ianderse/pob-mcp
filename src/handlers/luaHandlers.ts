@@ -3,7 +3,7 @@ import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
 import fs from "fs/promises";
 import path from "path";
 import { wrapHandler } from "../utils/errorHandling.js";
-import { sanitizeBuildName } from "../utils/pathSanitizer.js";
+import { buildFileName, resolveBuildFile } from "../utils/pathSanitizer.js";
 
 export interface LuaHandlerContext {
   pobDirectory: string;
@@ -79,8 +79,8 @@ export async function handleLuaSaveBuild(context: LuaHandlerContext, buildName: 
       throw new Error('build_name is required');
     }
 
-    const fileName = buildName.endsWith('.xml') ? buildName : `${buildName}.xml`;
-    const filePath = sanitizeBuildName(fileName, context.pobDirectory);
+    const fileName = buildFileName(buildName);
+    const filePath = resolveBuildFile(fileName, context.pobDirectory);
     const result = await luaClient.saveBuild(filePath);
 
     return {
@@ -189,7 +189,7 @@ export async function handleLuaLoadBuild(
     // If build_name is provided, read the file
     let xml = buildXml;
     if (buildName) {
-      const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
+      const buildPath = resolveBuildFile(buildName, context.pobDirectory);
       xml = await fs.readFile(buildPath, 'utf-8');
       // Use the build filename as the name if not specified
       if (!name) {
@@ -598,8 +598,8 @@ export async function handleLuaReloadBuild(context: LuaHandlerContext, buildName
       targetName = String(info.name);
     }
 
-    const fileName = targetName.endsWith('.xml') ? targetName : `${targetName}.xml`;
-    const buildPath = sanitizeBuildName(fileName, context.pobDirectory);
+    const fileName = buildFileName(targetName);
+    const buildPath = resolveBuildFile(fileName, context.pobDirectory);
     const xml = await fs.readFile(buildPath, 'utf-8');
     const name = fileName.replace(/\.xml$/i, '');
     await luaClient.loadBuildXml(xml, name);

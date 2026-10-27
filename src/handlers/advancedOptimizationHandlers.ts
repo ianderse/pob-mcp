@@ -11,7 +11,7 @@ import {
   formatSkillOptimization,
   type SkillGroup,
 } from "../skillLinkOptimizer.js";
-import { sanitizeBuildName } from "../utils/pathSanitizer.js";
+import { readNamedBuild } from "../utils/namedBuild.js";
 import { activeSkillSet, asArray } from "../utils/xmlCollections.js";
 
 export interface AdvancedOptimizationContext {
@@ -55,13 +55,8 @@ export async function handleAnalyzeItems(
           }
         } catch { /* no build loaded yet */ }
         if (needsLoad) {
-          try {
-            const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
-            const xml = await fs.readFile(buildPath, 'utf-8');
-            await luaClient.loadBuildXml(xml, buildName);
-          } catch {
-            // Build file not found — use whichever build is currently loaded in Lua bridge
-          }
+          const xml = await readNamedBuild(buildName, context.pobDirectory);
+          await luaClient.loadBuildXml(xml, buildName);
         }
       }
 
@@ -181,14 +176,8 @@ export async function handleOptimizeSkillLinks(
     if (luaClient) {
       // Load build if buildName provided
       if (buildName) {
-        const fs2 = await import('fs/promises');
-        try {
-          const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
-          const xml = await fs2.readFile(buildPath, 'utf-8');
-          await luaClient.loadBuildXml(xml, buildName);
-        } catch {
-          // Build file not found — use whichever build is currently loaded in Lua bridge
-        }
+        const xml = await readNamedBuild(buildName, context.pobDirectory);
+        await luaClient.loadBuildXml(xml, buildName);
       }
 
       try {

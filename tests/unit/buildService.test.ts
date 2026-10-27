@@ -97,6 +97,13 @@ describe('BuildService', () => {
       expect(build.Build?.ascendClassName).toBe('Deadeye');
     });
 
+    it('should read a build named without the .xml suffix', async () => {
+      await fs.writeFile(path.join(tempDir, 'suffixless.xml'), sampleBuild);
+
+      const build = await buildService.readBuild('suffixless');
+      expect(build.Build?.className).toBe('Ranger');
+    });
+
     it('should cache build after first read', async () => {
       await fs.writeFile(path.join(tempDir, 'cached.xml'), sampleBuild);
 

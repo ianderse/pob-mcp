@@ -1,10 +1,8 @@
 import type { BuildService } from "../services/buildService.js";
 import type { ValidationService } from "../services/validationService.js";
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
-import fs from "fs/promises";
-import path from "path";
 import { wrapHandler } from "../utils/errorHandling.js";
-import { sanitizeBuildName } from "../utils/pathSanitizer.js";
+import { readNamedBuild } from "../utils/namedBuild.js";
 
 export interface ValidationHandlerContext {
   buildService: BuildService;
@@ -28,57 +26,55 @@ export async function handleValidateBuild(
   let luaStats;
   const buildName = args?.build_name;
 
+  // A named build must exist. Checked before touching the Lua bridge so the error
+  // is the same whether or not a bridge is running, and so a miss can never fall
+  // through to whatever build happens to be in memory.
+  const namedBuildXml = buildName ? await readNamedBuild(buildName, context.pobDirectory) : undefined;
+
   // Try to get Lua bridge stats (works for both file-loaded and in-memory builds)
   let luaFlaskImmunities: { bleed: boolean; freeze: boolean; poison: boolean; curse: boolean } | null = null;
   if (getLuaClient) {
     const luaClient = getLuaClient();
     if (luaClient) {
       try {
-        // If a build name is provided and file exists, load it only if:
-        // - no build is currently loaded, OR
-        // - the same build is already loaded (safe reload)
-        // Never replace a *different* in-memory build to avoid data loss.
-        if (buildName && context.pobDirectory) {
-          let shouldLoad = true;
+        let otherBuildInMemory = false;
+        if (namedBuildXml !== undefined && buildName) {
           try {
             const info = await luaClient.getBuildInfo();
             const loadedName: string = info?.name ?? '';
             const requested = buildName.replace(/\.xml$/i, '');
             const loaded    = loadedName.replace(/\.xml$/i, '');
-            if (loaded && loaded !== requested) {
-              shouldLoad = false; // different build in memory — skip
-            }
+            otherBuildInMemory = Boolean(loaded) && loaded !== requested;
           } catch { /* no build loaded — safe to load */ }
 
-          if (shouldLoad) {
-            try {
-              const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
-              const buildXml = await fs.readFile(buildPath, 'utf-8');
-              await luaClient.loadBuildXml(buildXml, buildName);
-            } catch {
-              // File doesn't exist — use already-loaded in-memory build
-            }
+          if (!otherBuildInMemory) {
+            await luaClient.loadBuildXml(namedBuildXml, buildName);
           }
         }
-        luaStats = await luaClient.getStats();
+        // A different in-memory build is never replaced, to protect unsaved work,
+        // but neither its stats nor its flask immunities belong to the requested
+        // build. Let the XML below supply both when another build is loaded.
+        if (!otherBuildInMemory) {
+          luaStats = await luaClient.getStats();
 
-        // Get flask immunities from Lua bridge (more reliable than XML slot parsing)
-        try {
-          const items = await (luaClient as any).getItems();
-          if (Array.isArray(items)) {
-            const flaskItems = items.filter((it: any) =>
-              it.slot && it.slot.startsWith('Flask') && it.raw
-            );
-            const allFlaskText = flaskItems.map((it: any) => (it.raw || '').toLowerCase()).join(' ');
-            luaFlaskImmunities = {
-              bleed: allFlaskText.includes('bleed') || allFlaskText.includes('corrupted blood'),
-              freeze: allFlaskText.includes('freeze') || allFlaskText.includes('chill'),
-              poison: allFlaskText.includes('poison'),
-              curse: allFlaskText.includes('curse'),
-            };
+          // Get flask immunities from the same build as the live stats.
+          try {
+            const items = await (luaClient as any).getItems();
+            if (Array.isArray(items)) {
+              const flaskItems = items.filter((it: any) =>
+                it.slot && it.slot.startsWith('Flask') && it.raw
+              );
+              const allFlaskText = flaskItems.map((it: any) => (it.raw || '').toLowerCase()).join(' ');
+              luaFlaskImmunities = {
+                bleed: allFlaskText.includes('bleed') || allFlaskText.includes('corrupted blood'),
+                freeze: allFlaskText.includes('freeze') || allFlaskText.includes('chill'),
+                poison: allFlaskText.includes('poison'),
+                curse: allFlaskText.includes('curse'),
+              };
+            }
+          } catch {
+            // Flask immunity check via Lua unavailable — fall back to XML parsing
           }
-        } catch {
-          // Flask immunity check via Lua unavailable — fall back to XML parsing
         }
       } catch {
         // Lua stats unavailable

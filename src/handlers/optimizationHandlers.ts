@@ -5,7 +5,8 @@ import type { OptimizationConstraints } from "../types/optimization.js";
 import fs from "fs/promises";
 import { analyzeDefenses, formatDefensiveAnalysis } from "../defensiveAnalyzer.js";
 import { wrapHandler } from "../utils/errorHandling.js";
-import { sanitizeBuildName } from "../utils/pathSanitizer.js";
+import { resolveBuildFile } from "../utils/pathSanitizer.js";
+import { readNamedBuild } from "../utils/namedBuild.js";
 
 /** PoB's blank level 1 character: 60 Life, no Energy Shield, no Ward. */
 const BLANK_CHARACTER_POOL = 60;
@@ -49,7 +50,7 @@ export async function handleAnalyzeDefenses(
     } catch { /* no build loaded yet */ }
 
     if (needsLoad) {
-      const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
+      const buildPath = resolveBuildFile(buildName, context.pobDirectory);
       const buildXml = await fs.readFile(buildPath, 'utf-8');
       await luaClient.loadBuildXml(buildXml, buildName);
     }
@@ -115,13 +116,8 @@ export async function handleSuggestOptimalNodes(
     // Load build from disk if buildName refers to an existing file, otherwise
     // assume a build is already loaded in the Lua bridge (in-memory workflow)
     if (buildName) {
-      const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
-      try {
-        const buildXml = await fs.readFile(buildPath, 'utf-8');
-        await luaClient.loadBuildXml(buildXml, buildName);
-      } catch {
-        // Build file not found — use whichever build is currently loaded in Lua bridge
-      }
+      const buildXml = await readNamedBuild(buildName, context.pobDirectory);
+      await luaClient.loadBuildXml(buildXml, buildName);
     }
 
     const points = pointsAvailable || 10;
@@ -280,13 +276,8 @@ export async function handleOptimizeTree(
 
     // Load build from disk if it exists, otherwise use the currently loaded Lua build
     if (buildName) {
-      const buildPath = sanitizeBuildName(buildName, context.pobDirectory);
-      try {
-        const buildXml = await fs.readFile(buildPath, 'utf-8');
-        await luaClient.loadBuildXml(buildXml, buildName);
-      } catch {
-        // Build file not found — use whichever build is currently loaded in Lua bridge
-      }
+      const buildXml = await readNamedBuild(buildName, context.pobDirectory);
+      await luaClient.loadBuildXml(buildXml, buildName);
     }
 
     const points = maxPoints || 10;
