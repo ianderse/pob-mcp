@@ -1,11 +1,14 @@
-// Deep end-to-end MCP smoke test: full tool surface against a stock PoB checkout.
-// Usage: POB_PATH=/path/to/PathOfBuilding/src node tests/smoke/mcp-full.mjs
+// Deep end-to-end MCP smoke test: full tool surface against an unmodified PoB.
+// Usage: node tests/smoke/mcp-full.mjs   (set POB_PATH only to force a checkout)
 import { cp, mkdtemp, rm } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { smokePoBSrc } from './pobSource.mjs';
 
-if (!process.env.POB_PATH && !process.env.POB_FORK_PATH) throw new Error('POB_PATH must point to a stock PoB src directory.');
+// The server resolves the engine itself; fail here so a missing PoB reads as
+// a missing PoB rather than as a tool call timing out.
+smokePoBSrc();
 const buildsDir = await mkdtemp(join(tmpdir(), 'pob-mcp-full-'));
 await cp(resolve('example-build.xml'), join(buildsDir, 'example.xml'));
 const child = spawn('node', [resolve('build/index.js')], {

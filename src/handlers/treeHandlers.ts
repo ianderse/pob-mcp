@@ -381,10 +381,22 @@ export async function handleGetPassiveUpgrades(
   }
 
   // Step 3: search for notable candidates
-  const seen = new Set<string>();
-  const candidates: any[] = [];
+  // search_nodes matches across the whole tree, which includes every other
+  // class's ascendancy. Those can never be allocated by this build, so drop
+  // them before scoring rather than spending a simulation on each.
+  const ownAscendancy = (await luaClient.getBuildInfo())?.ascendClassName ?? '';
+  const isSimulatable = (node: any): boolean => {
+    const ascendancy = node.ascendancy ?? node.ascendancyName ?? '';
+    const isForeignAscendancy = ascendancy !== '' && ascendancy !== ownAscendancy;
+    const isMastery = node.isMastery === true || node.type === 'Mastery';
+    // Blight notables sit off the tree entirely and are reached by anointing an
+    // amulet, never by spending a passive point. find_best_anointment covers them.
+    const isAnointOnly = node.isBlighted === true;
+    return !isForeignAscendancy && !isMastery && !isAnointOnly;
+  };
 
-  for (const keyword of keywords.slice(0, 4)) {
+  // One failed keyword should narrow the search, not sink the whole suggestion.
+  const searchNotables = async (keyword: string): Promise<any[]> => {
     try {
       const results = await luaClient.searchNodes({
         keyword,
@@ -392,17 +404,25 @@ export async function handleGetPassiveUpgrades(
         maxResults: 15,
         includeAllocated: false,
       });
-      if (results && results.nodes) {
-        for (const node of results.nodes) {
-          const id = String(node.id);
-          if (!seen.has(id)) {
-            seen.add(id);
-            candidates.push(node);
-          }
-        }
-      }
-    } catch { /* skip failed searches */ }
-  }
+      return results?.nodes ?? [];
+    } catch {
+      return [];
+    }
+  };
+
+  const uniqueById = (nodes: any[]): any[] =>
+    [...new Map(nodes.map((node) => [String(node.id), node])).values()];
+
+  // The stdio bridge rejects concurrent requests, so these must run in
+  // sequence; the accumulator keeps that ordering without mutating state.
+  const searched = await keywords.slice(0, 4).reduce<Promise<any[]>>(
+    async (acc, keyword) => [...(await acc), ...(await searchNotables(keyword))],
+    Promise.resolve([]),
+  );
+
+  const distinct = uniqueById(searched);
+  const candidates = distinct.filter(isSimulatable);
+  const skippedForeign = distinct.length - candidates.length;
 
   if (candidates.length === 0) {
     return {
@@ -460,6 +480,9 @@ export async function handleGetPassiveUpgrades(
     '',
     `Base DPS: ${Math.round(baseDPS).toLocaleString()}  |  Base EHP: ${Math.round(baseEHP).toLocaleString()}`,
     `Evaluated ${candidates.length} candidate notables, showing top ${top.length}:`,
+    ...(skippedForeign > 0
+      ? [`(skipped ${skippedForeign} node(s) this build cannot allocate)`]
+      : []),
     '',
   ];
 
