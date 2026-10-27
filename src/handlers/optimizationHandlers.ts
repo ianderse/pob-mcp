@@ -7,6 +7,9 @@ import { analyzeDefenses, formatDefensiveAnalysis } from "../defensiveAnalyzer.j
 import { wrapHandler } from "../utils/errorHandling.js";
 import { sanitizeBuildName } from "../utils/pathSanitizer.js";
 
+/** PoB's blank level 1 character: 60 Life, no Energy Shield, no Ward. */
+const BLANK_CHARACTER_POOL = 60;
+
 export interface OptimizationHandlerContext {
   buildService: BuildService;
   treeService: TreeService;
@@ -54,9 +57,9 @@ export async function handleAnalyzeDefenses(
     // Get stats from PoB
     const stats = await luaClient.getStats();
 
-    // Validate that we have meaningful stats (not empty/default state)
-    const life = stats.Life || 0;
-    if (life <= 60) {
+    // Chaos Inoculation sets Life to 1 and carries the pool as Energy Shield.
+    const effectivePool = (stats.Life || 0) + (stats.EnergyShield || 0) + (stats.Ward || 0);
+    if (effectivePool <= BLANK_CHARACTER_POOL) {
       throw new Error(
         `Build "${buildName}" appears to be in default/empty state. The build may not have loaded correctly.`
       );
