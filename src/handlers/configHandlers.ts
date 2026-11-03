@@ -4,7 +4,7 @@ import path from 'path';
 import { wrapHandler } from "../utils/errorHandling.js";
 import { sanitizeBuildName } from "../utils/pathSanitizer.js";
 
-export interface ConfigHandlerContext {
+interface ConfigHandlerContext {
   getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }

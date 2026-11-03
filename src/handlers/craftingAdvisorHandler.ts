@@ -3,17 +3,17 @@ import type { PoeNinjaClient } from '../services/poeNinjaClient.js';
 import { fetchBaseModData } from '../services/craftingDataService.js';
 import { wrapHandler } from '../utils/errorHandling.js';
 
-export interface CraftingAdvisorContext {
+interface CraftingAdvisorContext {
   getLuaClient: () => PoBLuaApiClient | null;
   ninjaClient: PoeNinjaClient;
 }
 
-export interface CraftingResponseInput {
+interface CraftingResponseInput {
   base: string;
   slot: string;
   desiredMods: string[];
   modData: string;
-  currencyRates: { chaos: number; divine: number };
+  currencyRates: { chaos: number; divine: number; live: boolean };
   buildContext: Record<string, any> | null;
   ilvl?: number;
   budget?: 'low' | 'medium' | 'high';
@@ -65,7 +65,7 @@ export function buildCraftingResponse(input: CraftingResponseInput): string {
   }
 
   text += `## Currency Rates\n`;
-  text += `- 1 Divine Orb = ${currencyRates.divine} Chaos Orb\n\n`;
+  text += `- 1 Divine Orb = ${currencyRates.divine} Chaos Orb${currencyRates.live ? '' : '  ⚠ fallback rate — poe.ninja was unavailable; verify before costing the craft'}\n\n`;
 
   text += CRAFTING_METHODS + '\n';
 
@@ -139,13 +139,13 @@ export async function handleSuggestCrafting(
       };
     }
 
-    let currencyRates = { chaos: 1, divine: 200 };
+    let currencyRates = { chaos: 1, divine: 200, live: false };
     try {
       const rateMap = await context.ninjaClient.getCurrencyExchangeMap(league);
       const divineRate = rateMap.get('Divine Orb');
-      if (divineRate) currencyRates = { chaos: 1, divine: Math.round(divineRate) };
+      if (divineRate) currencyRates = { chaos: 1, divine: Math.round(divineRate), live: true };
     } catch {
-      // poe.ninja unavailable — use fallback rates
+      // poe.ninja unavailable — use fallback rates (labelled as such in the response)
     }
 
     let modData = '';

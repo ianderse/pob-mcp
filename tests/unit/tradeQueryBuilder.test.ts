@@ -11,4 +11,18 @@ describe('TradeQueryBuilder', () => {
     const query = new TradeQueryBuilder().applyOptions({ league: 'Standard', maxPrice: 30, priceCurrency: 'exalted' }).build();
     expect(query.query.filters?.trade_filters?.filters?.price).toEqual({ min: undefined, max: 30, option: 'exalted' });
   });
+
+  const rarityCases = [
+    ['rare', 'nonunique'],
+    ['magic', 'nonunique'],
+    ['normal', 'nonunique'],
+    ['unique', 'unique'],
+    ['any', 'any'],
+  ] as const;
+  for (const [rarity, option] of rarityCases) {
+    it(`translates rarity ${rarity} to the API option ${option}`, () => {
+      const query = new TradeQueryBuilder().withRarity(rarity).build();
+      expect(query.query.filters?.type_filters?.filters?.rarity).toEqual({ option });
+    });
+  }
 });

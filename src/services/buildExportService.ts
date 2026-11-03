@@ -6,27 +6,27 @@ import path from "path";
 import type { PoBBuild, SnapshotMetadata } from "../types.js";
 import { buildFileName, resolveBuildFile, sanitizeBuildName } from "../utils/pathSanitizer.js";
 
-export interface ExportOptions {
+interface ExportOptions {
   outputName: string;
   outputDirectory?: string;
   overwrite?: boolean;
   notes?: string;
 }
 
-export interface SaveTreeOptions {
+interface SaveTreeOptions {
   buildName: string;
   nodes: string[];
   masteryEffects?: Record<string, number>;
   backup?: boolean;
 }
 
-export interface SnapshotOptions {
+interface SnapshotOptions {
   buildName: string;
   description?: string;
   tag?: string;
 }
 
-export interface RestoreOptions {
+interface RestoreOptions {
   buildName: string;
   snapshotId: string;
   backupCurrent?: boolean;

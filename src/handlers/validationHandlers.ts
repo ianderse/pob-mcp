@@ -5,7 +5,7 @@ import { wrapHandler } from "../utils/errorHandling.js";
 import { resolveBuildFile } from "../utils/pathSanitizer.js";
 import { readNamedBuild } from "../utils/namedBuild.js";
 
-export interface ValidationHandlerContext {
+interface ValidationHandlerContext {
   buildService: BuildService;
   validationService: ValidationService;
   pobDirectory?: string;

@@ -49,7 +49,7 @@ export interface ToolRouterDependencies {
   ensureLuaClient: () => Promise<void>;
 }
 
-export type ToolResponse = Promise<{
+type ToolResponse = Promise<{
   content: Array<{
     type: string;
     text: string;
@@ -663,7 +663,7 @@ export async function routeToolCall(
       return await handleGenerateShoppingList(shoppingContext, {
         build_name: args.build_name as string,
         league: args.league as string,
-        budget: args.budget as 'budget' | 'medium' | 'endgame' | undefined
+        budget: args.budget_tier as 'budget' | 'medium' | 'endgame' | undefined
       });
     }
 

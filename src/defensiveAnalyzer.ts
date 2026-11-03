@@ -13,7 +13,7 @@
  * An exceptional build has all 3, with strong values in each.
  */
 
-export interface DefensiveAnalysis {
+interface DefensiveAnalysis {
   resistances: ResistanceAnalysis;
   lifePool: LifePoolAnalysis;
   avoidance: AvoidanceAnalysis;
@@ -25,7 +25,7 @@ export interface DefensiveAnalysis {
   defensiveLayerSummary: string[];
 }
 
-export interface ResistanceAnalysis {
+interface ResistanceAnalysis {
   fire: { value: number; status: 'capped' | 'overcapped' | 'uncapped' };
   cold: { value: number; status: 'capped' | 'overcapped' | 'uncapped' };
   lightning: { value: number; status: 'capped' | 'overcapped' | 'uncapped' };
@@ -33,7 +33,7 @@ export interface ResistanceAnalysis {
   allCapped: boolean;
 }
 
-export interface LifePoolAnalysis {
+interface LifePoolAnalysis {
   life: number;
   energyShield: number;
   total: number;
@@ -42,7 +42,7 @@ export interface LifePoolAnalysis {
   recommendation?: string;
 }
 
-export interface AvoidanceAnalysis {
+interface AvoidanceAnalysis {
   spellSuppression: number;
   dodge: number;
   spellDodge: number;
@@ -53,7 +53,7 @@ export interface AvoidanceAnalysis {
   summary: string;
 }
 
-export interface MitigationAnalysis {
+interface MitigationAnalysis {
   armour: { value: number; effectiveness: string };
   evasion: { value: number; effectiveness: string };
   block: { value: number; effectiveness: string };
@@ -63,7 +63,7 @@ export interface MitigationAnalysis {
   overall: 'excellent' | 'good' | 'fair' | 'poor' | 'none';
 }
 
-export interface SustainAnalysis {
+interface SustainAnalysis {
   lifeRegen: { value: number; percentOfMax: number; status: string };
   manaRegen: { value: number; status: string };
   esRecharge: { value: number; status: string };
@@ -71,7 +71,7 @@ export interface SustainAnalysis {
   overall: 'excellent' | 'good' | 'adequate' | 'poor';
 }
 
-export interface Recommendation {
+interface Recommendation {
   priority: 'critical' | 'high' | 'medium' | 'low';
   category: 'resistance' | 'life' | 'mitigation' | 'sustain' | 'avoidance' | 'layers';
   issue: string;
@@ -198,7 +198,7 @@ function analyzeLifePool(stats: Record<string, any>): LifePoolAnalysis {
     const pdr = getStat('PhysicalDamageReduction');
     // Approximate EHP: raw HP / (1 - mitigation%), capped at 5× total
     if (pdr > 0 && pdr < 100) {
-      ehp = Math.round(total / (1 - pdr / 100));
+      ehp = Math.min(total * 5, Math.round(total / (1 - pdr / 100)));
     } else {
       ehp = total;
     }
@@ -417,23 +417,24 @@ function analyzeSustain(stats: Record<string, any>): SustainAnalysis {
 
 function generateResistanceRecommendations(analysis: ResistanceAnalysis): Recommendation[] {
   const recs: Recommendation[] = [];
-  const uncapped: string[] = [];
-  if (analysis.fire.status === 'uncapped') uncapped.push(`Fire (${analysis.fire.value}%)`);
-  if (analysis.cold.status === 'uncapped') uncapped.push(`Cold (${analysis.cold.value}%)`);
-  if (analysis.lightning.status === 'uncapped') uncapped.push(`Lightning (${analysis.lightning.value}%)`);
+  const uncappedVals: Array<{ label: string; value: number }> = [];
+  if (analysis.fire.status === 'uncapped') uncappedVals.push({ label: 'Fire', value: analysis.fire.value });
+  if (analysis.cold.status === 'uncapped') uncappedVals.push({ label: 'Cold', value: analysis.cold.value });
+  if (analysis.lightning.status === 'uncapped') uncappedVals.push({ label: 'Lightning', value: analysis.lightning.value });
 
-  if (uncapped.length > 0) {
-    const needed = uncapped.map((r) => {
-      const match = r.match(/\((-?\d+)%\)/);
-      const current = match ? parseInt(match[1]) : 0;
-      return 75 - current;
-    });
+  if (uncappedVals.length > 0) {
+    // Work from the numeric values directly — re-parsing the display string
+    // dropped decimals (Fire 62.5% read as 0 → "need +75%" instead of +12.5).
+    const uncapped = uncappedVals.map((v) => `${v.label} (${v.value}%)`);
+    const needed = uncappedVals.map((v) => 75 - v.value);
+    const gap = Math.max(...needed);
+    const gapText = Number.isInteger(gap) ? String(gap) : gap.toFixed(1);
     recs.push({
       priority: 'critical',
       category: 'resistance',
       issue: `Uncapped resistances: ${uncapped.join(', ')}`,
       solutions: [
-        `Need +${Math.max(...needed)}% total to cap all`,
+        `Need +${gapText}% total to cap all`,
         'Check gear for resistance upgrades',
         'Consider passive tree nodes (Diamond Skin, prismatic nodes)',
         'Use Purity auras if desperate',

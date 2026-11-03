@@ -6,10 +6,10 @@
 
 import { PoBBuild } from '../types.js';
 
-export type UpgradePriority = 'critical' | 'high' | 'medium' | 'low';
+type UpgradePriority = 'critical' | 'high' | 'medium' | 'low';
 export type BudgetTier = 'budget' | 'medium' | 'endgame';
 
-export interface ShoppingListItem {
+interface ShoppingListItem {
   slot: string;
   priority: UpgradePriority;
   reason: string[];
@@ -31,7 +31,7 @@ export interface ShoppingListItem {
   };
 }
 
-export interface ItemRecommendation {
+interface ItemRecommendation {
   searchCriteria: string;
   estimatedPrice: {
     min: number;
@@ -42,7 +42,7 @@ export interface ItemRecommendation {
   notes?: string;
 }
 
-export interface ShoppingList {
+interface ShoppingList {
   buildName: string;
   league: string;
   summary: {
@@ -141,8 +141,13 @@ export class ShoppingListService {
     const items = (build as any).Items;
     if (!items || !items.ItemSet) return equipped;
 
-    const itemSet = items.ItemSet;
-    if (!itemSet.Slot) return equipped;
+    // fast-xml-parser returns an ARRAY whenever a build has >1 gear set —
+    // that is almost always. Pick the active set, else the first.
+    const itemSetRaw = items.ItemSet;
+    const itemSets: any[] = Array.isArray(itemSetRaw) ? itemSetRaw : [itemSetRaw];
+    const activeSetId = String(items.activeItemSet ?? itemSets[0]?.id ?? '1');
+    const itemSet = itemSets.find((s: any) => String(s.id) === activeSetId) ?? itemSets[0];
+    if (!itemSet?.Slot) return equipped;
 
     // Build item map
     const itemMap = new Map<string, string>();
@@ -228,7 +233,9 @@ export class ShoppingListService {
 
       if (trimmed.startsWith('Rarity:')) {
         item.rarity = trimmed.replace('Rarity:', '').trim();
-      } else if (!item.name && trimmed && !trimmed.startsWith('Rarity:')) {
+      } else if (!item.name && trimmed && !trimmed.startsWith('Rarity:') && !trimmed.startsWith('Item Class:') && !trimmed.startsWith('----')) {
+        // PoB item text starts "Item Class: …\nRarity: …\n<name>" — the name
+        // is the FIRST line after Rarity; "Item Class:" is metadata.
         item.name = trimmed;
       } else if (trimmed.match(/\+\d+ to maximum Life/)) {
         const match = trimmed.match(/\+(\d+) to maximum Life/);

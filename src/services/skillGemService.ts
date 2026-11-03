@@ -1,6 +1,6 @@
 import type { PoBBuild } from "../types.js";
 
-export interface GemData {
+interface GemData {
   name: string;
   type: "active" | "support";
   tags: string[];
@@ -19,7 +19,7 @@ export interface GemData {
   cost_tier?: "common" | "uncommon" | "rare" | "very_rare"; // Relative cost
 }
 
-export interface ArchetypeTemplate {
+interface ArchetypeTemplate {
   name: string;
   description: string;
   required_tags: string[];
@@ -31,7 +31,7 @@ export interface ArchetypeTemplate {
   avoid_supports: string[];
 }
 
-export interface GemAnalysis {
+interface GemAnalysis {
   activeSkill: {
     name: string;
     level: number;
@@ -53,7 +53,7 @@ export interface GemAnalysis {
   maxLinks: number;
 }
 
-export interface GemSuggestion {
+interface GemSuggestion {
   gem: string;
   replaces?: string;
   dpsIncrease: number; // Estimated percentage
@@ -422,9 +422,13 @@ export class SkillGemService {
       const gemData = this.gemDatabase.get(support);
       if (gemData?.anti_synergies) {
         for (const antiSynergy of gemData.anti_synergies) {
+          // The data mixes tags ("Spell", "Melee") and short gem names
+          // ("Elemental Focus" = "Elemental Focus Support") in this field —
+          // exact/name+Support/tag matching or these entries never fire.
           const hasConflict = supportNames.some((s) => {
+            if (s === antiSynergy || s === `${antiSynergy} Support`) return true;
             const otherGem = this.gemDatabase.get(s);
-            return otherGem?.tags.includes(antiSynergy);
+            return otherGem?.tags.includes(antiSynergy) ?? false;
           });
           if (hasConflict) {
             issues.push(`${support} conflicts with other gems (${antiSynergy})`);

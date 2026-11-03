@@ -503,10 +503,15 @@ function M.calc_with(params)
       build.spec.masterySelections[tonumber(nodeId)] = effectId
     end
   end
-  local out = calcFunc(override, params and params.useFullDPS)
-  -- Restore original mastery selections
+  local out, calcErr = pcall(calcFunc, override, params and params.useFullDPS)
+  -- Restore original mastery selections on EVERY path: if calcFunc raised and
+  -- we skipped the restore, the next get_tree/save_build would report and
+  -- persist masteries the caller never committed.
   if origMastery then
     build.spec.masterySelections = origMastery
+  end
+  if not out then
+    return nil, 'calc_with failed: ' .. tostring(calcErr)
   end
   return M.sanitize_for_json(out), M.sanitize_for_json(baseOut)
 end
@@ -1006,8 +1011,9 @@ function M.save_build(params)
   if not xml then return nil, 'failed to compose xml' end
   local f, ferr = io.open(params.path, 'w')
   if not f then return nil, 'failed to open file: ' .. tostring(ferr) end
-  f:write(xml)
+  local ok, werr = f:write(xml)
   f:close()
+  if not ok then return nil, 'failed to write file: ' .. tostring(werr) end
   return { path = params.path, size = #xml }
 end
 

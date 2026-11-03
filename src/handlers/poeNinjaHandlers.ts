@@ -211,6 +211,7 @@ export async function handleCalculateTradingProfit(
     output += `Step-by-Step Calculation:\n\n`;
     output += `Start: ${currentAmount.toFixed(4)} ${currentCurrency}\n\n`;
 
+    let chainBroken = false;
     for (let i = 1; i < currency_chain.length; i++) {
       const toCurrency = currency_chain[i];
 
@@ -219,10 +220,12 @@ export async function handleCalculateTradingProfit(
 
       if (!fromRate) {
         output += `❌ Error: Currency "${currentCurrency}" not found in rate data.\n`;
+        chainBroken = true;
         break;
       }
       if (!toRate) {
         output += `❌ Error: Currency "${toCurrency}" not found in rate data.\n`;
+        chainBroken = true;
         break;
       }
 
@@ -240,6 +243,13 @@ export async function handleCalculateTradingProfit(
 
     const finalCurrency = currency_chain[currency_chain.length - 1];
     const startCurrency = currency_chain[0];
+
+    if (chainBroken) {
+      // The chain never reached finalCurrency; printing a "Result" (and a
+      // round-trip profit verdict) for an incomplete chain is fabrication.
+      output += `\nChain incomplete: conversion stopped at ${currentCurrency}. No final result.\n`;
+      return { content: [{ type: 'text', text: output }] };
+    }
 
     output += `Result: ${currentAmount.toFixed(4)} ${finalCurrency}\n\n`;
 

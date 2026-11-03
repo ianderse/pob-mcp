@@ -31,6 +31,7 @@ for (const sf of program.getSourceFiles()) {
   if (f.includes('node_modules')) continue;
   const rel = relative(ROOT, f);
   if (!rel.startsWith('src/') && !rel.startsWith('tests/')) continue;
+  const bump = (k) => imported.set(k, (imported.get(k) || 0) + 1);
   ts.forEachChild(sf, (node) => {
     let spec, consume; // consume(clause)
     if (ts.isImportDeclaration(node) && node.moduleSpecifier) {
@@ -63,6 +64,23 @@ for (const sf of program.getSourceFiles()) {
       consume(node.exportClause);
     }
   });
+
+  // Inline `import('./mod.js').Name` type queries consume the named export
+  // but are invisible to the declaration walk above.
+  const visitTypeQueries = (node) => {
+    if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && node.argument.literal && ts.isStringLiteral(node.argument.literal)) {
+      const spec = node.argument.literal.text;
+      if (spec.startsWith('.') && node.qualifier) {
+        const abs = resolve(dirname(sf.fileName), spec).replace(/\.js$/, '.ts');
+        const name = ts.isIdentifier(node.qualifier)
+          ? node.qualifier.text
+          : ts.isPropertyAccessExpression(node.qualifier) ? node.qualifier.name.text : undefined;
+        if (name) bump(`${abs}::${name}`);
+      }
+    }
+    node.forEachChild(visitTypeQueries);
+  };
+  visitTypeQueries(sf);
 }
 
 const dead = [];

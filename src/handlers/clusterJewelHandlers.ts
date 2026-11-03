@@ -18,7 +18,7 @@ interface ClusterJewelContext {
   ninjaClient?: PoeNinjaClient;
 }
 
-export type ClusterJewelSize = 'Large' | 'Medium' | 'Small';
+type ClusterJewelSize = 'Large' | 'Medium' | 'Small';
 
 /**
  * Search for cluster jewels with specific properties

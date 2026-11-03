@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 
 /** Where the Lua engine lives and how to reach its modules. */
-export interface PoBLayout {
+interface PoBLayout {
   kind: "checkout" | "macos-app";
   /** Directory holding HeadlessWrapper.lua; the cwd for the Lua process. */
   src: string;

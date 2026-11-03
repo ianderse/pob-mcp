@@ -56,8 +56,9 @@ export class TreeService {
     const url = `https://raw.githubusercontent.com/PathOfBuildingCommunity/PathOfBuilding/master/src/TreeData/${version}/tree.lua`;
 
     return new Promise((resolve, reject) => {
-      https.get(url, (response) => {
+      const req = https.get(url, (response) => {
         if (response.statusCode === 404) {
+          response.resume(); // drain so the socket can be reused
           // Version not found, try fallback to 3_26
           console.error(`[Tree Data] Version ${version} not found, falling back to 3_26`);
           if (version !== "3_26") {
@@ -68,6 +69,7 @@ export class TreeService {
           return;
         }
         if (response.statusCode !== 200) {
+          response.resume();
           reject(new Error(`Failed to fetch tree data: HTTP ${response.statusCode}`));
           return;
         }
@@ -89,6 +91,8 @@ export class TreeService {
       }).on('error', (error) => {
         reject(new Error(`Network error fetching tree data: ${error.message}`));
       });
+      // ~20 MB tree file: a stalled connection must not hang the caller forever.
+      req.setTimeout(120_000, () => req.destroy(new Error(`Timeout fetching tree data for ${version}`)));
     });
   }
 

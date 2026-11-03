@@ -10,7 +10,7 @@
 
 import { ItemListing } from '../types/tradeTypes.js';
 
-export interface StatExtraction {
+interface StatExtraction {
   life: number;
   es: number;
   armour: number;
@@ -28,7 +28,7 @@ export interface StatExtraction {
   totalDPS?: number;
 }
 
-export interface CostBenefitMetrics {
+interface CostBenefitMetrics {
   // Efficiency metrics (stat per chaos)
   lifePerChaos: number;
   esPerChaos: number;
@@ -56,7 +56,7 @@ export interface CostBenefitMetrics {
   warnings: string[];
 }
 
-export interface ItemValueAnalysis {
+interface ItemValueAnalysis {
   listing: ItemListing;
   stats: StatExtraction;
   metrics: CostBenefitMetrics;
@@ -126,6 +126,16 @@ export class CostBenefitAnalyzer {
       dexterity: this.extractStat(allMods, ['to Dexterity']),
       intelligence: this.extractStat(allMods, ['to Intelligence']),
     };
+
+    // "+X% to all Elemental Resistances" and "+X% to all Resistances" match
+    // none of the per-element patterns above; without folding them in, tri-res
+    // items scored totalResist 0 and every trade list mis-ranked them.
+    const allElemental = this.extractStat(allMods, ['to all Elemental Resistances']);
+    const allResist = this.extractStat(allMods, ['to all Resistances']);
+    stats.fireResist += allElemental + allResist;
+    stats.coldResist += allElemental + allResist;
+    stats.lightningResist += allElemental + allResist;
+    stats.chaosResist += allResist;
 
     // Calculate total resist
     stats.totalResist = stats.fireResist + stats.coldResist + stats.lightningResist + stats.chaosResist;

@@ -7,9 +7,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-export MIN_TESTS=414
-# Re-anchored 2026-11-03 after dead-code wave (see log_experiment #2 asi)
-export FLOOR_ST=49.8 FLOOR_BR=38.5 FLOOR_LN=51.2 FLOOR_FN=56.0
+export MIN_TESTS=430
+# Honest all-files floors 2026-11-03. Previous "50.06%" readings were bogus:
+# roots:['tests'] kept src/ out of the haste map, so untested files never
+# entered coverage. roots now includes src; real numbers are ~40/30/41/46.
+export FLOOR_ST=39.8 FLOOR_BR=29.5 FLOOR_LN=41.2 FLOOR_FN=46.0
 
 npx tsc --noEmit
 OUT=$(npx jest --coverage --coverageThreshold='{}' --coverageReporters=json-summary --silent --reporters=summary 2>&1 | tail -5)

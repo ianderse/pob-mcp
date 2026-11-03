@@ -5,7 +5,7 @@ import { wrapHandler } from "../utils/errorHandling.js";
 import { buildFileName, resolveBuildFile } from "../utils/pathSanitizer.js";
 import type { BuildService } from "../services/buildService.js";
 
-export interface LuaHandlerContext {
+interface LuaHandlerContext {
   buildService?: Pick<BuildService, 'invalidateBuild'>;
   pobDirectory: string;
   luaEnabled: boolean;

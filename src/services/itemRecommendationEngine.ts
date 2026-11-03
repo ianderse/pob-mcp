@@ -14,7 +14,7 @@ import {
   ResistanceRequirements,
 } from '../types/tradeTypes.js';
 
-export interface UpgradeContext {
+interface UpgradeContext {
   currentItem?: {
     name: string;
     slot: string;
@@ -52,42 +52,6 @@ export class ItemRecommendationEngine {
   constructor(
     private tradeClient: TradeApiClient
   ) {}
-
-  /**
-   * Find item upgrades for a specific slot
-   */
-  async findUpgrades(
-    slot: string,
-    context: UpgradeContext
-  ): Promise<ItemRecommendation[]> {
-    const query = this.buildUpgradeQuery(slot, context);
-
-    // Search for items
-    const searchResult = await this.tradeClient.searchItems(context.league, query);
-
-    if (!searchResult.result || searchResult.result.length === 0) {
-      return [];
-    }
-
-    // Fetch up to 20 items for analysis
-    const itemIdsToFetch = searchResult.result.slice(0, Math.min(20, searchResult.result.length));
-    const items = await this.tradeClient.fetchItems(itemIdsToFetch, searchResult.id);
-
-    // Score and rank items
-    const recommendations = items.map((item, index) =>
-      this.scoreItem(item, index, context, searchResult.id)
-    );
-
-    // Sort by score descending
-    recommendations.sort((a, b) => b.score - a.score);
-
-    // Assign ranks
-    recommendations.forEach((rec, index) => {
-      rec.rank = index + 1;
-    });
-
-    return recommendations;
-  }
 
   /**
    * Find gear to cap resistances
@@ -247,152 +211,6 @@ export class ItemRecommendationEngine {
   }
 
   /**
-   * Score an item for upgrade potential
-   */
-  private scoreItem(
-    listing: ItemListing,
-    index: number,
-    context: UpgradeContext,
-    searchId: string
-  ): ItemRecommendation {
-    const item = listing.item;
-    const price = listing.listing.price?.amount || 0;
-
-    let score = 0;
-    const reasons: string[] = [];
-    let priority: 'high' | 'medium' | 'low' = 'medium';
-
-    // Extract item stats
-    const life = this.extractStat(item, 'life');
-    const es = this.extractStat(item, 'energy shield');
-    const resistances = this.extractResistances(item);
-
-    // Score based on build needs
-    if (context.buildNeeds.lifeNeeded && life > 0) {
-      const lifeGain = life - (context.currentItem?.life || 0);
-      if (lifeGain > 0) {
-        score += Math.min(30, lifeGain / 2);
-        reasons.push(`+${lifeGain} life over current item`);
-      }
-    }
-
-    if (context.buildNeeds.esNeeded && es > 0) {
-      const esGain = es - (context.currentItem?.es || 0);
-      if (esGain > 0) {
-        score += Math.min(30, esGain / 3);
-        reasons.push(`+${esGain} ES over current item`);
-      }
-    }
-
-    // Resistance scoring
-    if (context.buildNeeds.resistanceGaps) {
-      const totalResistGain = this.calculateResistanceGain(
-        resistances,
-        context.currentItem?.resistances || {},
-        context.buildNeeds.resistanceGaps
-      );
-      score += Math.min(40, totalResistGain);
-      if (totalResistGain > 0) {
-        reasons.push(`Improves resistances by ${totalResistGain}%`);
-      }
-    }
-
-    // Price factor
-    if (price <= context.budget.maxPricePerItem) {
-      score += 10;
-      reasons.push('Within budget');
-    } else {
-      score -= 20;
-      reasons.push('Over budget');
-    }
-
-    // Online seller bonus
-    if (listing.listing.account.online) {
-      score += 5;
-    }
-
-    // Determine priority
-    if (score >= 70) priority = 'high';
-    else if (score >= 50) priority = 'medium';
-    else priority = 'low';
-
-    const efficiency = price > 0 ? score / price : score;
-
-    return {
-      listing,
-      searchId,
-      score,
-      rank: index + 1,
-      reasons,
-      priority,
-      costBenefit: {
-        price,
-        currency: listing.listing.price?.currency || 'chaos',
-        lifeGain: life - (context.currentItem?.life || 0),
-        esGain: es - (context.currentItem?.es || 0),
-        resistGain: resistances,
-        efficiency,
-        pointsPerChaos: efficiency,
-      },
-    };
-  }
-
-  /**
-   * Build a trade query for item upgrades
-   */
-  private buildUpgradeQuery(slot: string, context: UpgradeContext) {
-    const builder = new TradeQueryBuilder();
-
-    // Map slot to item type
-    const slotTypeMap: Record<string, string> = {
-      'Weapon 1': 'Weapon',
-      'Weapon 2': 'Weapon',
-      'Body Armour': 'Body Armour',
-      'Helmet': 'Helmet',
-      'Gloves': 'Gloves',
-      'Boots': 'Boots',
-      'Amulet': 'Amulet',
-      'Ring 1': 'Ring',
-      'Ring 2': 'Ring',
-      'Belt': 'Belt',
-    };
-
-    const itemType = slotTypeMap[slot];
-    if (itemType && itemType !== 'Weapon') {
-      builder.withType(itemType);
-    }
-
-    // Apply budget
-    builder.withPriceRange(undefined, context.budget.maxPricePerItem);
-
-    // Add stat requirements
-    const stats: Array<{ id: string; min?: number }> = [];
-
-    if (context.buildNeeds.lifeNeeded) {
-      stats.push({
-        id: 'pseudo.pseudo_total_life',
-        min: Math.max(60, context.currentItem?.life || 0),
-      });
-    }
-
-    if (context.buildNeeds.esNeeded) {
-      stats.push({
-        id: 'pseudo.pseudo_total_energy_shield',
-        min: Math.max(40, context.currentItem?.es || 0),
-      });
-    }
-
-    if (stats.length > 0) {
-      builder.withStats(stats);
-    }
-
-    builder.withOnlineStatus('available');
-    builder.withSort('price', 'asc');
-
-    return builder.build();
-  }
-
-  /**
    * Build a query for resistance gear
    */
   private buildResistanceQuery(
@@ -433,27 +251,6 @@ export class ItemRecommendationEngine {
   // ========================================
   // Helper Methods
   // ========================================
-
-  private extractStat(item: any, statName: string): number {
-    // This is a simplified extraction - in real implementation,
-    // you'd parse the mods more carefully
-    const allMods = [
-      ...(item.explicitMods || []),
-      ...(item.implicitMods || []),
-    ];
-
-    for (const rawMod of allMods) {
-      const mod = getModText(rawMod);
-      if (mod.toLowerCase().includes(statName.toLowerCase())) {
-        const match = mod.match(/(\d+)/);
-        if (match) {
-          return parseInt(match[1], 10);
-        }
-      }
-    }
-
-    return 0;
-  }
 
   private extractResistances(item: any): {
     fire: number;
@@ -509,35 +306,5 @@ export class ItemRecommendationEngine {
     }
 
     return resistances;
-  }
-
-  private calculateResistanceGain(
-    newResists: { fire: number; cold: number; lightning: number; chaos: number },
-    currentResists: { fire?: number; cold?: number; lightning?: number; chaos?: number },
-    gaps: ResistanceRequirements
-  ): number {
-    let totalGain = 0;
-
-    if (gaps.fire > 0) {
-      const gain = newResists.fire - (currentResists.fire || 0);
-      totalGain += Math.max(0, Math.min(gain, gaps.fire));
-    }
-
-    if (gaps.cold > 0) {
-      const gain = newResists.cold - (currentResists.cold || 0);
-      totalGain += Math.max(0, Math.min(gain, gaps.cold));
-    }
-
-    if (gaps.lightning > 0) {
-      const gain = newResists.lightning - (currentResists.lightning || 0);
-      totalGain += Math.max(0, Math.min(gain, gaps.lightning));
-    }
-
-    if (gaps.chaos && gaps.chaos > 0) {
-      const gain = newResists.chaos - (currentResists.chaos || 0);
-      totalGain += Math.max(0, Math.min(gain, gaps.chaos));
-    }
-
-    return totalGain;
   }
 }

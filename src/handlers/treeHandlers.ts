@@ -4,13 +4,13 @@ import type { TreeComparison } from "../types.js";
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
 
-export interface TreeHandlerContext {
+interface TreeHandlerContext {
   buildService: BuildService;
   treeService: TreeService;
   getLuaClient?: () => PoBLuaApiClient | null;
 }
 
-export interface PassiveUpgradesContext {
+interface PassiveUpgradesContext {
   getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }

@@ -4,7 +4,7 @@
  * Fetches real-time currency rates and item prices from poe.ninja
  */
 
-export interface CurrencyRate {
+interface CurrencyRate {
   currencyTypeName: string;
   chaosEquivalent: number;
   pay?: {
@@ -21,7 +21,7 @@ export interface CurrencyRate {
 }
 
 // New API format (poe1/api/economy/exchange/current)
-export interface NewCurrencyLine {
+interface NewCurrencyLine {
   id: string;
   primaryValue: number;
   volumePrimaryValue?: number;
@@ -33,7 +33,7 @@ export interface NewCurrencyLine {
   };
 }
 
-export interface NewCurrencyItem {
+interface NewCurrencyItem {
   id: string;
   name: string;
   image: string;
@@ -41,7 +41,7 @@ export interface NewCurrencyItem {
   detailsId: string;
 }
 
-export interface NewCurrencyOverview {
+interface NewCurrencyOverview {
   core: {
     items: NewCurrencyItem[];
     rates: any;
@@ -52,7 +52,7 @@ export interface NewCurrencyOverview {
   items: NewCurrencyItem[];
 }
 
-export interface CurrencyOverview {
+interface CurrencyOverview {
   lines: CurrencyRate[];
   currencyDetails: Array<{
     id: number;
@@ -103,7 +103,7 @@ export function normalizeCurrencyOverview(data: unknown): CurrencyOverview {
   };
 }
 
-export interface ArbitrageOpportunity {
+interface ArbitrageOpportunity {
   chain: string[];
   profitPercent: number;
   startAmount: number;
@@ -140,32 +140,7 @@ export class PoeNinjaClient {
       headers: {
         'User-Agent': 'pob-mcp-server/1.0',
       },
-    });
-
-    if (!response.ok) {
-      throw new Error(`poe.ninja API request failed (${response.status}): ${await response.text()}`);
-    }
-
-    const data = normalizeCurrencyOverview(await response.json());
-    this.putInCache(cacheKey, data);
-    return data;
-  }
-
-  /**
-   * Get fragment rates for a league
-   */
-  async getFragmentRates(league: string): Promise<CurrencyOverview> {
-    const cacheKey = `fragment:${league}`;
-    const cached = this.getFromCache(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    const url = `${this.baseUrl}/overview?league=${encodeURIComponent(league)}&type=Fragment`;
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'pob-mcp-server/1.0',
-      },
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!response.ok) {
@@ -212,6 +187,7 @@ export class PoeNinjaClient {
       headers: {
         'User-Agent': 'pob-mcp-server/1.0',
       },
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!response.ok) {
@@ -396,12 +372,5 @@ export class PoeNinjaClient {
       data,
       timestamp: Date.now(),
     });
-  }
-
-  /**
-   * Clear the cache
-   */
-  clearCache(): void {
-    this.cache.clear();
   }
 }

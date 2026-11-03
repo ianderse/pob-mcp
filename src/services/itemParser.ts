@@ -52,13 +52,13 @@ const GAME_CATALYST = /^Quality \(([A-Za-z ]+) Modifiers\)$/;
 /** A rolled range such as `(1-1.5)` or `+(30-50)`. */
 const RANGE_VALUE = /([+-]?)\((-?\d+\.?\d*)-(-?\d+\.?\d*)\)/g;
 
-export type UnknownReason =
+type UnknownReason =
   | "unrecognised-key"
   | "unrecognised-tag"
   | "unresolved-variant-group"
   | "approximated-catalyst";
 
-export interface UnknownLine {
+interface UnknownLine {
   /** The line exactly as it appeared, colour codes intact. */
   line: string;
   reason: UnknownReason;
@@ -66,7 +66,7 @@ export interface UnknownLine {
   detail: string;
 }
 
-export interface ParsedModLine {
+interface ParsedModLine {
   /** Display text: tags stripped, ranges resolved, colour codes removed. */
   text: string;
   /** The line as stored, before tag stripping. */
@@ -87,7 +87,7 @@ export interface ParsedModLine {
   catalystScalar: number;
 }
 
-export interface ParsedItem {
+interface ParsedItem {
   rarity: string;
   name: string;
   base: string;

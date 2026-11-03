@@ -15,7 +15,7 @@ import { resolveBuildFile } from "../utils/pathSanitizer.js";
 import { readNamedBuild } from "../utils/namedBuild.js";
 import { activeSkillSet, asArray } from "../utils/xmlCollections.js";
 
-export interface AdvancedOptimizationContext {
+interface AdvancedOptimizationContext {
   buildService: BuildService;
   pobDirectory: string;
   getLuaClient: () => PoBLuaApiClient | null;

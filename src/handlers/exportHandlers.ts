@@ -4,7 +4,7 @@ import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import type { ExportContext } from "../utils/contextBuilder.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
-export interface ExportHandlerContext {
+interface ExportHandlerContext {
   buildService: BuildService;
   exportService: BuildExportService;
   luaClient?: PoBLuaApiClient;

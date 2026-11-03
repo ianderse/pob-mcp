@@ -1,7 +1,7 @@
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
-export interface JewelAdvisorContext {
+interface JewelAdvisorContext {
   getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }

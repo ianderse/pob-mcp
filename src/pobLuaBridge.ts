@@ -30,7 +30,7 @@ function missingLuaModuleMessage(moduleName: string): string {
   );
 }
 
-export interface PoBLuaApiOptions {
+interface PoBLuaApiOptions {
   cwd?: string;
   cmd?: string; // default: 'luajit'
   args?: string[]; // default: ['HeadlessWrapper.lua']
@@ -170,11 +170,6 @@ export class PoBLuaApiClient {
     });
 
     try {
-      // In Jest short-timeout scenarios, simulate missing ready banner to allow timeout test to pass
-      if (process.env.JEST_WORKER_ID && (this.options.timeoutMs ?? 0) <= 150) {
-        throw new Error("Failed to find valid ready banner");
-      }
-
       // Wait for ready banner (skip non-JSON lines like log messages)
       let ready: string = "";
       let attempts = 0;

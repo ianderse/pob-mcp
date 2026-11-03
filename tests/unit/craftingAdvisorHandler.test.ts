@@ -8,7 +8,7 @@ describe('buildCraftingResponse', () => {
       slot: 'helmet',
       desiredMods: ['maximum life', 'cold resistance'],
       modData: '=== poedb data ===\nsome mod info',
-      currencyRates: { chaos: 1, divine: 200 },
+      currencyRates: { chaos: 1, divine: 200, live: true },
       buildContext: null,
     });
     expect(result).toContain('Hubris Circlet');
@@ -20,7 +20,7 @@ describe('buildCraftingResponse', () => {
       slot: 'helmet',
       desiredMods: ['maximum life', 'cold resistance'],
       modData: '',
-      currencyRates: { chaos: 1, divine: 200 },
+      currencyRates: { chaos: 1, divine: 200, live: true },
       buildContext: null,
     });
     expect(result).toContain('maximum life');
@@ -33,7 +33,7 @@ describe('buildCraftingResponse', () => {
       slot: 'helmet',
       desiredMods: [],
       modData: '',
-      currencyRates: { chaos: 1, divine: 200 },
+      currencyRates: { chaos: 1, divine: 200, live: true },
       buildContext: { life: 3000, fireRes: 45, coldRes: 10 },
     });
     expect(result).toContain('Build context');
@@ -45,7 +45,7 @@ describe('buildCraftingResponse', () => {
       slot: 'helmet',
       desiredMods: [],
       modData: '',
-      currencyRates: { chaos: 1, divine: 200 },
+      currencyRates: { chaos: 1, divine: 200, live: true },
       buildContext: null,
     });
     expect(result).toContain('200');
@@ -119,5 +119,19 @@ describe('handleSuggestCrafting — graceful degradation', () => {
 
     expect(getItems).toHaveBeenCalled();
     expect(result.content[0].text).toContain('Crafting Advisor: Hubris Circlet (helmet)');
+  });
+});
+
+describe('fallback currency-rate disclosure', () => {
+  it('labels placeholder rates as fallback instead of presenting them as live market data', () => {
+    const text = buildCraftingResponse({
+      base: 'Hyaline Ring',
+      slot: 'Ring 1',
+      desiredMods: ['+8% to Fire Resistance'],
+      modData: '',
+      currencyRates: { chaos: 1, divine: 200, live: false },
+      buildContext: null,
+    });
+    expect(text).toContain('fallback rate');
   });
 });

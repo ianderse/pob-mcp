@@ -231,13 +231,6 @@ export interface TreeComparison {
   };
 }
 
-// Phase 3: Allocation Change Interface
-export interface AllocationChange {
-  type: 'allocate' | 'remove';
-  nodeIdentifier: string;
-  node?: PassiveTreeNode;
-}
-
 // Jewel System Interfaces
 export interface Jewel {
   id: string;
@@ -292,7 +285,7 @@ export interface JewelAnalysis {
 }
 
 // Build Validation Interfaces
-export type ValidationSeverity = 'critical' | 'warning' | 'info';
+type ValidationSeverity = 'critical' | 'warning' | 'info';
 
 export interface ValidationIssue {
   severity: ValidationSeverity;
@@ -351,8 +344,8 @@ export interface FlaskAnalysis {
 }
 
 // Build Goals / Issues
-export type BuildIssueSeverity = 'error' | 'warning' | 'info';
-export type BuildIssueCategory = 'resistance' | 'survivability' | 'reservation' | 'defence' | 'items' | 'gems';
+type BuildIssueSeverity = 'error' | 'warning' | 'info';
+type BuildIssueCategory = 'resistance' | 'survivability' | 'reservation' | 'defence' | 'items' | 'gems';
 
 export interface BuildIssue {
   severity: BuildIssueSeverity;

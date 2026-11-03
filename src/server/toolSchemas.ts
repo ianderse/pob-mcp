@@ -5,7 +5,7 @@
  * These schemas describe the available tools, their parameters, and documentation.
  */
 
-export interface ToolSchema {
+interface ToolSchema {
   name: string;
   description: string;
   inputSchema: {
@@ -1736,10 +1736,6 @@ export function getTradeToolSchemas(): any[] {
           league: {
             type: "string",
             description: "EXACT league name as specified by user",
-          },
-          budget: {
-            type: "number",
-            description: "Total budget in Chaos Orbs",
           },
           budget_tier: {
             type: "string",

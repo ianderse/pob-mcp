@@ -2,7 +2,7 @@ import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import type { BuildIssue } from "../types.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
-export interface BuildGoalsHandlerContext {
+interface BuildGoalsHandlerContext {
   getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }

@@ -9,7 +9,7 @@
 import type { PoBLuaApiClient } from '../pobLuaBridge.js';
 import { wrapHandler } from '../utils/errorHandling.js';
 
-export interface ItemShoppingContext {
+interface ItemShoppingContext {
   getLuaClient: () => PoBLuaApiClient | null;
 }
 

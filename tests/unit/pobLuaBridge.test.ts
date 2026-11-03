@@ -64,15 +64,15 @@ describe('PoBLuaApiClient', () => {
       // Create client with very short timeout
       client = new PoBLuaApiClient({ timeoutMs: 100 });
 
-      // Mock process that never sends ready
+      // Mock process that never delivers any stdout to the client: the real
+      // readLine timeout must produce the rejection (no production backdoor).
       mockSpawn.mockImplementationOnce(() => {
         const proc = new MockPoBProcess();
-        // Override to never send ready
-        proc.stdout.removeAllListeners('data');
+        proc.stdout.on = () => proc.stdout;
         return proc;
       });
 
-      await expect(client.start()).rejects.toThrow(/Timed out|Failed to find valid ready banner/);
+      await expect(client.start()).rejects.toThrow(/Timed out/i);
     });
 
     it('should explain a missing PoB Lua C module rather than reporting a timeout', async () => {

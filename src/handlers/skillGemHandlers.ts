@@ -3,7 +3,7 @@ import type { SkillGemService } from "../services/skillGemService.js";
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
-export interface SkillGemHandlerContext {
+interface SkillGemHandlerContext {
   buildService: BuildService;
   skillGemService: SkillGemService;
   pobDirectory?: string;

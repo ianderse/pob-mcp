@@ -1,7 +1,6 @@
 import {
   TradeQuery,
   StatFilterGroup,
-  ItemRequirements,
   ResistanceRequirements,
   SearchOptions,
 } from '../types/tradeTypes.js';
@@ -169,7 +168,9 @@ export class TradeQueryBuilder {
   }
 
   /**
-   * Set item rarity filter
+   * Set item rarity filter. The Trade API's rarity.option only accepts
+   * any|nonunique|unique|corrupted|non-corrupted — the PoB-side spellings
+   * normal/magic/rare all mean "any non-unique".
    */
   withRarity(rarity: 'normal' | 'magic' | 'rare' | 'unique' | 'any'): this {
     if (!this.query.query.filters) {
@@ -182,8 +183,9 @@ export class TradeQueryBuilder {
       this.query.query.filters.type_filters.filters = {};
     }
 
+    const apiOption = rarity === 'normal' || rarity === 'magic' || rarity === 'rare' ? 'nonunique' : rarity;
     this.query.query.filters.type_filters.filters.rarity = {
-      option: rarity,
+      option: apiOption,
     };
 
     return this;
@@ -419,83 +421,6 @@ export class TradeQueryBuilder {
   }
 
   /**
-   * Build query from ItemRequirements
-   */
-  static fromItemRequirements(requirements: ItemRequirements): TradeQueryBuilder {
-    const builder = new TradeQueryBuilder();
-
-    // Links
-    if (requirements.links) {
-      builder.withLinks(requirements.links);
-    }
-
-    // Sockets
-    if (requirements.sockets) {
-      builder.withSockets(
-        requirements.sockets.r,
-        requirements.sockets.g,
-        requirements.sockets.b,
-        requirements.sockets.w
-      );
-    }
-
-    // Weapon DPS
-    if (requirements.minDPS) {
-      builder.withDPS(requirements.minDPS);
-    }
-    if (requirements.minPDPS) {
-      builder.withPDPS(requirements.minPDPS);
-    }
-    if (requirements.minEDPS) {
-      builder.withEDPS(requirements.minEDPS);
-    }
-
-    // Defenses
-    if (requirements.minArmour || requirements.minEvasion || requirements.minES) {
-      builder.withDefenses(
-        requirements.minArmour ? { min: requirements.minArmour } : undefined,
-        requirements.minEvasion ? { min: requirements.minEvasion } : undefined,
-        requirements.minES ? { min: requirements.minES } : undefined
-      );
-    }
-
-    // Resistances
-    if (requirements.fireResist || requirements.coldResist || requirements.lightningResist) {
-      builder.withResistances({
-        fire: requirements.fireResist || 0,
-        cold: requirements.coldResist || 0,
-        lightning: requirements.lightningResist || 0,
-        chaos: requirements.chaosResist || 0,
-      });
-    }
-
-    // Life/ES (using pseudo stats)
-    const lifeESStats: Array<{ id: string; min?: number }> = [];
-    if (requirements.minLife) {
-      lifeESStats.push({
-        id: 'pseudo.pseudo_total_life',
-        min: requirements.minLife,
-      });
-    }
-    if (requirements.minES) {
-      lifeESStats.push({
-        id: 'pseudo.pseudo_total_energy_shield',
-        min: requirements.minES,
-      });
-    }
-    if (lifeESStats.length > 0) {
-      builder.withStats(lifeESStats);
-    }
-
-    // Custom stats
-    if (requirements.stats && requirements.stats.length > 0) {
-      builder.withStats(requirements.stats);
-    }
-
-    return builder;
-  }
-
-  /**
    * Apply common search options
    */
   applyOptions(options: SearchOptions): this {
@@ -527,18 +452,5 @@ export class TradeQueryBuilder {
    */
   build(): TradeQuery {
     return JSON.parse(JSON.stringify(this.query)); // Deep clone
-  }
-
-  /**
-   * Reset the builder to start fresh
-   */
-  reset(): this {
-    this.query = {
-      query: {
-        status: { option: 'online' },
-        filters: {},
-      },
-    };
-    return this;
   }
 }

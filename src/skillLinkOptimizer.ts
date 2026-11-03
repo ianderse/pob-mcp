@@ -4,7 +4,7 @@
  * Analyzes skill gem setups and suggests improvements for optimal damage/utility.
  */
 
-export interface SkillGem {
+interface SkillGem {
   name: string;
   level?: number;
   quality?: number;
@@ -22,14 +22,14 @@ export interface SkillGroup {
   includeInFullDPS?: boolean;
 }
 
-export interface SkillLinkIssue {
+interface SkillLinkIssue {
   type: 'missing_link' | 'suboptimal_gem' | 'low_level' | 'no_quality' | 'link_order' | 'wrong_support' | 'no_more_multiplier' | 'no_penetration';
   severity: 'high' | 'medium' | 'low';
   message: string;
   suggestion: string;
 }
 
-export interface SkillGroupAnalysis {
+interface SkillGroupAnalysis {
   group: SkillGroup;
   isValid: boolean;
   linkCount: number;
@@ -40,7 +40,7 @@ export interface SkillGroupAnalysis {
   expectedDamageBoost?: string;
 }
 
-export interface SkillOptimizationResult {
+interface SkillOptimizationResult {
   summary: string;
   buildType: string;
   groupAnalyses: SkillGroupAnalysis[];

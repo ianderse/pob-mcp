@@ -5,7 +5,7 @@
  * Works with both XML builds and Lua bridge for more accurate analysis.
  */
 
-export interface ItemSlotAnalysis {
+interface ItemSlotAnalysis {
   slot: string;
   currentItem: {
     name: string;
@@ -18,7 +18,7 @@ export interface ItemSlotAnalysis {
   priority: 'high' | 'medium' | 'low';
 }
 
-export interface ItemUpgradeRecommendation {
+interface ItemUpgradeRecommendation {
   summary: string;
   buildType: string;
   totalIssues: number;

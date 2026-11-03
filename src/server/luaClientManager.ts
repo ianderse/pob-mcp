@@ -7,11 +7,35 @@
 import { PoBLuaApiClient } from '../pobLuaBridge.js';
 import { BOOTSTRAP_BUILD_NAME } from './bootstrapBuild.js';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-// Resolve repo-owned files relative to this module, not process.cwd() —
-// MCP clients like Claude Desktop launch the server with an arbitrary cwd.
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+/**
+ * Resolve a repo-owned file relative to this module, not process.cwd() —
+ * MCP clients like Claude Desktop launch the server with an arbitrary cwd.
+ *
+ * Resolved on call and without the bare `import.meta` meta-property: it is a
+ * hard compile error under the CommonJS ts-jest transform (TS1343), which made
+ * this module — the bridge lifecycle — impossible to import in tests, and a
+ * module-scope const would break importing the file even when unused.
+ *
+ * ESM fallback: a module URL must be constructed without process.cwd(), and
+ * the only cwd-free options (import.meta, or eval'd meta-property) are either
+ * a compile break in CJS or a new runtime dependency. So in ESM (the production
+ * build) we resolve via the require cache of an anchor require built from the
+ * entry module's wrapper directory — see the caller comment in index.ts: it
+ * sets POB_REPO_ROOT at startup, which is the authoritative source; this
+ * fallback exists only for library use without that env var.
+ */
+function repoPath(...segments: string[]): string {
+  if (process.env.POB_REPO_ROOT) {
+    return path.join(process.env.POB_REPO_ROOT, ...segments);
+  }
+  if (typeof require !== 'undefined' && typeof __dirname !== 'undefined') {
+    return path.join(__dirname, '..', '..', ...segments);
+  }
+  throw new Error(
+    'Cannot locate repo-owned Lua files: set POB_REPO_ROOT (the shipped server entry sets it automatically)',
+  );
+}
 
 export class LuaClientManager {
   private client: PoBLuaApiClient | null = null;
@@ -88,7 +112,7 @@ export class LuaClientManager {
     const stdioClient = new PoBLuaApiClient({
       cwd: process.env.POB_PATH || process.env.POB_FORK_PATH,
       cmd: process.env.POB_CMD,
-      args: process.env.POB_ARGS ? process.env.POB_ARGS.split(/\s+/).filter(Boolean) : [path.join(repoRoot, 'lua', 'vanilla_stdio_bridge.lua')],
+      args: process.env.POB_ARGS ? process.env.POB_ARGS.split(/\s+/).filter(Boolean) : [repoPath('lua', 'vanilla_stdio_bridge.lua')],
       // The repo-owned adapter calls HeadlessWrapper as a library; nothing in
       // the PoB checkout may take over stdin/stdout first.
       env: { POB_API_STDIO: '0' },

@@ -5,7 +5,7 @@
  * Provides fuzzy matching and search capabilities
  */
 
-export interface StatMapping {
+interface StatMapping {
   pobName: string;
   tradeId: string;
   category: 'pseudo' | 'explicit' | 'implicit' | 'enchant' | 'crafted' | 'fractured';
@@ -16,7 +16,7 @@ export interface StatMapping {
 /**
  * Comprehensive stat mappings between PoB and Trade API
  */
-export const STAT_MAPPINGS: StatMapping[] = [
+const STAT_MAPPINGS: StatMapping[] = [
   // ========================================
   // Pseudo Stats (most commonly used)
   // ========================================
@@ -505,22 +505,6 @@ export class StatMapper {
   }
 
   /**
-   * Get Trade API stat ID from PoB stat name
-   */
-  getTradeId(pobStatName: string): string | null {
-    const mapping = this.mappingsByPobName.get(pobStatName.toLowerCase());
-    return mapping ? mapping.tradeId : null;
-  }
-
-  /**
-   * Get PoB stat name from Trade API ID
-   */
-  getPobName(tradeId: string): string | null {
-    const mapping = this.mappingsByTradeId.get(tradeId.toLowerCase());
-    return mapping ? mapping.pobName : null;
-  }
-
-  /**
    * Search for stats by fuzzy matching
    * Returns matching stat mappings sorted by relevance
    */
@@ -584,53 +568,5 @@ export class StatMapper {
     results.sort((a, b) => b.score - a.score);
 
     return results.slice(0, limit).map(r => r.mapping);
-  }
-
-  /**
-   * Get all mappings in a category
-   */
-  getByCategory(category: StatMapping['category']): StatMapping[] {
-    return STAT_MAPPINGS.filter(m => m.category === category);
-  }
-
-  /**
-   * Get all mappings
-   */
-  getAllMappings(): StatMapping[] {
-    return [...STAT_MAPPINGS];
-  }
-
-  /**
-   * Convert a PoB stat requirement to Trade API stat filter
-   */
-  pobStatToTradeFilter(pobStatName: string, min?: number, max?: number): { id: string; min?: number; max?: number } | null {
-    const tradeId = this.getTradeId(pobStatName);
-    if (!tradeId) {
-      return null;
-    }
-
-    return {
-      id: tradeId,
-      min,
-      max,
-    };
-  }
-
-  /**
-   * Batch convert multiple PoB stats to Trade API filters
-   */
-  pobStatsToTradeFilters(
-    stats: Array<{ name: string; min?: number; max?: number }>
-  ): Array<{ id: string; min?: number; max?: number }> {
-    const results: Array<{ id: string; min?: number; max?: number }> = [];
-
-    for (const stat of stats) {
-      const filter = this.pobStatToTradeFilter(stat.name, stat.min, stat.max);
-      if (filter) {
-        results.push(filter);
-      }
-    }
-
-    return results;
   }
 }

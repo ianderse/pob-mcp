@@ -28,7 +28,7 @@ export interface HandlerContext {
 /**
  * Context for watch handlers (includes watchService)
  */
-export interface WatchContext {
+interface WatchContext {
   buildService: BuildService;
   treeService: TreeService;
   watchService: WatchService;
@@ -37,7 +37,7 @@ export interface WatchContext {
 /**
  * Context for Lua-related operations
  */
-export interface LuaContext {
+interface LuaContext {
   buildService?: Pick<BuildService, 'invalidateBuild'>;
   pobDirectory: string;
   luaEnabled: boolean;
@@ -49,7 +49,7 @@ export interface LuaContext {
 /**
  * Context for item and skill operations (subset of Lua operations)
  */
-export interface ItemSkillContext {
+interface ItemSkillContext {
   getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }
@@ -57,7 +57,7 @@ export interface ItemSkillContext {
 /**
  * Context for optimization operations (combines build/tree services with Lua)
  */
-export interface OptimizationContext {
+interface OptimizationContext {
   buildService: BuildService;
   treeService: TreeService;
   pobDirectory: string;
@@ -77,7 +77,7 @@ export interface ExportContext {
 /**
  * Context for skill gem analysis operations
  */
-export interface SkillGemContext {
+interface SkillGemContext {
   buildService: BuildService;
   skillGemService: SkillGemService;
   pobDirectory: string;
@@ -88,7 +88,7 @@ export interface SkillGemContext {
 /**
  * Context for advanced optimization operations (items, skill links, budget builds)
  */
-export interface AdvancedOptimizationContext {
+interface AdvancedOptimizationContext {
   buildService: BuildService;
   pobDirectory: string;
   getLuaClient: () => PoBLuaApiClient | null;
@@ -98,7 +98,7 @@ export interface AdvancedOptimizationContext {
 /**
  * Context for validation operations
  */
-export interface ValidationContext {
+interface ValidationContext {
   buildService: BuildService;
   validationService: ValidationService;
   pobDirectory: string;

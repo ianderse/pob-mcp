@@ -11,7 +11,7 @@ import { readNamedBuild } from "../utils/namedBuild.js";
 /** PoB's blank level 1 character: 60 Life, no Energy Shield, no Ward. */
 const BLANK_CHARACTER_POOL = 60;
 
-export interface OptimizationHandlerContext {
+interface OptimizationHandlerContext {
   buildService: BuildService;
   treeService: TreeService;
   pobDirectory: string;

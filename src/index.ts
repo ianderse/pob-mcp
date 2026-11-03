@@ -1,5 +1,16 @@
 #!/usr/bin/env node
 
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+// Authoritative repo root for repo-owned data files (lua bridge adapter).
+// Must be set before any module resolves paths: LuaClientManager cannot read
+// import.meta itself (the CommonJS test transform rejects it), so the entry —
+// which only ever runs as ESM — publishes it here.
+if (!process.env.POB_REPO_ROOT) {
+  process.env.POB_REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+}
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {

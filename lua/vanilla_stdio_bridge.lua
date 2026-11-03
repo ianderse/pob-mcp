@@ -272,22 +272,29 @@ end
 reply({ ok = true, ready = true, version = { adapter = 'vanilla-stdio-v2' } })
 for line in io.lines() do
   local request = json.decode(line)
-  local action, params = request and request.action, request and request.params or {}
-  if action == 'quit' then
-    reply({ ok = true, quit = true })
-    break
-  end
-  local handler = handlers[action]
-  if not handler then
-    reply({ ok = false, error = 'unknown action: ' .. tostring(action) })
+  -- dkjson happily decodes scalars ("5", "\"ping\""); indexing them would
+  -- raise OUTSIDE the handler pcall and kill the bridge — the one failure
+  -- mode reply() promises to prevent.
+  if type(request) ~= 'table' then
+    reply({ ok = false, error = 'invalid request: expected a JSON object' })
   else
-    local ok, res = pcall(handler, params)
-    if not ok then
-      reply({ ok = false, error = tostring(res) })
-    elseif type(res) ~= 'table' then
-      reply({ ok = false, error = 'handler returned no response' })
+    local action, params = request.action, request.params or {}
+    if action == 'quit' then
+      reply({ ok = true, quit = true })
+      break
+    end
+    local handler = handlers[action]
+    if not handler then
+      reply({ ok = false, error = 'unknown action: ' .. tostring(action) })
     else
-      reply(res)
+      local ok, res = pcall(handler, params)
+      if not ok then
+        reply({ ok = false, error = tostring(res) })
+      elseif type(res) ~= 'table' then
+        reply({ ok = false, error = 'handler returned no response' })
+      else
+        reply(res)
+      end
     end
   end
 end

@@ -76,8 +76,9 @@ export class TradeApiClient {
   }
 
   /**
-   * Fetch full item details for the given item IDs
-   * Can fetch up to 10 items at once
+   * Fetch full item details for the given item IDs.
+   * The Trade API caps one fetch request at 10 ids; larger lists are
+   * batched into sequential requests (rate limiter already serializes them).
    */
   async fetchItems(itemIds: string[], queryId?: string): Promise<ItemListing[]> {
     if (itemIds.length === 0) {
@@ -85,7 +86,11 @@ export class TradeApiClient {
     }
 
     if (itemIds.length > 10) {
-      throw new Error('Cannot fetch more than 10 items at once');
+      const all: ItemListing[] = [];
+      for (let i = 0; i < itemIds.length; i += 10) {
+        all.push(...(await this.fetchItems(itemIds.slice(i, i + 10), queryId)));
+      }
+      return all;
     }
 
     const cacheKey = `fetch:${itemIds.join(',')}`;
@@ -106,26 +111,6 @@ export class TradeApiClient {
     const items = result.result || [];
     this.putInCache(cacheKey, items, this.defaultCacheTTL);
     return items;
-  }
-
-  /**
-   * Get available stat filters from the API
-   * This data changes infrequently, so we cache it for 1 hour
-   */
-  async getStats(): Promise<StatData> {
-    const cacheKey = 'stats:all';
-    const cached = this.getFromCache<StatData>(cacheKey, 3600000); // 1 hour
-    if (cached) {
-      return cached;
-    }
-
-    const url = `${this.baseUrl}/data/stats`;
-    const result = await this.limiter.schedule(() =>
-      this.makeRequest<StatData>('GET', url)
-    );
-
-    this.putInCache(cacheKey, result, 3600000); // Cache for 1 hour
-    return result;
   }
 
   /**
@@ -175,28 +160,6 @@ export class TradeApiClient {
     return this.rateLimitInfo;
   }
 
-  /**
-   * Clear the cache
-   */
-  clearCache(): void {
-    this.cache.clear();
-  }
-
-  /**
-   * Clear specific cache entries matching a pattern
-   */
-  clearCachePattern(pattern: string): void {
-    const keysToDelete: string[] = [];
-    for (const key of this.cache.keys()) {
-      if (key.includes(pattern)) {
-        keysToDelete.push(key);
-      }
-    }
-    for (const key of keysToDelete) {
-      this.cache.delete(key);
-    }
-  }
-
   // ========================================
   // Private Methods
   // ========================================
@@ -214,6 +177,9 @@ export class TradeApiClient {
         // The official Trade API rejects anonymous weighted-sum searches
         ...(process.env.POE_SESSION_ID ? { Cookie: `POESESSID=${process.env.POE_SESSION_ID}` } : {}),
       },
+      // No timeout here once let a single stalled connection block the
+      // whole queue (the limiter runs at maxConcurrent 1).
+      signal: AbortSignal.timeout(30_000),
     };
 
     if (body) {

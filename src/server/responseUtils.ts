@@ -4,7 +4,7 @@
  * Utilities for formatting and processing MCP tool responses
  */
 
-export type ToolResponse = {
+type ToolResponse = {
   content: Array<{
     type: string;
     text: string;
@@ -19,7 +19,7 @@ export type ToolResponse = {
  * @param maxLength - Maximum length before truncation (default: 5000 to minimize tokens)
  * @returns Truncated text with helpful message if truncated
  */
-export function truncateResponse(text: string, maxLength: number = 5000): string {
+function truncateResponse(text: string, maxLength: number = 5000): string {
   if (text.length <= maxLength) {
     return text;
   }
