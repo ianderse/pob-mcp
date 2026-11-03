@@ -343,27 +343,6 @@ export interface FetchResult {
 // Static Data Structures
 // ========================================
 
-interface StatDefinition {
-  id: string;
-  text: string;
-  type: string;
-  option?: {
-    options?: Array<{
-      id: number;
-      text: string;
-    }>;
-  };
-}
-
-interface StatCategory {
-  label: string;
-  entries: StatDefinition[];
-}
-
-export interface StatData {
-  result: StatCategory[];
-}
-
 interface League {
   id: string;
   realm?: string;

@@ -445,53 +445,6 @@ export class StatMapper {
   }
 
   /**
-   * Load stats dynamically from official PoE trade API data
-   */
-  async loadFromTradeAPI(statData: any): Promise<void> {
-    // Clear existing mappings
-    this.mappingsByPobName.clear();
-    this.mappingsByTradeId.clear();
-    this.allAliases.clear();
-    this.allStats = [];
-
-    // Process each stat category from the API
-    if (statData && statData.result) {
-      for (const category of statData.result) {
-        const categoryType = this.getCategoryType(category.label);
-
-        for (const entry of category.entries || []) {
-          const mapping: StatMapping = {
-            pobName: entry.id, // Use the ID as the PoB name for now
-            tradeId: entry.id,
-            category: categoryType,
-            aliases: [entry.text, entry.id],
-            description: entry.text,
-          };
-
-          this.addMapping(mapping);
-          this.allStats.push(mapping);
-        }
-      }
-    }
-
-    console.error(`[StatMapper] Loaded ${this.allStats.length} stats from trade API`);
-  }
-
-  /**
-   * Determine category type from API label
-   */
-  private getCategoryType(label: string): 'pseudo' | 'explicit' | 'implicit' | 'enchant' | 'crafted' | 'fractured' {
-    const lowerLabel = label.toLowerCase();
-    if (lowerLabel.includes('pseudo')) return 'pseudo';
-    if (lowerLabel.includes('explicit')) return 'explicit';
-    if (lowerLabel.includes('implicit')) return 'implicit';
-    if (lowerLabel.includes('enchant')) return 'enchant';
-    if (lowerLabel.includes('crafted')) return 'crafted';
-    if (lowerLabel.includes('fractured')) return 'fractured';
-    return 'explicit'; // Default
-  }
-
-  /**
    * Add a mapping to the indexes
    */
   private addMapping(mapping: StatMapping): void {

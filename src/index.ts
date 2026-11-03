@@ -317,18 +317,11 @@ class PoBMCPServer {
    * Initialize async components
    */
   private async initialize() {
-    // Load official stat data from PoE trade API (if enabled)
-    if (this.tradeClient && this.statMapper) {
-      try {
-        console.error('[StatMapper] Loading stats from PoE trade API...');
-        const statData = await this.tradeClient.getStatData();
-        await this.statMapper.loadFromTradeAPI(statData);
-        console.error('[StatMapper] Successfully loaded official stat data');
-      } catch (error) {
-        console.error('[StatMapper] Failed to load official stats, using static fallback:', error);
-        // Static mappings already loaded in constructor as fallback
-      }
-    }
+    // StatMapper is intentionally static-only: the trade API /stats dump keys
+    // everything by hashed ID (no PoB names), so swapping it in at startup used
+    // to erase the curated aliases that search_stats matches against. Official
+    // stat IDs enter queries via tradeQueryBuilder's own stat-id handling, not
+    // via this class.
   }
 
   async run() {
