@@ -1,7 +1,6 @@
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 import { EventEmitter } from "events";
 import path from "path";
-import os from "os";
 import zlib from "zlib";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";

@@ -93,7 +93,7 @@ export function analyzeDefenses(stats: Record<string, any>): DefensiveAnalysis {
   recommendations.push(...generateResistanceRecommendations(resistances));
   recommendations.push(...generateLifePoolRecommendations(lifePool));
   recommendations.push(...generateAvoidanceRecommendations(avoidance));
-  recommendations.push(...generateMitigationRecommendations(mitigation, stats));
+  recommendations.push(...generateMitigationRecommendations(mitigation));
   recommendations.push(...generateSustainRecommendations(sustain));
 
   // Evaluate defensive layers
@@ -525,8 +525,7 @@ function generateAvoidanceRecommendations(analysis: AvoidanceAnalysis): Recommen
 }
 
 function generateMitigationRecommendations(
-  analysis: MitigationAnalysis,
-  stats: Record<string, any>
+  analysis: MitigationAnalysis
 ): Recommendation[] {
   const recs: Recommendation[] = [];
   if (analysis.overall === 'none' || analysis.overall === 'poor') {

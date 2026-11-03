@@ -45,7 +45,6 @@ export async function handleAnalyzeItems(
       // Load build into Lua only if a different build (or no build) is currently loaded.
       // Preserves any select_spec / select_item_set changes made in the current session.
       if (buildName) {
-        const fs = await import('fs/promises');
         let needsLoad = true;
         try {
           const info = await luaClient.getBuildInfo();

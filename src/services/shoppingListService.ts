@@ -5,10 +5,6 @@
  */
 
 import { PoBBuild } from '../types.js';
-import { TradeApiClient } from './tradeClient.js';
-import { StatMapper } from './statMapper.js';
-import { PoeNinjaClient } from './poeNinjaClient.js';
-import { TradeQueryBuilder } from './tradeQueryBuilder.js';
 
 export type UpgradePriority = 'critical' | 'high' | 'medium' | 'low';
 export type BudgetTier = 'budget' | 'medium' | 'endgame';
@@ -77,20 +73,13 @@ export interface ShoppingList {
 }
 
 export class ShoppingListService {
-  constructor(
-    private tradeClient?: TradeApiClient,
-    private statMapper?: StatMapper,
-    private ninjaClient?: PoeNinjaClient
-  ) {}
-
   /**
    * Generate a shopping list from a PoB build
    */
   async generateShoppingList(
     build: PoBBuild,
     buildName: string,
-    league: string,
-    budget: BudgetTier = 'medium'
+    league: string
   ): Promise<ShoppingList> {
     // Extract build info
     const equippedItems = this.extractEquippedItems(build);
@@ -114,7 +103,7 @@ export class ShoppingListService {
 
     for (const slot of slots) {
       const currentItem = equippedItems[slot];
-      const analysis = await this.analyzeSlot(slot, currentItem, buildNeeds, league);
+      const analysis = await this.analyzeSlot(slot, currentItem, buildNeeds);
 
       if (analysis) {
         shoppingItems.push(analysis);
@@ -394,8 +383,7 @@ export class ShoppingListService {
   private async analyzeSlot(
     slot: string,
     currentItem: any | undefined,
-    buildNeeds: ShoppingList['buildNeeds'],
-    league: string
+    buildNeeds: ShoppingList['buildNeeds']
   ): Promise<ShoppingListItem | null> {
     // Determine if slot needs upgrade
     const issues: string[] = currentItem?.issues || [];

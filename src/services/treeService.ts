@@ -417,8 +417,7 @@ export class TreeService {
   findShortestPaths(
     allocatedNodes: Set<string>,
     targetNodeId: string,
-    treeData: PassiveTreeData,
-    maxPaths: number = 1
+    treeData: PassiveTreeData
   ): Array<{ nodes: string[]; cost: number }> {
     // Multi-source BFS from all allocated nodes toward the target.
     // O(V+E) — correct and optimal for unit-weight graphs.
@@ -494,7 +493,7 @@ export class TreeService {
   }
 
   // Helper methods for optimization
-  private buildNodeGraph(allocatedNodes: PassiveTreeNode[], allTreeNodes: Map<string, PassiveTreeNode>): Map<string, string[]> {
+  private buildNodeGraph(allocatedNodes: PassiveTreeNode[]): Map<string, string[]> {
     const graph = new Map<string, string[]>();
     const allocatedIds = new Set(allocatedNodes.map(n => String(n.skill)));
 
@@ -556,12 +555,10 @@ export class TreeService {
     allocatedNodes: PassiveTreeNode[],
     keystones: PassiveTreeNode[],
     notables: PassiveTreeNode[],
-    jewels: PassiveTreeNode[],
-    allTreeNodes: Map<string, PassiveTreeNode>
+    jewels: PassiveTreeNode[]
   ): PathOptimization[] {
     const optimizations: PathOptimization[] = [];
-    const graph = this.buildNodeGraph(allocatedNodes, allTreeNodes);
-    const allocatedIds = new Set(allocatedNodes.map(n => String(n.skill)));
+    const graph = this.buildNodeGraph(allocatedNodes);
 
     // Find starting node (usually ascendancy start or class start)
     const startNode = allocatedNodes.find(n => n.isAscendancyStart) || allocatedNodes[0];
@@ -597,9 +594,6 @@ export class TreeService {
   }
 
   private calculateEfficiencyScores(
-    allocatedNodes: PassiveTreeNode[],
-    keystones: PassiveTreeNode[],
-    notables: PassiveTreeNode[],
     normalNodes: PassiveTreeNode[]
   ): EfficiencyScore[] {
     const scores: EfficiencyScore[] = [];
@@ -795,14 +789,10 @@ export class TreeService {
           allocatedNodes,
           keystones,
           notables,
-          jewels,
-          treeData.nodes
+          jewels
         );
 
         const efficiencyScores = this.calculateEfficiencyScores(
-          allocatedNodes,
-          keystones,
-          notables,
           normal
         );
 

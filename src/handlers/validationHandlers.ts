@@ -21,7 +21,7 @@ export async function handleValidateBuild(
   args?: { build_name?: string }
 ) {
   return wrapHandler('validate build', async () => {
-  const { buildService, validationService, getLuaClient, ensureLuaClient } = context;
+  const { buildService, validationService, getLuaClient } = context;
 
   let buildData;
   let luaStats;

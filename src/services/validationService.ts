@@ -23,9 +23,9 @@ export class ValidationService {
     // Run validation rules
     this.validateResistances(stats, criticalIssues, warnings);
     this.validateDefenses(stats, build, criticalIssues, warnings);
-    this.validateMana(stats, build, criticalIssues, warnings, recommendations);
-    this.validateAccuracy(stats, build, criticalIssues, warnings);
-    this.validateImmunities(flaskAnalysis, criticalIssues, warnings, recommendations);
+    this.validateMana(stats, criticalIssues, warnings, recommendations);
+    this.validateAccuracy(stats, criticalIssues, warnings);
+    this.validateImmunities(flaskAnalysis, warnings, recommendations);
     this.validateDefensiveLayers(stats, warnings, recommendations);
     this.validateDamageScaling(build, recommendations);
 
@@ -34,7 +34,7 @@ export class ValidationService {
     const isValid = criticalIssues.length === 0;
 
     // Generate summary
-    const summary = this.generateSummary(overallScore, criticalIssues, warnings);
+    const summary = this.generateSummary(overallScore);
 
     return {
       isValid,
@@ -218,7 +218,6 @@ export class ValidationService {
 
   private validateMana(
     stats: any,
-    build: PoBBuild,
     criticalIssues: ValidationIssue[],
     warnings: ValidationIssue[],
     recommendations: ValidationIssue[]
@@ -293,7 +292,6 @@ export class ValidationService {
 
   private validateAccuracy(
     stats: any,
-    build: PoBBuild,
     criticalIssues: ValidationIssue[],
     warnings: ValidationIssue[]
   ): void {
@@ -349,7 +347,6 @@ export class ValidationService {
 
   private validateImmunities(
     flaskAnalysis: FlaskAnalysis | null,
-    criticalIssues: ValidationIssue[],
     warnings: ValidationIssue[],
     recommendations: ValidationIssue[]
   ): void {
@@ -591,9 +588,7 @@ export class ValidationService {
   }
 
   private generateSummary(
-    score: number,
-    criticalIssues: ValidationIssue[],
-    warnings: ValidationIssue[]
+    score: number
   ): string {
     if (score >= 9) {
       return 'Build is in excellent shape! Only minor improvements possible.';

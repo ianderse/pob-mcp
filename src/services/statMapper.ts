@@ -424,7 +424,6 @@ export class StatMapper {
   private mappingsByTradeId: Map<string, StatMapping>;
   private allAliases: Map<string, StatMapping>;
   private allStats: StatMapping[] = [];
-  private loaded: boolean = false;
 
   constructor() {
     this.mappingsByPobName = new Map();
@@ -443,7 +442,6 @@ export class StatMapper {
       this.addMapping(mapping);
     }
     this.allStats = [...STAT_MAPPINGS];
-    this.loaded = true;
   }
 
   /**
@@ -476,7 +474,6 @@ export class StatMapper {
       }
     }
 
-    this.loaded = true;
     console.error(`[StatMapper] Loaded ${this.allStats.length} stats from trade API`);
   }
 

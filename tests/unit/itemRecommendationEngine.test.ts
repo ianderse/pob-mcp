@@ -2,7 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 import { ItemRecommendationEngine } from '../../src/services/itemRecommendationEngine';
 
 describe('ItemRecommendationEngine trade mod normalization', () => {
-  const engine = new ItemRecommendationEngine({} as any, {} as any);
+  const engine = new ItemRecommendationEngine({} as any);
 
   it('extracts resistances from current structured Trade API mod entries', () => {
     const resistances = (engine as any).extractResistances({

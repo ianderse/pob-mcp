@@ -201,7 +201,7 @@ export async function handleCompareGemSetups(
     setups: Array<{ name: string; gems: string[] }>;
   }
 ) {
-  const { buildService, pobDirectory, getLuaClient, ensureLuaClient } = context;
+  const { buildService } = context;
 
   if (!args.build_name) {
     throw new Error("build_name is required");

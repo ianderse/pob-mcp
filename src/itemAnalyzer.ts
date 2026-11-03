@@ -145,7 +145,6 @@ function analyzeItemSlot(
 
   // Boots
   if (slot === 'Boots') {
-    const lowMovementSpeed = true; // We can't detect this from current data easily
     analysis.suggestions.push('Ensure boots have 25-30% movement speed for mapping comfort');
 
     if (buildArchetype.includes('es') && (stats.energyShield || 0) < 1500) {

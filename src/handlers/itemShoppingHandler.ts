@@ -187,7 +187,6 @@ export async function handleFindItemUpgrades(
     let fireOverCap = 0;
     let coldOverCap = 0;
     let lightningOverCap = 0;
-    let totalDps = 0;
     let str = 0;
     let dex = 0;
     let int_ = 0;
@@ -207,7 +206,6 @@ export async function handleFindItemUpgrades(
           'Life', 'EnergyShield',
           'FireResist', 'ColdResist', 'LightningResist', 'ChaosResist',
           'FireResistOverCap', 'ColdResistOverCap', 'LightningResistOverCap',
-          'TotalDPS', 'CombinedDPS',
           'Str', 'Dex', 'Int',
         ]);
         life = Number(stats?.Life ?? 0);
@@ -219,7 +217,6 @@ export async function handleFindItemUpgrades(
         fireOverCap = Number(stats?.FireResistOverCap ?? 0);
         coldOverCap = Number(stats?.ColdResistOverCap ?? 0);
         lightningOverCap = Number(stats?.LightningResistOverCap ?? 0);
-        totalDps = Number(stats?.CombinedDPS ?? stats?.TotalDPS ?? 0);
         str = Number(stats?.Str ?? 0);
         dex = Number(stats?.Dex ?? 0);
         int_ = Number(stats?.Int ?? 0);
@@ -242,7 +239,6 @@ export async function handleFindItemUpgrades(
     const fireMissing = Math.max(0, 75 - fireResist);
     const coldMissing = Math.max(0, 75 - coldResist);
     const lightningMissing = Math.max(0, 75 - lightningResist);
-    const chaosMissing = Math.max(0, 0 - chaosResist); // chaos target is ≥ 0%
 
     // Life/ES assessment
     const isESBuild = es > life;

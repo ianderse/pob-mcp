@@ -194,7 +194,7 @@ function projectEntry(table: LuaTable, id: string, source: ModEntry["source"]): 
  * projection. Parsing the file as one literal would hold every tradeHash in memory at once.
  */
 export function parseModFile(text: string, source: ModEntry["source"], affixesOnly = false): ModEntry[] {
-  return text.split("\n").reduce<ModEntry[]>((entries, line, index) => {
+  return text.split("\n").reduce<ModEntry[]>((entries, line) => {
     const trimmed = line.trim();
     if (trimmed === "" || trimmed.startsWith("--") || trimmed === "return {" || trimmed === "}") return entries;
 

@@ -3,7 +3,7 @@ import { TradeApiClient } from '../services/tradeClient.js';
 import { TradeQueryBuilder } from '../services/tradeQueryBuilder.js';
 import { StatMapper } from '../services/statMapper.js';
 import { ItemRecommendationEngine } from '../services/itemRecommendationEngine.js';
-import { ItemListing, SearchOptions, ItemRecommendation, ResistanceRequirements, BudgetConstraints } from '../types/tradeTypes.js';
+import { ItemListing, ItemRecommendation, ResistanceRequirements, BudgetConstraints } from '../types/tradeTypes.js';
 import { CostBenefitAnalyzer } from '../services/costBenefitAnalyzer.js';
 import { PoeNinjaClient } from '../services/poeNinjaClient.js';
 
@@ -641,70 +641,15 @@ export async function handleFindResistanceGear(
       };
     }
 
-    const output = formatResistanceRecommendations(recommendations.slice(0, limit), resistanceGaps, league, true);
+    const output = formatResistanceRecommendations(recommendations.slice(0, limit), resistanceGaps, league);
     return { content: [{ type: 'text', text: output }] };
   });
-}
-
-function formatItemRecommendations(
-  recommendations: ItemRecommendation[],
-  slot: string,
-  league: string,
-  includeLinks: boolean = false
-): string {
-  let output = `=== ${slot} Upgrades (${league}) ===\n`;
-  output += `${recommendations.length} found\n\n`;
-
-  for (const rec of recommendations) {
-    const item = rec.listing.item;
-    const price = rec.listing.listing.price;
-
-    output += `${rec.rank}. ${item.name || item.typeLine}`;
-    if (rec.priority === 'high') output += ' ⭐';
-    output += `\n`;
-
-    if (item.name && item.typeLine && item.name !== item.typeLine) {
-      output += `   Base: ${item.typeLine}\n`;
-    }
-
-    output += `   Score: ${rec.score.toFixed(1)}/100 (${rec.priority} priority)\n`;
-
-    if (price) {
-      output += `   Price: ${price.amount} ${price.currency}\n`;
-    }
-
-    if (rec.costBenefit) {
-      const cb = rec.costBenefit;
-      if (cb.lifeGain && cb.lifeGain > 0) {
-        output += `   Life Gain: +${cb.lifeGain}\n`;
-      }
-      if (cb.esGain && cb.esGain > 0) {
-        output += `   ES Gain: +${cb.esGain}\n`;
-      }
-      if (cb.efficiency) {
-        output += `   Efficiency: ${cb.efficiency.toFixed(2)} points per ${cb.currency}\n`;
-      }
-    }
-
-    if (rec.reasons.length > 0) {
-      output += `   Why:\n`;
-      for (const reason of rec.reasons.slice(0, 3)) {
-        output += `     - ${reason}\n`;
-      }
-    }
-
-    output += `   ${rec.listing.listing.account?.online ? '🟢' : '🔴'} ${rec.listing.listing.account?.name ?? 'unknown'}\n`;
-    output += `   🔗 ${getTradeItemUrl(league, rec.searchId, rec.listing.id)}\n\n`;
-  }
-
-  return output;
 }
 
 function formatResistanceRecommendations(
   recommendations: ItemRecommendation[],
   resistanceGaps: ResistanceRequirements,
-  league: string,
-  includeLinks: boolean = false
+  league: string
 ): string {
   const targets = [];
   if (resistanceGaps.fire > 0) targets.push(`${resistanceGaps.fire}% Fire`);

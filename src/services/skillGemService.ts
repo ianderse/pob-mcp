@@ -92,14 +92,14 @@ export class SkillGemService {
     const supportGems = skill.gems.slice(1);
 
     // Detect archetype
-    const archetype = this.detectArchetype(activeGem, build);
+    const archetype = this.detectArchetype(activeGem);
     const archetypeMatch = this.calculateArchetypeMatch(supportGems, archetype);
 
     // Rate each support gem
-    const supports = supportGems.map((gem) => this.rateSupport(gem, activeGem, archetype));
+    const supports = supportGems.map((gem) => this.rateSupport(gem, archetype));
 
     // Detect issues
-    const issues = this.detectIssues(activeGem, supportGems, archetype);
+    const issues = this.detectIssues(supportGems, archetype);
 
     return {
       activeSkill: {
@@ -300,7 +300,7 @@ export class SkillGemService {
   /**
    * Detect build archetype
    */
-  private detectArchetype(activeGem: any, build: PoBBuild): ArchetypeTemplate {
+  private detectArchetype(activeGem: any): ArchetypeTemplate {
     const gemName = activeGem.nameSpec || activeGem.gemId || "";
     const tags = this.getGemTags(gemName);
 
@@ -343,7 +343,6 @@ export class SkillGemService {
    */
   private rateSupport(
     gem: any,
-    activeGem: any,
     archetype: ArchetypeTemplate
   ): {
     name: string;
@@ -405,7 +404,7 @@ export class SkillGemService {
   /**
    * Detect issues with skill setup
    */
-  private detectIssues(activeGem: any, supports: any[], archetype: ArchetypeTemplate): string[] {
+  private detectIssues(supports: any[], archetype: ArchetypeTemplate): string[] {
     const issues: string[] = [];
     const supportNames = supports.map((s) => s.nameSpec || s.gemId || "");
 

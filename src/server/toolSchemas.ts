@@ -177,10 +177,6 @@ export function getToolSchemas(): ToolSchema[] {
             type: "string",
             description: "ID of the target passive node",
           },
-          show_alternatives: {
-            type: "boolean",
-            description: "Return up to 3 alternative paths instead of just the shortest (default: false)",
-          },
         },
         required: ["target_node_id"],
       },
@@ -1387,7 +1383,7 @@ export function getExportToolSchemas(): any[] {
           },
           output_directory: {
             type: "string",
-            description: "Target directory (optional, defaults to POB_DIRECTORY/.pob-mcp/exports)",
+            description: "Sub-directory under POB_DIRECTORY to export into (optional, defaults to POB_DIRECTORY/.pob-mcp/exports). Paths outside POB_DIRECTORY are rejected.",
           },
           overwrite: {
             type: "boolean",

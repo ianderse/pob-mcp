@@ -134,7 +134,7 @@ export class CostBenefitAnalyzer {
     if (item.properties) {
       for (const prop of item.properties) {
         if (prop.name === 'Physical Damage') {
-          stats.physicalDPS = this.calculateDPS(prop, item);
+          stats.physicalDPS = this.calculateDPS(item);
         } else if (prop.name === 'Elemental Damage') {
           stats.elementalDPS = this.calculateElementalDPS(item);
         }
@@ -165,7 +165,7 @@ export class CostBenefitAnalyzer {
   /**
    * Calculate physical DPS from weapon properties
    */
-  private calculateDPS(prop: any, item: any): number {
+  private calculateDPS(item: any): number {
     let physDPS = 0;
     let aps = 1.0;
 
@@ -351,7 +351,7 @@ export class CostBenefitAnalyzer {
    * Format cost/benefit analysis for display
    */
   formatAnalysis(analysis: ItemValueAnalysis): string {
-    const { stats, metrics, priceInChaos, listing } = analysis;
+    const { stats, metrics } = analysis;
     let output = '';
 
     // Value tier indicator

@@ -208,54 +208,62 @@ export async function handleSetEnemyStats(
     currentConfig = await luaClient.getConfig() ?? {};
   } catch { /* old values unavailable — omit them from output */ }
 
-  // Build config update params
+  // Build config update params. `paramKey` is PoB's own config option name —
+  // set_config rejects anything outside its whitelist, so these must match.
   const params: Record<string, any> = {};
-  const changesSummary: Array<{key: string; old: any; new: any}> = [];
+  const changesSummary: Array<{ paramKey: string; label: string; old: any; new: any }> = [];
 
   if (args.level !== undefined) {
-    changesSummary.push({ key: "Enemy Level", old: currentConfig.enemyLevel, new: args.level });
+    changesSummary.push({ paramKey: "enemyLevel", label: "Enemy Level", old: currentConfig.enemyLevel, new: args.level });
     params.enemyLevel = args.level;
   }
   if (args.fire_resist !== undefined) {
-    changesSummary.push({ key: "Fire Resist", old: currentConfig.enemyFireResistance, new: args.fire_resist });
-    params.enemyFireResistance = args.fire_resist;
+    changesSummary.push({ paramKey: "enemyFireResist", label: "Fire Resist", old: currentConfig.enemyFireResist, new: args.fire_resist });
+    params.enemyFireResist = args.fire_resist;
   }
   if (args.cold_resist !== undefined) {
-    changesSummary.push({ key: "Cold Resist", old: currentConfig.enemyColdResistance, new: args.cold_resist });
-    params.enemyColdResistance = args.cold_resist;
+    changesSummary.push({ paramKey: "enemyColdResist", label: "Cold Resist", old: currentConfig.enemyColdResist, new: args.cold_resist });
+    params.enemyColdResist = args.cold_resist;
   }
   if (args.lightning_resist !== undefined) {
-    changesSummary.push({ key: "Lightning Resist", old: currentConfig.enemyLightningResistance, new: args.lightning_resist });
-    params.enemyLightningResistance = args.lightning_resist;
+    changesSummary.push({ paramKey: "enemyLightningResist", label: "Lightning Resist", old: currentConfig.enemyLightningResist, new: args.lightning_resist });
+    params.enemyLightningResist = args.lightning_resist;
   }
   if (args.chaos_resist !== undefined) {
-    changesSummary.push({ key: "Chaos Resist", old: currentConfig.enemyChaosResistance, new: args.chaos_resist });
-    params.enemyChaosResistance = args.chaos_resist;
+    changesSummary.push({ paramKey: "enemyChaosResist", label: "Chaos Resist", old: currentConfig.enemyChaosResist, new: args.chaos_resist });
+    params.enemyChaosResist = args.chaos_resist;
   }
   if (args.armor !== undefined) {
-    changesSummary.push({ key: "Armor", old: currentConfig.enemyArmour, new: args.armor });
+    changesSummary.push({ paramKey: "enemyArmour", label: "Armor", old: currentConfig.enemyArmour, new: args.armor });
     params.enemyArmour = args.armor;
   }
   if (args.evasion !== undefined) {
-    changesSummary.push({ key: "Evasion", old: currentConfig.enemyEvasion, new: args.evasion });
+    changesSummary.push({ paramKey: "enemyEvasion", label: "Evasion", old: currentConfig.enemyEvasion, new: args.evasion });
     params.enemyEvasion = args.evasion;
   }
 
-  // Apply changes
-  await luaClient.setConfig(params);
+  // Apply changes — PoB reports per-key outcomes; a rejected key leaves the
+  // build unchanged, so the header must reflect what actually landed.
+  const result = await luaClient.setConfig(params);
+  const rejected = new Map(Object.entries(result?.rejected ?? {}));
 
   // Get updated stats
   const newStats = await luaClient.getStats(['TotalDPS', 'CombinedDPS', 'Life', 'EnergyShield']);
 
   // Format output
-  let output = `=== Enemy Configuration Updated ===\n\n`;
+  let output = rejected.size
+    ? `=== Enemy Configuration Partially/NOT Updated ===\n\n`
+    : `=== Enemy Configuration Updated ===\n\n`;
 
   for (const change of changesSummary) {
-    const suffix = change.key.includes("Resist") ? "%" : "";
-    if (change.old != null) {
-      output += `${change.key}: ${change.old}${suffix} → ${change.new}${suffix}\n`;
+    const suffix = change.label.includes("Resist") ? "%" : "";
+    const rejection = rejected.get(change.paramKey);
+    if (rejection !== undefined) {
+      output += `${change.label}: ❌ rejected by Path of Building (${rejection})\n`;
+    } else if (change.old != null) {
+      output += `${change.label}: ${change.old}${suffix} → ${change.new}${suffix}\n`;
     } else {
-      output += `${change.key}: ${change.new}${suffix}\n`;
+      output += `${change.label}: ${change.new}${suffix}\n`;
     }
   }
 

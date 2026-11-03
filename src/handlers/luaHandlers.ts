@@ -1,7 +1,6 @@
 import type { AilmentReport, PoBLuaApiClient } from "../pobLuaBridge.js";
 import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
 import fs from "fs/promises";
-import path from "path";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { buildFileName, resolveBuildFile } from "../utils/pathSanitizer.js";
 import type { BuildService } from "../services/buildService.js";

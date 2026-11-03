@@ -1,6 +1,6 @@
 import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
-import type { TreeAnalysisResult, TreeComparison, PassiveTreeNode, AllocationChange, PassiveTreeData } from "../types.js";
+import type { TreeComparison } from "../types.js";
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
 
@@ -198,8 +198,7 @@ export async function handleGetNearbyNodes(
 export async function handleFindPath(
   context: TreeHandlerContext,
   buildName: string | undefined,
-  targetNodeId: string,
-  showAlternatives?: boolean
+  targetNodeId: string
 ) {
   try {
     let allocatedNodeIds: string[] = [];
@@ -264,8 +263,7 @@ export async function handleFindPath(
     const paths = context.treeService.findShortestPaths(
       allocatedNodes,
       targetNodeId,
-      treeData,
-      showAlternatives ? 3 : 1
+      treeData
     );
 
     if (paths.length === 0) {

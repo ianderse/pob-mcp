@@ -134,8 +134,7 @@ export async function routeToolCall(
       return await handleFindPath(
         treeContext,
         args.build_name as string,
-        args.target_node_id as string,
-        args.show_alternatives as boolean | undefined
+        args.target_node_id as string
       );
 
     // Lua bridge tools
@@ -414,7 +413,6 @@ export async function routeToolCall(
         args.build_name as string,
         args.goal as string,
         args.max_points as number | undefined,
-        args.max_iterations as number | undefined,
         args.constraints as OptimizationConstraints | undefined
       );
 

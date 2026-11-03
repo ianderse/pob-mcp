@@ -266,7 +266,6 @@ export async function handleOptimizeTree(
   buildName: string,
   goalString: string,
   maxPoints?: number,
-  maxIterations?: number,
   constraints?: OptimizationConstraints
 ) {
   return wrapHandler('optimize tree', async () => {

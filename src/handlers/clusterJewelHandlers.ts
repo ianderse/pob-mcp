@@ -382,39 +382,23 @@ export async function handleAnalyzeClusterJewels(
 }
 
 /**
- * Find cluster jewels in a PoB build
+ * Find cluster jewels in a PoB build.
+ * readBuild() returns the PathOfBuilding element already UNWRAPPED, and tree
+ * jewels are NOT inside any gear ItemSet — their rendered text lives in
+ * Items/Item regardless of which set is equipped. Iterating Items/Item is
+ * both the correct and the only navigation needed.
  */
 function findClusterJewelsInBuild(build: any): any[] {
   const clusterJewels: any[] = [];
 
-  // Get the active item set
-  const spec = build.PathOfBuilding?.Build?.Spec;
-  if (!spec) return clusterJewels;
+  const rawItems = build?.Items?.Item;
+  if (!rawItems) return clusterJewels;
+  const itemList = Array.isArray(rawItems) ? rawItems : [rawItems];
 
-  const specs = Array.isArray(spec) ? spec : [spec];
-  const activeSpec = specs.find((s: any) => s.treeVersion) || specs[0];
-
-  if (!activeSpec) return clusterJewels;
-
-  // Get items from the active spec
-  const items = build.PathOfBuilding?.Build?.Items;
-  if (!items) return clusterJewels;
-
-  const itemSets = Array.isArray(items.ItemSet) ? items.ItemSet : [items.ItemSet];
-  const activeItemSetId = activeSpec.activeItemSet || '1';
-  const activeItemSet = itemSets.find((set: any) => set.id === activeItemSetId) || itemSets[0];
-
-  if (!activeItemSet || !activeItemSet.Item) return clusterJewels;
-
-  const itemList = Array.isArray(activeItemSet.Item) ? activeItemSet.Item : [activeItemSet.Item];
-
-  // Find cluster jewels (they are socketed in the tree)
   for (const item of itemList) {
     if (!item || !item['#text']) continue;
 
-    const itemText = item['#text'];
-
-    // Check if this is a cluster jewel
+    const itemText: string = item['#text'];
     if (itemText.includes('Cluster Jewel')) {
       clusterJewels.push(parseClusterJewelItem(item, itemText));
     }

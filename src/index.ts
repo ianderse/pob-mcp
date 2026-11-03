@@ -8,10 +8,6 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import path from "path";
-import os from "os";
-import fs from "fs/promises";
-import { XMLParser } from "fast-xml-parser";
 // Import services
 import { defaultBuildsDirectory } from "./utils/pobLayout.js";
 import { BuildService } from "./services/buildService.js";
@@ -24,13 +20,6 @@ import { TradeApiClient } from "./services/tradeClient.js";
 import { StatMapper } from "./services/statMapper.js";
 import { PoeNinjaClient } from "./services/poeNinjaClient.js";
 import { ItemRecommendationEngine } from "./services/itemRecommendationEngine.js";
-
-// Import types
-import type {
-  PassiveTreeData,
-  PoBBuild,
-  TreeAnalysisResult,
-} from "./types.js";
 
 // Import utilities
 import { ContextBuilder } from "./utils/contextBuilder.js";
@@ -45,7 +34,6 @@ import { wrapWithTruncation } from "./server/responseUtils.js";
 class PoBMCPServer {
   private server: Server;
   private pobDirectory: string;
-  private parser: XMLParser;
 
   // Services
   private buildService: BuildService;
@@ -80,12 +68,6 @@ class PoBMCPServer {
       }
     );
 
-    // Initialize XML parser
-    this.parser = new XMLParser({
-      ignoreAttributes: false,
-      attributeNamePrefix: "",
-    });
-
     // Default Path of Building directory (can be customized)
     this.pobDirectory = process.env.POB_DIRECTORY || defaultBuildsDirectory();
 
@@ -111,7 +93,7 @@ class PoBMCPServer {
         cacheTTL,
       });
       this.statMapper = new StatMapper();
-      this.recommendationEngine = new ItemRecommendationEngine(this.tradeClient, this.statMapper);
+      this.recommendationEngine = new ItemRecommendationEngine(this.tradeClient);
       console.error('[Trade API] Enabled with rate limit:', requestsPerSecond, 'req/s');
     } else {
       console.error('[Trade API] Disabled (set POE_TRADE_ENABLED=true to enable)');
@@ -174,43 +156,6 @@ class PoBMCPServer {
     };
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
-  }
-
-  // Delegate to tool gate module
-  private checkToolGate(toolName: string): void {
-    this.toolGate.checkGate(toolName);
-  }
-
-  private unlockToolGate(): void {
-    this.toolGate.unlock();
-  }
-
-  // Tree Data Fetching
-  private async getTreeData(version: string = "3_26"): Promise<PassiveTreeData> {
-    // Delegate to TreeService
-    return await this.treeService.getTreeData(version);
-  }
-
-  // Tree Analysis Methods
-  private getActiveSpec(build: PoBBuild): any {
-    // Delegate to BuildService
-    return this.buildService.getActiveSpec(build);
-  }
-
-  private parseAllocatedNodes(build: PoBBuild): string[] {
-    // Delegate to BuildService
-    return this.buildService.parseAllocatedNodes(build);
-  }
-
-  private extractBuildVersion(build: PoBBuild): string {
-    // Delegate to BuildService
-    return this.buildService.extractBuildVersion(build);
-  }
-
-
-  private async analyzePassiveTree(build: PoBBuild): Promise<TreeAnalysisResult | null> {
-    // Delegate to TreeService
-    return await this.treeService.analyzePassiveTree(build);
   }
 
   private setupHandlers() {

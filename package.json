@@ -22,7 +22,9 @@
     "test:smoke:weighted": "POE_WEIGHTED_SMOKE=true node tests/smoke/mcp.mjs",
     "test:smoke:trade": "node tests/smoke/trade-mcp.mjs",
     "test:smoke:crafting": "node tests/smoke/crafting-mcp.mjs",
-    "test:smoke:persistence": "node tests/smoke/persistence.mjs"
+    "test:smoke:persistence": "node tests/smoke/persistence.mjs",
+    "test:smoke:race": "node tests/smoke/lua-client-race.mjs",
+    "test:smoke:truthfulness": "node tests/smoke/state-truthfulness.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

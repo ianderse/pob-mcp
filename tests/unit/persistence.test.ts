@@ -64,6 +64,19 @@ describe('build persistence', () => {
     expect(await builds.readBuildXml('fixture')).toBe(original);
   });
 
+  it('confines exports with an output_directory to the PoB directory', async () => {
+    const build = await builds.readBuild('fixture');
+    await expect(
+      exports.exportBuild(build, { outputName: 'evil', outputDirectory: os.tmpdir() }, original)
+    ).rejects.toThrow('Build name must be relative');
+    await expect(
+      exports.exportBuild(build, { outputName: 'evil', outputDirectory: '../escape' }, original)
+    ).rejects.toThrow('path traversal');
+    const nested = await exports.exportBuild(build, { outputName: 'copy', outputDirectory: 'sub/deep' }, original);
+    expect(nested.filePath.startsWith(path.resolve(directory) + path.sep)).toBe(true);
+    expect(nested.filePath).toBe(path.join(path.resolve(directory), 'sub', 'deep', 'copy.xml'));
+  });
+
   it('canonicalizes cache aliases and invalidates both spellings', async () => {
     const first = await builds.readBuild('fixture');
     expect(await builds.readBuild('fixture.xml')).toBe(first);

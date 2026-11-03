@@ -42,29 +42,43 @@ export class LuaClientManager {
       return this.starting;
     }
 
+    if (this.client && this.client.isAlive()) {
+      return; // Already initialized and healthy
+    }
+
     let crashed = false;
+    let deadClient: PoBLuaApiClient | null = null;
     if (this.client) {
-      if (this.client.isAlive()) {
-        return; // Already initialized and healthy
-      }
       // Process died — clean up the dead client so we restart below
       console.error('[Lua Bridge] Client process died, restarting...');
       crashed = true;
-      try { await this.client.stop(); } catch {}
+      deadClient = this.client;
       this.client = null;
     }
 
-    this.starting = this.initClient();
+    // Reserve the starting slot SYNCHRONOUSLY before awaiting anything.
+    // The old order (await dead.stop(), THEN set this.starting) let a second
+    // concurrent ensureClient() — two tool calls in one stdio read batch —
+    // see starting===null and a dead client, take the same path, and spawn a
+    // second bridge whose process nothing could ever stop.
+    const pending = (async () => {
+      if (deadClient) {
+        try { await deadClient.stop(); } catch {}
+      }
+      await this.initClient();
+      if (crashed) {
+        // The restarted bridge holds only the init-test build; proceeding silently
+        // would return blank-character stats as if they were the user's build.
+        throw new Error('The PoB Lua bridge crashed and was restarted. The previously loaded build was lost — reload it with lua_load_build, then retry.');
+      }
+    })();
+    this.starting = pending;
     try {
-      await this.starting;
+      await pending;
     } finally {
-      this.starting = null;
-    }
-
-    if (crashed) {
-      // The restarted bridge holds only the init-test build; proceeding silently
-      // would return blank-character stats as if they were the user's build.
-      throw new Error('The PoB Lua bridge crashed and was restarted. The previously loaded build was lost — reload it with lua_load_build, then retry.');
+      if (this.starting === pending) {
+        this.starting = null;
+      }
     }
   }
 

@@ -43,7 +43,7 @@ export class TradeApiClient {
     });
 
     // Set up event handlers for better observability
-    this.limiter.on('failed', async (error, jobInfo) => {
+    this.limiter.on('failed', async (_error, jobInfo) => {
       const retryAfter = this.rateLimitInfo?.retryAfter;
       if (retryAfter && jobInfo.retryCount < 3) {
         console.error(`[TradeAPI] Request failed, retrying after ${retryAfter}ms (attempt ${jobInfo.retryCount + 1}/3)`);
@@ -51,7 +51,7 @@ export class TradeApiClient {
       }
     });
 
-    this.limiter.on('retry', (error, jobInfo) => {
+    this.limiter.on('retry', (_error, jobInfo) => {
       console.error(`[TradeAPI] Retrying request (attempt ${jobInfo.retryCount + 1})`);
     });
   }
@@ -270,7 +270,8 @@ export class TradeApiClient {
     }
 
     const now = Date.now();
-    if (now > entry.expiresAt) {
+    const expiresAt = customTTL !== undefined ? entry.timestamp + customTTL : entry.expiresAt;
+    if (now > expiresAt) {
       this.cache.delete(key);
       return null;
     }

@@ -424,25 +424,6 @@ export class TradeQueryBuilder {
   static fromItemRequirements(requirements: ItemRequirements): TradeQueryBuilder {
     const builder = new TradeQueryBuilder();
 
-    // Set type/base filter if specified
-    if (requirements.slot) {
-      // Map slot names to item categories
-      const slotToType: Record<string, string> = {
-        'Weapon 1': 'weapon',
-        'Weapon 2': 'weapon',
-        'Body Armour': 'armour.chest',
-        'Helmet': 'armour.helmet',
-        'Gloves': 'armour.gloves',
-        'Boots': 'armour.boots',
-        'Amulet': 'accessory.amulet',
-        'Ring 1': 'accessory.ring',
-        'Ring 2': 'accessory.ring',
-        'Belt': 'accessory.belt',
-      };
-      // Note: Type filtering needs category option in type_filters
-      // This is simplified - actual implementation would need category support
-    }
-
     // Links
     if (requirements.links) {
       builder.withLinks(requirements.links);

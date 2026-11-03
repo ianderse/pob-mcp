@@ -7,11 +7,8 @@
 
 import { TradeApiClient } from './tradeClient.js';
 import { TradeQueryBuilder } from './tradeQueryBuilder.js';
-import { StatMapper } from './statMapper.js';
 import {
   ItemListing,
-  ItemRequirements,
-  BuildRequirements,
   BudgetConstraints,
   ItemRecommendation,
   ResistanceRequirements,
@@ -53,8 +50,7 @@ function getModText(mod: unknown): string {
 
 export class ItemRecommendationEngine {
   constructor(
-    private tradeClient: TradeApiClient,
-    private statMapper: StatMapper
+    private tradeClient: TradeApiClient
   ) {}
 
   /**

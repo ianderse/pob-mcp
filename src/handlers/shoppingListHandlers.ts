@@ -41,14 +41,10 @@ export async function handleGenerateShoppingList(
     const build = await context.buildService.readBuild(build_name);
 
     // Create shopping list service
-    const shoppingService = new ShoppingListService(
-      context.tradeClient,
-      context.statMapper,
-      context.ninjaClient
-    );
+    const shoppingService = new ShoppingListService();
 
     // Generate the list
-    const shoppingList = await shoppingService.generateShoppingList(build, build_name, league, budget);
+    const shoppingList = await shoppingService.generateShoppingList(build, build_name, league);
 
     // Format output
     const output = formatShoppingList(shoppingList, budget);

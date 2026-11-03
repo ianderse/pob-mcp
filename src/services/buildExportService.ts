@@ -47,8 +47,11 @@ export class BuildExportService {
    * Export a complete build to XML file
    */
   async exportBuild(buildData: PoBBuild, options: ExportOptions, sourceXml: string): Promise<{ filePath: string; message: string }> {
-    // Ensure export directory exists
-    const targetDir = options.outputDirectory || this.exportDirectory;
+    // Contain the whole write inside pobDirectory: output_directory is a
+    // sub-path of it, never an arbitrary client-chosen location.
+    const targetDir = options.outputDirectory
+      ? sanitizeBuildName(options.outputDirectory, this.pobDirectory)
+      : this.exportDirectory;
     await fs.mkdir(targetDir, { recursive: true });
 
     await this.validateBuildData(buildData);

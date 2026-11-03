@@ -48,80 +48,6 @@ export interface SkillOptimizationResult {
 }
 
 /**
- * Common support gem recommendations by skill type
- */
-const SUPPORT_RECOMMENDATIONS: Record<string, string[]> = {
-  // Physical attack
-  'physical-attack': [
-    'Brutality Support',
-    'Melee Physical Damage Support',
-    'Impale Support',
-    'Close Combat Support',
-    'Multistrike Support',
-    'Fortify Support',
-  ],
-
-  // Elemental attack
-  'elemental-attack': [
-    'Elemental Damage with Attacks Support',
-    'Trinity Support',
-    'Inspiration Support',
-    'Elemental Focus Support',
-    'Penetration Support',
-  ],
-
-  // Spell (general)
-  'spell': [
-    'Spell Echo Support',
-    'Controlled Destruction Support',
-    'Concentrated Effect Support',
-    'Elemental Focus Support',
-    'Exceptional Spell Cascade Support',
-  ],
-
-  // DOT (damage over time)
-  'dot': [
-    'Efficacy Support',
-    'Swift Affliction Support',
-    'Deadly Ailments Support',
-    'Void Manipulation Support',
-    'Cruelty Support',
-  ],
-
-  // Minion
-  'minion': [
-    'Minion Damage Support',
-    'Minion Life Support',
-    'Feeding Frenzy Support',
-    'Predator Support',
-    'Meat Shield Support',
-  ],
-
-  // Projectile
-  'projectile': [
-    'Greater Multiple Projectiles Support',
-    'Exceptional Fork Support',
-    'Chain Support',
-    'Pierce Support',
-    'Barrage Support',
-  ],
-
-  // Crit
-  'crit': [
-    'Increased Critical Strikes Support',
-    'Increased Critical Damage Support',
-    'Precise Technique Support',
-  ],
-
-  // Aura/Curse
-  'aura': [
-    'Enlighten Support',
-    'Empower Support',
-    'Enhance Support',
-  ],
-};
-
-/**
  * Support gems that provide multiplicative ("more") damage bonuses.
  * These are the primary way to scale DPS — far stronger per slot than "increased" supports.
  * An exceptional main skill should have at least 2–3 "more" multipliers in its 6-link.
@@ -287,10 +213,7 @@ function isSupportGem(gemName: string): boolean {
 /**
  * Analyze a single skill group
  */
-function analyzeSkillGroup(
-  group: SkillGroup,
-  buildArchetype: string
-): SkillGroupAnalysis {
+function analyzeSkillGroup(group: SkillGroup): SkillGroupAnalysis {
   const analysis: SkillGroupAnalysis = {
     group,
     isValid: true,
@@ -493,7 +416,7 @@ export function analyzeSkillSetup(
     if (group.gems.length === 0 && !group.isMainSkill) {
       continue; // Skip empty non-main groups
     }
-    const analysis = analyzeSkillGroup(group, buildArchetype);
+    const analysis = analyzeSkillGroup(group);
     groupAnalyses.push(analysis);
   }
 

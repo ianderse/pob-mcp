@@ -1,6 +1,3 @@
-import type { BuildService } from "../services/buildService.js";
-import type { TreeService } from "../services/treeService.js";
-import type { ValidationService } from "../services/validationService.js";
 import type { TreeAnalysisResult } from "../types.js";
 import type { HandlerContext } from "../utils/contextBuilder.js";
 import fs from "fs/promises";

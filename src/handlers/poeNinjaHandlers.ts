@@ -1,5 +1,5 @@
 import { wrapHandler } from '../utils/errorHandling.js';
-import { PoeNinjaClient, ArbitrageOpportunity } from '../services/poeNinjaClient.js';
+import { PoeNinjaClient } from '../services/poeNinjaClient.js';
 
 interface PoeNinjaContext {
   ninjaClient: PoeNinjaClient;
