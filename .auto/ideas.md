@@ -1,0 +1,11 @@
+# Ideas backlog (deferred)
+- CI workflow (finding 24) — needs care: smoke tests need PoB; jest-only workflow fine.
+- ToolGate is a permanent no-op placeholder threaded through router deps — remove entirely or make real. Decide with owner; removal reduces plumbing.
+- statMapper dual source of truth (finding 12) — real fix may need trade-API snapshot fixture for tests offline.
+- `optimizationHandlers.optimize_tree` either enforce constraints (real node-filtering) or drop params — behavior change to advertise in tool description.
+- Replace hand-rolled smoke transports with mcpClient.mjs; wire state-truthfulness.mjs into package.json.
+- jest fake-timers migration for watchService/pobLuaBridge timing tests (flaky under CI load).
+- tradeQueryBuilder.fromItemRequirements: dead AND stubbed (slot filter no-op) — delete unless slot-filter-from-item is a wanted feature.
+- treeService.analyzePathOptimizations stub ("Same for now") — implement or remove output line that implies it works.
+- itemParser `{corruptedRange}` parsed but never consumed — wire into applyRange or stop storing.
+- Consider `knip` as devDep to replace hand-rolled dead_exports.mjs (better graph accuracy) — but re-baseline metric if counts shift.
