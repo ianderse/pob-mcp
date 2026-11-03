@@ -7,7 +7,7 @@
  */
 
 import type { PoBLuaApiClient } from '../pobLuaBridge.js';
-import { wrapHandler } from '../utils/errorHandling.js';
+import { wrapHandler, noteIgnoredError,} from '../utils/errorHandling.js';
 
 interface ItemShoppingContext {
   getLuaClient: () => PoBLuaApiClient | null;
@@ -199,7 +199,7 @@ export async function handleFindItemUpgrades(
         buildClass = info?.className && info?.ascendClassName
           ? `${info.className} (${info.ascendClassName})`
           : (info?.className ?? null);
-      } catch { /* build info unavailable */ }
+      } catch (e) { noteIgnoredError("build info unavailable", e); }
 
       try {
         const stats = await luaClient.getStats([
@@ -220,7 +220,7 @@ export async function handleFindItemUpgrades(
         str = Number(stats?.Str ?? 0);
         dex = Number(stats?.Dex ?? 0);
         int_ = Number(stats?.Int ?? 0);
-      } catch { /* stats unavailable */ }
+      } catch (e) { noteIgnoredError("stats unavailable", e); }
 
       try {
         const items = await luaClient.getItems();
@@ -232,7 +232,7 @@ export async function handleFindItemUpgrades(
           currentItemBase = equipped.baseName ?? null;
           currentItemRarity = equipped.rarity ?? null;
         }
-      } catch { /* items unavailable */ }
+      } catch (e) { noteIgnoredError("items unavailable", e); }
     }
 
     // Compute resistance gaps (to cap = 75%)

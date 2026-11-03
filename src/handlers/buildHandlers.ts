@@ -1,4 +1,5 @@
 import type { TreeAnalysisResult } from "../types.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { HandlerContext } from "../utils/contextBuilder.js";
 import fs from "fs/promises";
 import { wrapHandler } from "../utils/errorHandling.js";
@@ -60,7 +61,7 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
             shouldLoad = false;
           }
         }
-      } catch { /* no build loaded yet — safe to load */ }
+      } catch (e) { noteIgnoredError("no build loaded yet — safe to load", e); }
 
       if (shouldLoad) {
         const buildPath = resolveBuildFile(buildName, context.pobDirectory);
@@ -68,7 +69,7 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
         await luaClient.loadBuildXml(buildXml, buildName.replace(/\.xml$/i, ""), buildPath);
       }
       if (!luaSkipped) {
-        try { luaStats = await luaClient.getStats(); } catch { /* best effort */ }
+        try { luaStats = await luaClient.getStats(); } catch (e) { noteIgnoredError("live Lua stats after build load (context degraded, not wrong)", e); }
 
         // Query active spec/item set for context and to guide tree analysis
         try {
@@ -93,12 +94,10 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
               specContextLines.push('Use select_spec / select_item_set to switch before re-analyzing.');
             }
           }
-        } catch { /* advisory only */ }
+        } catch (e) { noteIgnoredError('active spec/set header line (analysis unaffected)', e); }
       }
     }
-  } catch (error) {
-    // Continue with XML-only analysis
-  }
+  } catch (e) { noteIgnoredError("Continue with XML-only analysis", e); }
 
   // Build an override object that reflects the Lua-selected spec/item set/skill set,
   // so generateBuildSummary and analyzePassiveTree read from the correct sets (not disk defaults).
@@ -248,14 +247,14 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
       if (specsResult?.specs?.length > 0) {
         selectedSpec = specsResult.specs.find((s: any) => s.active) ?? specsResult.specs[0];
       }
-    } catch { /* ignore */ }
+    } catch (e) { noteIgnoredError("spec list for build context (advisory)", e); }
 
     try {
       const itemSetsResult = await luaClient.listItemSets();
       if (itemSetsResult?.itemSets?.length > 0) {
         selectedItemSet = itemSetsResult.itemSets.find((s: any) => s.active) ?? itemSetsResult.itemSets[0];
       }
-    } catch { /* ignore */ }
+    } catch (e) { noteIgnoredError("item-set list for build context (advisory)", e); }
 
     // get_stats defaults to defence-only fields, so the offensive rows below have
     // to be requested by name — otherwise DPS and crit always render as "N/A".
@@ -275,7 +274,7 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
   try {
     await context.ensureLuaClient();
     luaClient = context.getLuaClient();
-  } catch { /* Lua unavailable — fall through to XML */ }
+  } catch (e) { noteIgnoredError("Lua unavailable — fall through to XML", e); }
 
   if (luaClient) {
     // Never replace a *different* in-memory build (data-loss risk) — comparing
@@ -285,7 +284,7 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
     try {
       const info = await luaClient.getBuildInfo();
       loadedName = info?.name ?? '';
-    } catch { /* no build loaded yet — safe to load */ }
+    } catch (e) { noteIgnoredError("no build loaded yet — safe to load", e); }
     // The bootstrap build is not user work — a freshly started bridge always holds
     // it, so treating it as unsaved changes would block compare_builds outright.
     if (loadedName && loadedName !== BOOTSTRAP_BUILD_NAME) {
@@ -302,7 +301,7 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
       r1 = await loadEndgame(luaClient, build1Name);
       r2 = await loadEndgame(luaClient, build2Name);
       luaOk = true;
-    } catch { /* fall through to XML */ }
+    } catch (e) { noteIgnoredError("fall through to XML", e); }
   }
 
   if (luaOk && r1 && r2) {

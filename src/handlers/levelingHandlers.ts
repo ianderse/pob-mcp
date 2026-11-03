@@ -7,6 +7,7 @@
  */
 
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { PoBBuild, PoBGem, PoBSkill } from "../types.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { activeSkillSet, asArray } from "../utils/xmlCollections.js";
@@ -117,9 +118,7 @@ export async function handlePlanLeveling(
             'your main skill';
         }
       }
-    } catch {
-      // Fall through and use whatever was provided in args
-    }
+    } catch (e) { noteIgnoredError("Fall through and use whatever was provided in args", e); }
   }
 
   // Defaults when neither Lua nor args provide a value

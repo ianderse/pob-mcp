@@ -1,4 +1,5 @@
 import type { BuildService } from "../services/buildService.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { TreeService } from "../services/treeService.js";
 import type { TreeComparison } from "../types.js";
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
@@ -93,9 +94,7 @@ export async function handleGetNearbyNodes(
         const build = await context.buildService.readBuild(buildName);
         allocatedNodeIds = context.buildService.parseAllocatedNodes(build);
         treeVersion = context.buildService.extractBuildVersion(build);
-      } catch {
-        // Fall through to Lua fallback
-      }
+      } catch (e) { noteIgnoredError("Fall through to Lua fallback", e); }
     }
 
     // Lua bridge fallback when no file or file read failed
@@ -214,9 +213,7 @@ export async function handleFindPath(
         }
         allocatedNodeIds = context.buildService.parseAllocatedNodes(build);
         treeVersion = context.buildService.extractBuildVersion(build);
-      } catch {
-        // Fall through to Lua fallback
-      }
+      } catch (e) { noteIgnoredError("Fall through to Lua fallback", e); }
     }
 
     // Lua bridge fallback when no file or file read failed
@@ -466,7 +463,11 @@ export async function handleGetPassiveUpgrades(
       }
 
       scored.push({ node, dpsDelta, ehpDelta, score });
-    } catch { /* skip nodes that fail calcWith */ }
+    } catch (e) {
+      // One failed calcWith simulation only removes that candidate; log once
+      // per node (dozens per run) rather than aggregating and hiding details.
+      noteIgnoredError(`candidate scoring for node ${node.id} skipped`, e);
+    }
   }
 
   // Step 5: sort and return top N
@@ -566,7 +567,9 @@ export async function handleSuggestMasteries(context: PassiveUpgradesContext) {
                        (out.Minion?.CombinedDPS as number) || (out.Minion?.TotalDPS as number) || baseDPS;
         const outEHP = (out.TotalEHP as number) || (out.Life as number) || baseEHP;
         scored.push({ stat: effect.stat, dpsDelta: outDPS - baseDPS, ehpDelta: outEHP - baseEHP });
-      } catch { /* skip effects that fail simulation */ }
+      } catch (e) {
+        noteIgnoredError(`mastery effect simulation skipped (node ${mastery.nodeId}, effect ${effect.effectId})`, e);
+      }
     }
 
     // Sort by relative gain (same formula as handleGetPassiveUpgrades to avoid raw-value scale mismatch)

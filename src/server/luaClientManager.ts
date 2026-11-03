@@ -5,6 +5,7 @@
  */
 
 import { PoBLuaApiClient } from '../pobLuaBridge.js';
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import { BOOTSTRAP_BUILD_NAME } from './bootstrapBuild.js';
 import path from 'node:path';
 
@@ -87,7 +88,7 @@ export class LuaClientManager {
     // second bridge whose process nothing could ever stop.
     const pending = (async () => {
       if (deadClient) {
-        try { await deadClient.stop(); } catch {}
+        try { await deadClient.stop(); } catch (e) { noteIgnoredError("stop of crashed bridge before restart (process already gone)", e); }
       }
       await this.initClient();
       if (crashed) {
@@ -150,7 +151,7 @@ export class LuaClientManager {
     } catch (error) {
       // Don't leak a half-initialized process, and don't let a later
       // ensureClient() treat this unverified client as healthy
-      try { await stdioClient.stop(); } catch {}
+      try { await stdioClient.stop(); } catch (e) { noteIgnoredError("stop of half-initialized bridge (start is what failed)", e); }
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error('[Lua Bridge] Failed to initialize:', errorMsg);
       throw new Error(`Failed to start PoB Lua Bridge: ${errorMsg}`);

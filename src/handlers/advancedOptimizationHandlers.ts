@@ -1,4 +1,5 @@
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { BuildService } from "../services/buildService.js";
 import {
   analyzeEquippedItems,
@@ -38,7 +39,7 @@ export async function handleAnalyzeItems(
     // Try to use Lua client for accurate data if available
     try {
       await context.ensureLuaClient();
-    } catch { /* Lua unavailable — fall back to XML below */ }
+    } catch (e) { noteIgnoredError("Lua unavailable — fall back to XML below", e); }
     const luaClient = context.getLuaClient();
 
     if (luaClient) {
@@ -53,7 +54,7 @@ export async function handleAnalyzeItems(
           if (loaded && (loaded === requested || loaded.split(/[/\\]/).pop() === requested.split(/[/\\]/).pop())) {
             needsLoad = false;
           }
-        } catch { /* no build loaded yet */ }
+        } catch (e) { noteIgnoredError("no build loaded yet", e); }
         if (needsLoad) {
           const xml = await readNamedBuild(buildName, context.pobDirectory);
           await luaClient.loadBuildXml(xml, buildName, resolveBuildFile(buildName, context.pobDirectory));
@@ -170,7 +171,7 @@ export async function handleOptimizeSkillLinks(
     // Try Lua client first for accurate data
     try {
       await context.ensureLuaClient();
-    } catch { /* Lua unavailable — fall back to XML below */ }
+    } catch (e) { noteIgnoredError("Lua unavailable — fall back to XML below", e); }
     const luaClient = context.getLuaClient();
 
     if (luaClient) {

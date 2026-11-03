@@ -33,3 +33,25 @@ export async function wrapHandler<T>(
     throw new Error(`Failed to ${action}: ${errorMsg}`);
   }
 }
+
+/**
+ * Record a deliberately swallowed, non-fatal error.
+ *
+ * Optional build context (live stats, item names, ninja data) degrades the
+ * response rather than failing it, so those failures are caught and dropped —
+ * but silently. This helper keeps the swallow honest: the reason and the
+ * original message always reach the MCP log channel (stderr).
+ *
+ * @param context - what was being attempted and why failing it is acceptable
+ * @param error - the caught value, logged verbatim
+ *
+ * @example
+ * ```typescript
+ * try { luaStats = await luaClient.getStats(); }
+ * catch (e) { noteIgnoredError('live stats for context (file-only analysis still valid)', e); }
+ * ```
+ */
+export function noteIgnoredError(context: string, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[non-fatal] ${context}: ${message}`);
+}

@@ -1,4 +1,5 @@
 import type { AilmentReport, PoBLuaApiClient } from "../pobLuaBridge.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
 import fs from "fs/promises";
 import { wrapHandler } from "../utils/errorHandling.js";
@@ -130,9 +131,7 @@ async function buildPostLoadSummary(context: LuaHandlerContext, luaClient: PoBLu
         }
         extraLines.push('Use select_item_set to switch item sets.');
       }
-    } catch {
-      // Non-fatal: spec/item set info is advisory only
-    }
+    } catch (e) { noteIgnoredError("Non-fatal: spec/item set info is advisory only", e); }
     const extra = extraLines.length > 0 ? '\n' + extraLines.join('\n') : '';
 
     // Auto-context: fetch stats + top issues after successful load (sequential — bridge is single-request)
@@ -168,7 +167,7 @@ async function buildPostLoadSummary(context: LuaHandlerContext, luaClient: PoBLu
           summaryLines.push('✅ No critical issues detected.');
         }
       }
-    } catch { /* auto-context is best-effort */ }
+    } catch (e) { noteIgnoredError("auto-context is best-effort", e); }
     const summary = summaryLines.join('\n');
 
     return extra + (summary ? '\n---\n' + summary : '');

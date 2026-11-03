@@ -1,4 +1,5 @@
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { wrapHandler } from "../utils/errorHandling.js";
@@ -74,7 +75,7 @@ export async function handleListConfigPresets(context: ConfigPresetContext) {
   let files: string[] = [];
   try {
     files = await fs.readdir(dir);
-  } catch { /* dir doesn't exist yet */ }
+  } catch (e) { noteIgnoredError("dir doesn't exist yet", e); }
   const presets = files.filter(f => f.endsWith('.json')).map(f => f.replace('.json', ''));
 
   return {
@@ -206,7 +207,7 @@ export async function handleSetEnemyStats(
   let currentConfig: Record<string, any> = {};
   try {
     currentConfig = await luaClient.getConfig() ?? {};
-  } catch { /* old values unavailable — omit them from output */ }
+  } catch (e) { noteIgnoredError("old values unavailable — omit them from output", e); }
 
   // Build config update params. `paramKey` is PoB's own config option name —
   // set_config rejects anything outside its whitelist, so these must match.

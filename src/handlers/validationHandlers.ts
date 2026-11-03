@@ -1,4 +1,5 @@
 import type { BuildService } from "../services/buildService.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { ValidationService } from "../services/validationService.js";
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import { wrapHandler } from "../utils/errorHandling.js";
@@ -46,7 +47,7 @@ export async function handleValidateBuild(
             const requested = buildName.replace(/\.xml$/i, '');
             const loaded    = loadedName.replace(/\.xml$/i, '');
             otherBuildInMemory = Boolean(loaded) && loaded !== requested;
-          } catch { /* no build loaded — safe to load */ }
+          } catch (e) { noteIgnoredError("no build loaded — safe to load", e); }
 
           if (!otherBuildInMemory) {
             await luaClient.loadBuildXml(namedBuildXml, buildName, resolveBuildFile(buildName, context.pobDirectory!));
@@ -73,13 +74,9 @@ export async function handleValidateBuild(
                 curse: allFlaskText.includes('curse'),
               };
             }
-          } catch {
-            // Flask immunity check via Lua unavailable — fall back to XML parsing
-          }
+          } catch (e) { noteIgnoredError("Flask immunity check via Lua unavailable — fall back to XML parsing", e); }
         }
-      } catch {
-        // Lua stats unavailable
-      }
+      } catch (e) { noteIgnoredError("Lua stats unavailable", e); }
     }
   }
 
@@ -87,9 +84,7 @@ export async function handleValidateBuild(
   if (buildName) {
     try {
       buildData = await buildService.readBuild(buildName);
-    } catch {
-      // File not found — fall back to Lua-only validation below
-    }
+    } catch (e) { noteIgnoredError("File not found — fall back to Lua-only validation below", e); }
   }
 
   // If no build data and no lua stats, we can't do anything useful

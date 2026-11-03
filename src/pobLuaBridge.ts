@@ -1,4 +1,5 @@
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
+import { noteIgnoredError } from './utils/errorHandling.js';
 import { EventEmitter } from "events";
 import path from "path";
 import zlib from "zlib";
@@ -230,7 +231,7 @@ export class PoBLuaApiClient {
       // Don't leak the spawned process when startup fails
       this.proc = null;
       this.killed = true;
-      try { child.kill(); } catch {}
+      try { child.kill(); } catch (e) { noteIgnoredError("kill during startup cleanup (process likely already exited)", e); }
       throw err;
     }
   }
@@ -309,7 +310,7 @@ export class PoBLuaApiClient {
           if (err instanceof Error && /Timed out/.test(err.message)) {
             this.killed = true;
             this.buffer = "";
-            try { this.proc?.kill(); } catch {}
+            try { this.proc?.kill(); } catch (e) { noteIgnoredError("kill on stop (process likely already exited)", e); }
             throw new Error("Timed out waiting for response; the PoB bridge was terminated to avoid protocol desync and will restart on the next call");
           }
           throw err;
@@ -668,7 +669,7 @@ async setTree(params: {
     if (!this.proc) return;
     try {
       await this.send({ action: "quit" });
-    } catch {}
+    } catch (e) { noteIgnoredError('graceful quit handshake (hard kill follows)', e); }
     this.proc.kill();
     this.proc = null;
   }

@@ -1,4 +1,5 @@
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import { wrapHandler } from "../utils/errorHandling.js";
 
 interface ItemSkillHandlerContext {
@@ -217,7 +218,7 @@ export async function handleToggleFlask(
       if (stats.PhysicalDamageReduction != null) {
         text += `  PDR: ${fmt(stats.PhysicalDamageReduction)}%\n`;
       }
-    } catch {}
+    } catch (e) { noteIgnoredError("defensive detail stats (section omitted from output)", e); }
 
     return {
       content: [

@@ -1,4 +1,5 @@
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { BuildIssue } from "../types.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
@@ -47,7 +48,7 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
     try {
       const buildInfo = await luaClient.getBuildInfo();
       buildLevel = buildInfo?.level ?? 1;
-    } catch { /* ignore - default to level 1 */ }
+    } catch (e) { noteIgnoredError('build level lookup (issues checked against level 1)', e); }
 
     if (buildLevel >= 80 && chaos < -20) {
       issues.push({ severity: 'error', category: 'resistance', message: `Chaos resist is ${chaos}% at level ${buildLevel} — critically low for endgame. Aim for at least 0%, ideally 20%+.` });
@@ -108,7 +109,7 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
           issues.push({ severity: 'warning', category: 'defence', message: `~${unspent} passive points appear unspent (${regularNodes} regular nodes allocated, ~${expectedPoints} expected at level ${buildLevel}).` });
         }
       }
-    } catch { /* tree check is best-effort */ }
+    } catch (e) { noteIgnoredError("tree check is best-effort", e); }
 
     // Unequipped items & jewels check
     try {
@@ -149,7 +150,7 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
           });
         }
       }
-    } catch { /* items check is best-effort */ }
+    } catch (e) { noteIgnoredError("items check is best-effort", e); }
 
     // Gem coherence check - detect mixed damage scaling
     try {
@@ -192,7 +193,7 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
           }
         }
       }
-    } catch { /* gem check is best-effort */ }
+    } catch (e) { noteIgnoredError("gem check is best-effort", e); }
 
     return { issues, stats };
   });

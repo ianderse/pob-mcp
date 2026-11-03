@@ -1,4 +1,5 @@
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
 import type { OptimizationConstraints } from "../types/optimization.js";
@@ -47,7 +48,7 @@ export async function handleAnalyzeDefenses(
       if (loaded && (loaded === requested || basename(loaded) === basename(requested))) {
         needsLoad = false; // same build — keep current Lua state
       }
-    } catch { /* no build loaded yet */ }
+    } catch (e) { noteIgnoredError("no build loaded yet", e); }
 
     if (needsLoad) {
       const buildPath = resolveBuildFile(buildName, context.pobDirectory);
@@ -83,7 +84,7 @@ export async function handleAnalyzeDefenses(
       if (parts.length > 0) {
         contextHeader += `\n[${parts.join(' | ')}]`;
       }
-    } catch { /* advisory only */ }
+    } catch (e) { noteIgnoredError('active spec/set context header (analysis unaffected)', e); }
 
     // Analyze defenses
     const analysis = analyzeDefenses(stats);
@@ -158,7 +159,7 @@ export async function handleSuggestOptimalNodes(
           (gemText.includes('strike') || gemText.includes('slash') || gemText.includes('attack'))) {
         buildKeywords.push('attack');
       }
-    } catch {}
+    } catch (e) { noteIgnoredError("skill-type keywords from gem names (archetype heuristics weaker)", e); }
 
     // Map goal to search keywords, prioritising build archetype
     const goalKeywords: Record<string, string[]> = {
@@ -191,7 +192,7 @@ export async function handleSuggestOptimalNodes(
         if (results && results.nodes) {
           allNodes.push(...results.nodes);
         }
-      } catch {}
+      } catch (e) { noteIgnoredError("class keystone lookup for tree search (result set smaller)", e); }
     }
 
     // Also search for keystones
@@ -205,7 +206,7 @@ export async function handleSuggestOptimalNodes(
       if (keystoneResults && keystoneResults.nodes) {
         allNodes.push(...keystoneResults.nodes);
       }
-    } catch {}
+    } catch (e) { noteIgnoredError("ascendancy keystone lookup for tree search (result set smaller)", e); }
 
     // Deduplicate by id
     const seen = new Set<string>();

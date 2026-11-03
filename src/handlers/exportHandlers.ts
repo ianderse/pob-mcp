@@ -1,4 +1,5 @@
 import type { BuildService } from "../services/buildService.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { BuildExportService } from "../services/buildExportService.js";
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import type { ExportContext } from "../utils/contextBuilder.js";
@@ -219,7 +220,7 @@ export async function handleExportBuildSummary(context: ExportContext) {
   let skills: any = null;
   let tree: any = null;
 
-  try { info = await luaClient.getBuildInfo(); } catch { /* best effort */ }
+  try { info = await luaClient.getBuildInfo(); } catch (e) { noteIgnoredError("build info for export template (fields fall back to Unknown)", e); }
   try {
     stats = await luaClient.getStats([
       'Life', 'EnergyShield', 'Mana', 'ManaUnreserved',
@@ -228,9 +229,9 @@ export async function handleExportBuildSummary(context: ExportContext) {
       'Armour', 'Evasion', 'PhysicalDamageReduction', 'TotalEHP',
       'LifeRegen', 'SpellSuppressionChance', 'BlockChance',
     ]) ?? {};
-  } catch { /* best effort */ }
-  try { skills = await luaClient.getSkills(); } catch { /* best effort */ }
-  try { tree = await luaClient.getTree(); } catch { /* best effort */ }
+  } catch (e) { noteIgnoredError("defensive stats for export template (rows omitted)", e); }
+  try { skills = await luaClient.getSkills(); } catch (e) { noteIgnoredError("skill groups for export template (section omitted)", e); }
+  try { tree = await luaClient.getTree(); } catch (e) { noteIgnoredError("tree summary for export template (class falls back to build info)", e); }
 
   const classNames = ['Scion', 'Marauder', 'Ranger', 'Witch', 'Duelist', 'Templar', 'Shadow'];
   const className = (tree?.classId != null ? classNames[tree.classId] : null) || info?.className || 'Unknown';
