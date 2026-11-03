@@ -3,6 +3,7 @@ import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
 import type { OptimizationConstraints } from "../types/optimization.js";
+import type { PassiveTreeData } from "../types.js";
 import fs from "fs/promises";
 import { analyzeDefenses, formatDefensiveAnalysis } from "../defensiveAnalyzer.js";
 import { wrapHandler } from "../utils/errorHandling.js";
@@ -293,16 +294,17 @@ export async function handleOptimizeTree(
     // Get nearby notable/keystone recommendations via TreeService
     // For in-memory builds (no file on disk), fall back to the node IDs from the Lua bridge
     let allocatedNodes: Set<string>;
-    let treeData: any;
+    let treeData: PassiveTreeData;
     try {
       const build = await context.buildService.readBuild(buildName);
       const allocatedNodeIds = context.buildService.parseAllocatedNodes(build);
       allocatedNodes = new Set<string>(allocatedNodeIds);
       const treeVersion = context.buildService.extractBuildVersion(build);
       treeData = await context.treeService.getTreeData(treeVersion);
-    } catch {
+    } catch (e) {
       // Build not on disk — use node IDs already loaded from Lua bridge
-      const luaNodeIds: string[] = tree?.nodes?.map((n: any) => String(n.id ?? n)) ?? [];
+      noteIgnoredError("on-disk build for optimize (in-memory Lua tree used)", e);
+      const luaNodeIds: string[] = (tree?.nodes ?? []).map((n) => String(n));
       allocatedNodes = new Set<string>(luaNodeIds);
       treeData = await context.treeService.getTreeData(undefined);
     }
@@ -315,6 +317,15 @@ export async function handleOptimizeTree(
                        undefined;
 
     const nearbyNodes = context.treeService.findNearbyNodes(allocatedNodes, treeData, 3, goalFilter);
+
+    // Constraints: protectedNodes is enforced by dropping protected nodes
+    // from the recommendations. minLife/minES are evaluated against CURRENT
+    // stats — suggestions are not stat-recalculated (that needs a full PoB
+    // recompute), so "met" here means "the current build already satisfies
+    // it", stated as such below.
+    const protectedSet = new Set((constraints?.protectedNodes ?? []).map(String));
+    const protectedSkipped = nearbyNodes.filter(({ nodeId }) => protectedSet.has(String(nodeId)));
+    const candidateNodes = nearbyNodes.filter(({ nodeId }) => !protectedSet.has(String(nodeId)));
 
     let text = `=== Tree Optimization: ${buildName} ===\n\n`;
     text += `Goal: ${goalString}\n`;
@@ -329,10 +340,10 @@ export async function handleOptimizeTree(
     text += `Fire/Cold/Lightning Resist: ${stats.FireResist || 0}%/${stats.ColdResist || 0}%/${stats.LightningResist || 0}%\n\n`;
 
     // Recommendations based on nearby nodes
-    if (nearbyNodes.length > 0) {
+    if (candidateNodes.length > 0) {
       text += `=== Recommended Allocations (within 3 nodes) ===\n\n`;
       let count = 0;
-      for (const { node, nodeId } of nearbyNodes.slice(0, points)) {
+      for (const { node, nodeId } of candidateNodes.slice(0, points)) {
         const typeTag = node.isKeystone ? ' [KEYSTONE]' : node.isNotable ? ' [Notable]' : '';
         text += `${count + 1}. **${node.name || 'Unnamed'}**${typeTag} [${nodeId}]\n`;
         if (node.stats && node.stats.length > 0) {
@@ -348,11 +359,20 @@ export async function handleOptimizeTree(
       text += `Try get_nearby_nodes for unfiltered nearby node suggestions.\n`;
     }
 
-    if (constraints) {
-      text += `\n=== Constraints Applied ===\n`;
-      if (constraints.minLife) text += `- Minimum Life: ${constraints.minLife}\n`;
-      if (constraints.minES) text += `- Minimum Energy Shield: ${constraints.minES}\n`;
-      if (constraints.protectedNodes) text += `- Protected Nodes: ${constraints.protectedNodes.join(', ')}\n`;
+    if (constraints && (constraints.minLife || constraints.minES || constraints.protectedNodes)) {
+      text += `\n=== Constraints ===\n`;
+      if (constraints.minLife) {
+        const lifeNow = toFiniteNumber(stats.Life) ?? 0;
+        text += `- Min Life ${constraints.minLife}: currently ${lifeNow.toLocaleString()} — ${lifeNow >= constraints.minLife ? 'met by current build' : 'NOT met by current build'} (suggestions are not stat-recalculated)\n`;
+      }
+      if (constraints.minES) {
+        const esNow = toFiniteNumber(stats.EnergyShield) ?? 0;
+        text += `- Min ES ${constraints.minES}: currently ${esNow.toLocaleString()} — ${esNow >= constraints.minES ? 'met by current build' : 'NOT met by current build'} (suggestions are not stat-recalculated)\n`;
+      }
+      if (protectedSet.size > 0) {
+        text += `- Protected nodes (${protectedSet.size}): excluded from recommendations` +
+          (protectedSkipped.length > 0 ? ` — ${protectedSkipped.length} matching suggestion(s) dropped` : '') + '\n';
+      }
     }
 
     return {

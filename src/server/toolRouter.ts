@@ -518,7 +518,6 @@ export async function routeToolCall(
         skill_index: args.skill_index as number | undefined,
         link_count: args.link_count as number,
         budget: args.budget as "league_start" | "mid_league" | "endgame" | undefined,
-        optimize_for: args.optimize_for as "dps" | "clear_speed" | "bossing" | "defense" | undefined,
       });
 
     // ========================================

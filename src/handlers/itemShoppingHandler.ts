@@ -163,7 +163,6 @@ export async function handleFindItemUpgrades(
   context: ItemShoppingContext,
   args: {
     slot: string;
-    build_name?: string;
     priority?: 'dps' | 'defense' | 'resistance' | 'balanced';
   }
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
@@ -266,6 +265,13 @@ export async function handleFindItemUpgrades(
     text += '\n';
 
     // --- BUILD GAPS ---
+    // Without the Lua bridge there are no real stats: life=0/resists=75 are
+    // placeholders, not analysis. Say so instead of reporting fabricated gaps.
+    if (!luaClient) {
+      text += `## Build Gaps\n`;
+      text += `- Build stats unavailable — no build loaded in the Lua bridge, so resistance/life gaps are unknown. The mods below are generic for this slot.\n`;
+      text += `- Load a build with lua_load_build (or start the bridge with a build) for a real gap analysis.\n\n`;
+    } else {
     const gaps: string[] = [];
     if (!lifeGood) gaps.push(`${defenceLabel} is ${defenceValue.toLocaleString()} — target ${isESBuild ? '4000+' : '4500+'}`);
     if (fireMissing > 0) gaps.push(`Fire resist ${fireResist}% — ${fireMissing}% short of cap (${resistLabel(fireMissing)} priority)`);
@@ -278,12 +284,13 @@ export async function handleFindItemUpgrades(
       text += `## Build Gaps\n`;
       for (const g of gaps) text += `- ${g}\n`;
       text += '\n';
-    } else if (luaClient) {
+    } else {
       text += `## Build Status\n`;
       text += `- ${defenceLabel}: ${defenceValue.toLocaleString()} ✓\n`;
       text += `- Resistances: Fire ${fireResist}% / Cold ${coldResist}% / Lightning ${lightningResist}% / Chaos ${chaosResist}% ✓\n`;
       text += `- No critical gaps — this is a quality-of-life upgrade\n`;
       text += '\n';
+    }
     }
 
     // --- PRIORITY MODS ---

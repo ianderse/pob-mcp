@@ -357,7 +357,6 @@ export async function handleFindOptimalLinks(
     skill_index?: number;
     link_count: number;
     budget?: "league_start" | "mid_league" | "endgame";
-    optimize_for?: "dps" | "clear_speed" | "bossing" | "defense";
   }
 ) {
   const { buildService, skillGemService } = context;
@@ -381,13 +380,11 @@ export async function handleFindOptimalLinks(
   });
 
   const budget = args.budget || "endgame";
-  const optimizeFor = args.optimize_for || "dps";
 
   // Format output
   const outputLines: string[] = [
     `=== Optimal ${args.link_count}-Link for ${analysis.activeSkill.name} ===`,
     '',
-    `Optimization Target: ${optimizeFor.toUpperCase()}`,
     `Budget: ${budget.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())}`,
     '',
     '🏆 Optimal Setup:',

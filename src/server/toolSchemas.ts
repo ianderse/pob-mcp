@@ -945,10 +945,6 @@ export function getLuaToolSchemas(): any[] {
             type: "string",
             description: "Gear slot to get a shopping spec for (e.g., 'Helmet', 'Body Armour', 'Boots', 'Gloves', 'Belt', 'Amulet', 'Ring 1', 'Ring 2', 'Weapon 1', 'Weapon 2')",
           },
-          build_name: {
-            type: "string",
-            description: "Build file to analyze (optional if a build is loaded via lua_load_build)",
-          },
           priority: {
             type: "string",
             description: "What to optimize for: 'dps', 'defense', 'resistance', or 'balanced' (default: 'balanced')",
@@ -1018,7 +1014,7 @@ export function getOptimizationToolSchemas(): any[] {
           },
           constraints: {
             type: "object",
-            description: "Constraints like minimum life, required keystones, etc.",
+            description: "Optional constraints: { minLife, minES, protectedNodes: string[] }. protectedNodes are excluded from recommendations; minLife/minES are evaluated against current stats and reported (suggestions are not stat-recalculated).",
           },
           max_points: {
             type: "number",
@@ -1333,10 +1329,6 @@ export function getSkillGemToolSchemas(): any[] {
           budget: {
             type: "string",
             description: "Budget tier: 'league_start', 'mid_league', or 'endgame' (default: 'endgame')",
-          },
-          optimize_for: {
-            type: "string",
-            description: "Optimization target: 'dps', 'clear_speed', 'bossing', or 'defense' (default: 'dps')",
           },
         },
         required: ["build_name", "link_count"],
