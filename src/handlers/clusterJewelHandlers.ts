@@ -615,7 +615,7 @@ export async function handleAnalyzeBuildClusterJewels(context: ClusterJewelBuild
   const skills = await luaClient.getSkills();
   const gemNames: string[] = [];
   for (const group of (skills?.groups ?? [])) {
-    for (const gem of (group.gems ?? [])) gemNames.push(gem.name || gem);
+    for (const gem of (group.gems ?? [])) gemNames.push(gem.name);
   }
   const archetypeTags = inferClusterArchetype(gemNames);
 

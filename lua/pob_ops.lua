@@ -303,9 +303,18 @@ function M.get_tree()
     nodes = {},
     masteryEffects = {},
   }
+  local ascendancyPointsUsed = 0
   for id, _ in pairs(spec.allocNodes or {}) do
     table.insert(out.nodes, id)
+    -- Ascendancy points spent = allocated ascendancy nodes, minus the free
+    -- ascendancy-start node every chosen ascendancy grants. TS-side guards
+    -- (max-8 cap, unspent-point estimates) treat it exactly this way.
+    local node = spec.nodes and spec.nodes[id]
+    if node and node.ascendancyName and node.isAscendancyStart ~= true then
+      ascendancyPointsUsed = ascendancyPointsUsed + 1
+    end
   end
+  out.ascendancyPointsUsed = ascendancyPointsUsed
   for mastery, effect in pairs(spec.masterySelections or {}) do
     out.masteryEffects[mastery] = effect
   end

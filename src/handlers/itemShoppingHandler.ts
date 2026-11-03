@@ -225,10 +225,10 @@ export async function handleFindItemUpgrades(
       try {
         const items = await luaClient.getItems();
         const equipped = Array.isArray(items)
-          ? items.find((i: any) => i.slot === slot)
+          ? items.find((i) => i.slot === slot)
           : null;
         if (equipped) {
-          currentItemName = equipped.name ?? equipped.title ?? null;
+          currentItemName = equipped.name ?? null;
           currentItemBase = equipped.baseName ?? null;
           currentItemRarity = equipped.rarity ?? null;
         }

@@ -1,4 +1,4 @@
-import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import { toFiniteNumber, type ConfigValues, type PoBLuaApiClient } from "../pobLuaBridge.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -164,9 +164,9 @@ export async function handleSetConfig(
 
   if (newStats.TotalDPS != null) {
     output += `=== Current Stats ===\n`;
-    output += `Total DPS: ${formatNumber(newStats.TotalDPS)}\n`;
-    if (newStats.Life) output += `Life: ${formatNumber(newStats.Life)}\n`;
-    if (newStats.EnergyShield) output += `Energy Shield: ${formatNumber(newStats.EnergyShield)}\n`;
+    output += `Total DPS: ${formatNumber(toFiniteNumber(newStats.TotalDPS) ?? 0)}\n`;
+    if (newStats.Life) output += `Life: ${formatNumber(toFiniteNumber(newStats.Life) ?? 0)}\n`;
+    if (newStats.EnergyShield) output += `Energy Shield: ${formatNumber(toFiniteNumber(newStats.EnergyShield) ?? 0)}\n`;
   }
 
   return {
@@ -269,8 +269,8 @@ export async function handleSetEnemyStats(
   }
 
   output += `\n=== DPS Update ===\n`;
-  const oldDPS = oldStats.TotalDPS || 0;
-  const newDPS = newStats.TotalDPS || 0;
+  const oldDPS = toFiniteNumber(oldStats.TotalDPS) ?? 0;
+  const newDPS = toFiniteNumber(newStats.TotalDPS) ?? 0;
   const percentChange = oldDPS > 0 ? ((newDPS - oldDPS) / oldDPS * 100) : 0;
 
   output += `Previous DPS: ${formatNumber(oldDPS)}\n`;
@@ -307,7 +307,7 @@ export async function handleSetEnemyStats(
 /**
  * Format configuration output
  */
-function formatConfigOutput(config: any, labels: Record<string, string> = {}): string {
+function formatConfigOutput(config: ConfigValues, labels: Record<string, string> = {}): string {
   if (!config || typeof config !== 'object') {
     return "=== Configuration State ===\n\nNo configuration data available.\n";
   }

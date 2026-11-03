@@ -5,6 +5,7 @@ import fs from "fs/promises";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { resolveBuildFile } from "../utils/pathSanitizer.js";
 import { BOOTSTRAP_BUILD_NAME } from "../server/bootstrapBuild.js";
+import type { ItemSetEntry, PoBLuaApiClient, SpecEntry, StatsExport } from "../pobLuaBridge.js";
 export type { HandlerContext } from "../utils/contextBuilder.js";
 
 export async function handleListBuilds(context: HandlerContext) {
@@ -30,7 +31,7 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
   // Try to get live Lua stats — only load from file if no build is loaded.
   // If the same build is already loaded, preserve current spec/item set selection.
   // Never replace a *different* in-memory build (data-loss risk).
-  let luaStats: any = null;
+  let luaStats: StatsExport | null = null;
   let luaSkipped = false;
   let luaActiveSpecIndex: number | null = null;
   let luaActiveItemSetId: string | null = null;
@@ -75,8 +76,8 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
         try {
           const specsResult = await luaClient.listSpecs();
           const itemSetsResult = await luaClient.listItemSets();
-          const activeSpec = specsResult?.specs?.find((s: any) => s.active);
-          const activeItemSet = itemSetsResult?.itemSets?.find((s: any) => s.active);
+          const activeSpec = specsResult?.specs?.find(s => s.active);
+          const activeItemSet = itemSetsResult?.itemSets?.find(s => s.active);
           if (activeSpec) luaActiveSpecIndex = activeSpec.index;
           if (activeItemSet) luaActiveItemSetId = String(activeItemSet.id);
           const numSpecs = specsResult?.specs?.length ?? 0;
@@ -232,27 +233,27 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
   // We deliberately do NOT override spec/item set with heuristics — using the
   // saved state matches what the user sees in PoB and avoids reporting wrong stats
   // (e.g. resistances from a different gear set than the one the user expects).
-  const loadEndgame = async (luaClient: any, buildName: string) => {
+  const loadEndgame = async (luaClient: PoBLuaApiClient, buildName: string) => {
     const buildPath = resolveBuildFile(buildName, context.pobDirectory);
     const buildXml = await fs.readFile(buildPath, 'utf-8');
     const displayName = buildName.replace(/\.xml$/i, '').split(/[/\\]/).pop() ?? buildName;
     await luaClient.loadBuildXml(buildXml, displayName, buildPath);
 
-    let selectedSpec: any = null;
-    let selectedItemSet: any = null;
+    let selectedSpec: SpecEntry | null = null;
+    let selectedItemSet: ItemSetEntry | null = null;
 
     // Report which spec/item set is active (informational only — no override)
     try {
       const specsResult = await luaClient.listSpecs();
       if (specsResult?.specs?.length > 0) {
-        selectedSpec = specsResult.specs.find((s: any) => s.active) ?? specsResult.specs[0];
+        selectedSpec = specsResult.specs.find(s => s.active) ?? specsResult.specs[0];
       }
     } catch (e) { noteIgnoredError("spec list for build context (advisory)", e); }
 
     try {
       const itemSetsResult = await luaClient.listItemSets();
       if (itemSetsResult?.itemSets?.length > 0) {
-        selectedItemSet = itemSetsResult.itemSets.find((s: any) => s.active) ?? itemSetsResult.itemSets[0];
+        selectedItemSet = itemSetsResult.itemSets.find(s => s.active) ?? itemSetsResult.itemSets[0];
       }
     } catch (e) { noteIgnoredError("item-set list for build context (advisory)", e); }
 
@@ -268,9 +269,9 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
 
   // Try Lua-based live comparison
   let luaOk = false;
-  let r1: any = null;
-  let r2: any = null;
-  let luaClient: any = null;
+  let r1: Awaited<ReturnType<typeof loadEndgame>> | null = null;
+  let r2: Awaited<ReturnType<typeof loadEndgame>> | null = null;
+  let luaClient: PoBLuaApiClient | null = null;
   try {
     await context.ensureLuaClient();
     luaClient = context.getLuaClient();

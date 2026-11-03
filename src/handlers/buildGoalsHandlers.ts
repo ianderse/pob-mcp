@@ -94,7 +94,7 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
     try {
       const tree = await luaClient.getTree();
       if (tree?.nodes && buildLevel > 1) {
-        const totalAllocated = (tree.nodes as any[]).length;
+        const totalAllocated = tree.nodes.length;
         const ascNodes = tree.ascendancyPointsUsed ?? 0;
         // Subtract: 1 class start + ascendancy start (if ascendancy allocated) + ascendancy nodes
         const regularNodes = totalAllocated - 1 - (ascNodes > 0 ? 1 : 0) - ascNodes;
@@ -116,8 +116,8 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
       const items = await luaClient.getItems();
       if (Array.isArray(items)) {
         // Find jewel slots that are empty (id === 0)
-        const jewelSlots = items.filter((it: any) => it.slot && /jewel/i.test(it.slot));
-        const emptyJewelSlots = jewelSlots.filter((it: any) => !it.id || it.id === 0);
+        const jewelSlots = items.filter(it => it.slot && /jewel/i.test(it.slot));
+        const emptyJewelSlots = jewelSlots.filter(it => !it.id || it.id === 0);
         if (emptyJewelSlots.length > 0) {
           issues.push({
             severity: 'warning',
@@ -129,7 +129,7 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
         // Check for unequipped gear slots
         const gearSlots = ['Weapon 1', 'Body Armour', 'Helmet', 'Gloves', 'Boots', 'Belt', 'Ring 1', 'Ring 2', 'Amulet'];
         for (const slotName of gearSlots) {
-          const slot = items.find((it: any) => it.slot === slotName);
+          const slot = items.find(it => it.slot === slotName);
           if (slot && (!slot.id || slot.id === 0)) {
             issues.push({
               severity: 'warning',
@@ -140,8 +140,8 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
         }
 
         // Check for empty flask slots
-        const flaskSlots = items.filter((it: any) => it.slot && /flask/i.test(it.slot));
-        const emptyFlasks = flaskSlots.filter((it: any) => !it.id || it.id === 0);
+        const flaskSlots = items.filter(it => it.slot && /flask/i.test(it.slot));
+        const emptyFlasks = flaskSlots.filter(it => !it.id || it.id === 0);
         if (emptyFlasks.length > 0) {
           issues.push({
             severity: emptyFlasks.length >= 3 ? 'error' : 'warning',
@@ -158,11 +158,11 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
       if (skillsData?.groups) {
         for (const group of skillsData.groups as any[]) {
           if (!group.enabled || !group.gems || group.gems.length < 2) continue;
-          const gems = (group.gems as any[]).filter((g: any) => g.enabled);
-          const supports = gems.filter((g: any) => g.isSupport);
+          const gems = (group.gems as any[]).filter(g => g.enabled);
+          const supports = gems.filter(g => g.isSupport);
           if (supports.length < 2) continue;
 
-          const supportNames = supports.map((g: any) => (g.name || '').toLowerCase());
+          const supportNames = supports.map(g => (g.name || '').toLowerCase());
 
           // Check for Brutality + elemental/chaos supports (direct conflict)
           const hasBrutality = supportNames.some((n: string) => n.includes('brutality'));

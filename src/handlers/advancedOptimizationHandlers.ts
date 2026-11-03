@@ -1,4 +1,4 @@
-import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import { toFiniteNumber, type PoBLuaApiClient } from "../pobLuaBridge.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { BuildService } from "../services/buildService.js";
 import {
@@ -73,15 +73,15 @@ export async function handleAnalyzeItems(
         // Get stats from Lua
         const luaStats = await luaClient.getStats();
         stats = {
-          life: luaStats.Life,
-          energyShield: luaStats.EnergyShield,
-          evasion: luaStats.Evasion,
-          armour: luaStats.Armour,
-          dps: luaStats.TotalDPS,
-          fireRes: luaStats['FireResist'],
-          coldRes: luaStats['ColdResist'],
-          lightningRes: luaStats['LightningResist'],
-          chaosRes: luaStats['ChaosResist'],
+          life: toFiniteNumber(luaStats.Life),
+          energyShield: toFiniteNumber(luaStats.EnergyShield),
+          evasion: toFiniteNumber(luaStats.Evasion),
+          armour: toFiniteNumber(luaStats.Armour),
+          dps: toFiniteNumber(luaStats.TotalDPS),
+          fireRes: toFiniteNumber(luaStats['FireResist']),
+          coldRes: toFiniteNumber(luaStats['ColdResist']),
+          lightningRes: toFiniteNumber(luaStats['LightningResist']),
+          chaosRes: toFiniteNumber(luaStats['ChaosResist']),
         };
 
         // Get class info from tree
@@ -203,9 +203,9 @@ export async function handleOptimizeSkillLinks(
         const className = classNames[tree.classId];
 
         buildArchetype = inferBuildArchetype(className, undefined, {
-          life: stats.Life,
-          energyShield: stats.EnergyShield,
-          dps: stats.TotalDPS,
+          life: toFiniteNumber(stats.Life),
+          energyShield: toFiniteNumber(stats.EnergyShield),
+          dps: toFiniteNumber(stats.TotalDPS),
         });
       } catch (error) {
         if (!buildName) {

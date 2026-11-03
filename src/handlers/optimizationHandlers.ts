@@ -1,4 +1,4 @@
-import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import { toFiniteNumber, type PoBLuaApiClient } from "../pobLuaBridge.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
@@ -60,7 +60,7 @@ export async function handleAnalyzeDefenses(
     const stats = await luaClient.getStats();
 
     // Chaos Inoculation sets Life to 1 and carries the pool as Energy Shield.
-    const effectivePool = (stats.Life || 0) + (stats.EnergyShield || 0) + (stats.Ward || 0);
+    const effectivePool = (toFiniteNumber(stats.Life) ?? 0) + (toFiniteNumber(stats.EnergyShield) ?? 0) + (toFiniteNumber(stats.Ward) ?? 0);
     if (effectivePool <= BLANK_CHARACTER_POOL) {
       throw new Error(
         `Build "${buildName}" appears to be in default/empty state. The build may not have loaded correctly.`

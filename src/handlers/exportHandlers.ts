@@ -1,7 +1,7 @@
 import type { BuildService } from "../services/buildService.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { BuildExportService } from "../services/buildExportService.js";
-import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import type { BuildInfo, PoBLuaApiClient, SkillsOutput, StatsExport, TreeState } from "../pobLuaBridge.js";
 import type { ExportContext } from "../utils/contextBuilder.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
@@ -215,10 +215,10 @@ export async function handleExportBuildSummary(context: ExportContext) {
   if (!luaClient) throw new Error('Lua bridge not active. Use lua_load_build first.');
 
   // Lua bridge only supports one request at a time — must be sequential
-  let info: any = null;
-  let stats: Record<string, any> = {};
-  let skills: any = null;
-  let tree: any = null;
+  let info: BuildInfo | null = null;
+  let stats: StatsExport = {};
+  let skills: SkillsOutput | null = null;
+  let tree: TreeState | null = null;
 
   try { info = await luaClient.getBuildInfo(); } catch (e) { noteIgnoredError("build info for export template (fields fall back to Unknown)", e); }
   try {
@@ -263,18 +263,16 @@ export async function handleExportBuildSummary(context: ExportContext) {
   output += '\n';
 
   // Main skill setup
-  const mainGroup = skills?.groups?.find((g: any) => g.index === skills.mainSocketGroup) || skills?.groups?.[0];
+  const mainGroup = skills?.groups?.find(g => g.index === skills.mainSocketGroup) || skills?.groups?.[0];
   if (mainGroup) {
-    const gemNames = (mainGroup.gems || []).map((g: any) => g.name || g).filter(Boolean);
+    const gemNames = (mainGroup.gems || []).map(g => g.name || g).filter(Boolean);
     output += `## Main Skill\n\n`;
     output += `**${mainGroup.label || 'Main'}:** ${gemNames.join(' + ')}\n\n`;
   }
 
-  // Keystone passives
-  if (Array.isArray(tree?.keystones) && tree.keystones.length > 0) {
-    output += `## Keystones\n\n`;
-    output += tree.keystones.map((k: string) => `- ${k}`).join('\n') + '\n\n';
-  }
+  // No keystone section: the bridge's get_tree returns node IDs only, never
+  // keystone names. Rendering one would require deriving names from the
+  // passive tree data (see TreeService), which this template does not do.
 
   output += `---\n_Generated with pob-mcp-server_\n`;
 

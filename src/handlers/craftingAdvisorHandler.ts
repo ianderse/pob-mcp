@@ -119,8 +119,8 @@ export async function handleSuggestCrafting(
               ring: 'Ring 1', amulet: 'Amulet', belt: 'Belt',
             };
             const slotName = slotMap[slot.toLowerCase()];
-            const item = items.find((i: any) => i.slot === slotName);
-            if (item?.baseName || item?.base) base = item.baseName ?? item.base;
+            const item = items.find((i) => i.slot === slotName);
+            if (item?.baseName) base = item.baseName;
           } catch (e) { noteIgnoredError("No item in slot — fine, continue without auto-detected base", e); }
         }
       } catch (e) { noteIgnoredError("PoB not loaded — fine, continue without build context", e); }
