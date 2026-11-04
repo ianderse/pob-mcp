@@ -228,6 +228,14 @@ Note the full path to the `src/` directory — that's your `POB_PATH`.
 
 > No fork or patches are required. The server ships its own stdio adapter (`lua/vanilla_stdio_bridge.lua` + `lua/pob_ops.lua`) that loads the stock `HeadlessWrapper.lua` as a library and drives PoB's real calculation engine directly. Every Lua-bridge tool — stats, tree editing, gems, items, config, specs, save/export, anointments, weighted trade queries — works against an unmodified checkout. Call `lua_get_capabilities` at runtime for the authoritative action list.
 
+No PoB at all? The offline smoke suite runs without the engine — the bridge
+lifecycle race, persistence semantics, and state truthfulness (it asserts every
+`calc_with` response carries real computed keys rather than an empty object):
+
+```bash
+npm run test:smoke:offline
+```
+
 To verify locally after building this project:
 
 ```bash
