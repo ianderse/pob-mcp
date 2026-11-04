@@ -114,6 +114,16 @@ try {
   if (!bossBogus?.rejected?.enemyIsBoss) {
     throw new Error(`unknown list value must be rejected, got ${JSON.stringify(bossBogus)}`);
   }
+  // the exact keys advertised in the set_config tool description must exist
+  // in this PoB version (they were invented once: 'conditionOnFullLife')
+  const advertised = await client.setConfig({
+    buffFortification: true,
+    conditionFullLife: true,
+    conditionFullEnergyShield: true,
+  });
+  if (Object.keys(advertised?.rejected ?? {}).length > 0) {
+    throw new Error(`schema-advertised config keys rejected: ${JSON.stringify(advertised.rejected)}`);
+  }
 
   await client.loadBuildXml(await readFile(gearedBuildXml, 'utf8'), 'weighted-query-smoke');
   const weighted = await client.generateWeightedTradeQuery('Amulet');

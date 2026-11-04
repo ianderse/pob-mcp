@@ -1098,13 +1098,13 @@ export function getConfigToolSchemas(): ToolSchema[] {
     },
     {
       name: "set_config",
-      description: "Modify configuration inputs. Common keys — Charges: usePowerCharges, useFrenzyCharges, useEnduranceCharges | Conditions: conditionFortify, conditionLeeching, conditionOnFullLife, conditionOnFullEnergyShield | Buffs: buffOnslaught | Enemy: enemyIsBoss ('None'/'Boss'/'Pinnacle'/'Uber'; legacy names 'Shaper'/'Sirus' map to 'Pinnacle', 'Atziri'/'Uber Atziri' to 'Boss'), enemyLevel | Build: bandit ('None'/'Oak'/'Alira'/'Kraityn'), pantheonMajorGod, pantheonMinorGod. Values outside an option's accepted set are rejected per key, never silently ignored. Call get_config to see all current values.",
+      description: "Modify configuration inputs. Common keys — Charges: usePowerCharges, useFrenzyCharges, useEnduranceCharges | Conditions: buffFortification, conditionLeeching, conditionFullLife, conditionFullEnergyShield | Buffs: buffOnslaught | Enemy: enemyIsBoss ('None'/'Boss'/'Pinnacle'/'Uber'; legacy names 'Shaper'/'Sirus' map to 'Pinnacle', 'Atziri'/'Uber Atziri' to 'Boss'), enemyLevel | Build: bandit ('None'/'Oak'/'Alira'/'Kraityn'), pantheonMajorGod, pantheonMinorGod. Values outside an option's accepted set are rejected per key, never silently ignored. Call get_config to see all current values.",
       inputSchema: {
         type: "object",
         properties: {
           config_name: {
             type: "string",
-            description: "Name of configuration input to change (e.g., 'usePowerCharges', 'enemyIsBoss', 'conditionFortify')",
+            description: "Name of configuration input to change (e.g., 'usePowerCharges', 'enemyIsBoss', 'buffFortification')",
           },
           value: {
             description: "New value (boolean for most flags, number for counts)",
