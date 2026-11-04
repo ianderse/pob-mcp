@@ -714,10 +714,15 @@ function M.add_item_text(params)
   build.itemsTab:AddItem(item, params.noAutoEquip == true)
   if params.slotName then
     local slot = tostring(params.slotName)
-    if build.itemsTab.slots[slot] then
-      build.itemsTab.slots[slot]:SetSelItemId(item.id)
-      build.itemsTab:PopulateSlots()
+    if not build.itemsTab.slots[slot] then
+      -- Never claim a slot we did not equip into: an unknown name used to
+      -- fall through silently while the response echoed the requested slot.
+      -- The item IS already in the build (above), so say so - a plain error
+      -- would invite a retry that duplicates the item.
+      return nil, string.format('unknown slot "%s" (item was added to the build as id %d but NOT equipped) - use the exact slot names reported by get_equipped_items (they vary with the PoB version)', slot, item.id)
     end
+    build.itemsTab.slots[slot]:SetSelItemId(item.id)
+    build.itemsTab:PopulateSlots()
   end
   build.itemsTab:AddUndoState()
   build.buildFlag = true

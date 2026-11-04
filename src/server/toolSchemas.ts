@@ -617,8 +617,7 @@ export function getLuaToolSchemas(): ToolSchema[] {
           },
           slot_name: {
             type: "string",
-            description: "Slot to equip in: Weapon 1, Weapon 2, Helmet, Body Armour, Gloves, Boots, Amulet, Ring 1, Ring 2, Belt, Flask 1-5",
-            enum: ["Weapon 1", "Weapon 2", "Helmet", "Body Armour", "Gloves", "Boots", "Amulet", "Ring 1", "Ring 2", "Belt", "Flask 1", "Flask 2", "Flask 3", "Flask 4", "Flask 5"],
+            description: "Slot to equip in, using PoB's exact slot names: Weapon 1, Weapon 2, Helmet, Body Armour, Gloves, Boots, Amulet, Ring 1, Ring 2, Belt, Flask 1-5, plus any version-specific slots (e.g. Ring 3, Graft 1/2) as reported by get_equipped_items. Unknown names fail with the item reported as added-but-not-equipped.",
           },
           no_auto_equip: {
             type: "boolean",
@@ -701,8 +700,7 @@ export function getLuaToolSchemas(): ToolSchema[] {
           },
           slot: {
             type: "string",
-            description: "Item slot for sockets (e.g., 'Weapon 1', 'Body Armour')",
-            enum: ["Weapon 1", "Weapon 2", "Helmet", "Body Armour", "Gloves", "Boots", "Amulet", "Ring 1", "Ring 2", "Belt", "Flask 1", "Flask 2", "Flask 3", "Flask 4", "Flask 5"],
+            description: "Item slot for sockets, PoB's exact slot name (e.g., 'Weapon 1', 'Body Armour', 'Helmet', 'Gloves', 'Boots', 'Shield'); jewel-socket slots as reported by get_equipped_items",
           },
           enabled: {
             type: "boolean",
