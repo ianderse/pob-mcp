@@ -29,7 +29,6 @@ function makeDeps() {
     buildValidationContext: () => ({}),
   };
   return {
-    toolGate: { checkGate: () => {}, unlock: () => {}, isLocked: () => false, getLastToolCalled: () => '' },
     contextBuilder,
     tradeClient: {}, // router only gates on presence here; the service itself doesn't call it
     statMapper: null,

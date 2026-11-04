@@ -11,6 +11,7 @@ import { StatMapper } from '../services/statMapper.js';
 import { PoeNinjaClient } from '../services/poeNinjaClient.js';
 import { ItemListing } from '../types/tradeTypes.js';
 import type { PoBLuaApiClient } from '../pobLuaBridge.js';
+import type { PoBItemEntry, PoBBuild } from '../types.js';
 
 interface ClusterJewelContext {
   tradeClient: TradeApiClient;
@@ -296,7 +297,21 @@ function formatClusterJewelResults(
 /**
  * Extract passive count from cluster jewel implicit mods
  */
-function extractPassiveCount(item: any): number | null {
+/** One parsed cluster jewel (this file's light-weight view of PoB item text). */
+interface ParsedClusterJewel {
+  slot: string | undefined;
+  rarity: string;
+  name: string;
+  baseType: string;
+  itemLevel: number;
+  passiveCount: number | null;
+  size?: 'Large' | 'Medium' | 'Small';
+  enchantments: string[];
+  notables: string[];
+  mods: string[];
+}
+
+function extractPassiveCount(item: { implicitMods?: string[] }): number | null {
   const implicitMods = item.implicitMods || [];
 
   for (const mod of implicitMods) {
@@ -312,7 +327,7 @@ function extractPassiveCount(item: any): number | null {
 /**
  * Extract notable names from cluster jewel explicit mods
  */
-function extractNotables(item: any): string[] {
+function extractNotables(item: { explicitMods?: string[] }): string[] {
   const explicitMods = item.explicitMods || [];
   const notables: string[] = [];
 
@@ -330,7 +345,7 @@ function extractNotables(item: any): string[] {
  * Analyze cluster jewels equipped in a build
  */
 export async function handleAnalyzeClusterJewels(
-  context: { buildService: any },
+  context: { buildService: { readBuild: (name: string) => Promise<PoBBuild> } },
   args: {
     build_name: string;
   }
@@ -388,8 +403,8 @@ export async function handleAnalyzeClusterJewels(
  * Items/Item regardless of which set is equipped. Iterating Items/Item is
  * both the correct and the only navigation needed.
  */
-function findClusterJewelsInBuild(build: any): any[] {
-  const clusterJewels: any[] = [];
+function findClusterJewelsInBuild(build: PoBBuild): ParsedClusterJewel[] {
+  const clusterJewels: ParsedClusterJewel[] = [];
 
   const rawItems = build?.Items?.Item;
   if (!rawItems) return clusterJewels;
@@ -410,10 +425,10 @@ function findClusterJewelsInBuild(build: any): any[] {
 /**
  * Parse a cluster jewel item from PoB format
  */
-function parseClusterJewelItem(item: any, itemText: string): any {
+function parseClusterJewelItem(item: PoBItemEntry, itemText: string): ParsedClusterJewel {
   const lines = itemText.split('\n');
 
-  const jewel: any = {
+  const jewel: ParsedClusterJewel = {
     slot: item.id,
     rarity: 'Unknown',
     name: '',
@@ -496,7 +511,7 @@ function parseClusterJewelItem(item: any, itemText: string): any {
 /**
  * Format cluster jewel analysis output
  */
-function formatClusterJewelAnalysis(jewel: any, index: number): string {
+function formatClusterJewelAnalysis(jewel: ParsedClusterJewel, index: number): string {
   let output = `${index}. ${jewel.name || jewel.baseType}\n`;
   output += `   Base: ${jewel.baseType}\n`;
   output += `   Rarity: ${jewel.rarity}\n`;
@@ -591,15 +606,23 @@ export async function handleAnalyzeBuildClusterJewels(context: ClusterJewelBuild
   if (!luaClient) throw new Error('Lua bridge not active. Use lua_load_build first.');
 
   const items = await luaClient.getItems();
-  const clusterJewels = (items as any[]).filter((item: any) => {
-    const base: string = item.base || '';
-    return (
+  const clusterJewels = items.filter((item) => {
+    // PoB's field is `baseName` (get_items maps it.baseName); the previous
+    // `item.base` was always undefined → this filter matched NOTHING and
+    // the tool always reported "No cluster jewels detected".
+    const base: string = item.baseName || '';
+    if (!
       (base.includes('Cluster Jewel') ||
        base.includes('Large Jewel') ||
        base.includes('Medium Jewel') ||
-       base.includes('Small Jewel')) &&
-      item.slot && String(item.slot).toLowerCase().includes('jewel')
-    );
+       base.includes('Small Jewel'))
+    ) return false;
+    // Socketed passive-tree jewels arrive as "Amber Watcher [Large Cluster
+    // Jewel]" in name — accept that too; socket slot naming is PoB-version
+    // dependent and must not be the only accept path.
+    const nameIsJewel = /\[[^\]]*Jewel[^\]]*\]/.test(item.name || '');
+    const slotIsJewel = String(item.slot).toLowerCase().includes('jewel');
+    return nameIsJewel || slotIsJewel;
   });
 
   if (clusterJewels.length === 0) {
@@ -624,8 +647,8 @@ export async function handleAnalyzeBuildClusterJewels(context: ClusterJewelBuild
 
   for (const jewel of clusterJewels) {
     const raw: string = jewel.raw || '';
-    output += `### ${jewel.name || jewel.base} (${jewel.slot})\n`;
-    output += `Base: ${jewel.base}\n`;
+    output += `### ${jewel.name || jewel.baseName} (${jewel.slot})\n`;
+    output += `Base: ${jewel.baseName}\n`;
 
     // Find any known notable names mentioned in the raw item text
     const foundNotables = Object.keys(CLUSTER_NOTABLE_TAGS).filter(n => raw.includes(n));

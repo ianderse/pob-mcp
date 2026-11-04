@@ -49,3 +49,38 @@ describe('handleAnalyzeClusterJewels', () => {
     expect(result.content[0].text).toContain('No cluster jewels found');
   });
 });
+
+describe('handleAnalyzeBuildClusterJewels (live bridge)', () => {
+  // get_items yields `baseName` (PoB it.baseName), not `base` — a filter on
+  // item.base matched nothing and the tool always reported "No cluster
+  // jewels detected" for every build.
+  // Socketed jewels reach get_items under PoB's *passive-tree* slot names
+  // (Socket13, …) — Ring slots carry normal rings.
+  const equipped = [
+    { slot: 'Ammo1', id: 0 },
+    { slot: 'Weapon 1', id: 1, name: "Axe", type: "Weapon", baseName: "Victaria's Attempt" },
+    // Socketed jewels reach get_items under PoB's *passive-tree* slot names
+    // (Socket13, …) — Ring slots carry normal rings. Name has PoB's
+    // socketed-jewel form ("Amber Watcher [Large Cluster Jewel]").
+    { slot: 'Socket13', id: 2, name: 'Amber Watcher [Large Cluster Jewel]', type: 'Ring', baseName: 'Perfect Large Cluster Jewel', raw: 'Rarity: RARE\nPerfect Large Cluster Jewel\n----\nAdds 15 Passive Skills\nAllocates Feasting Fiends' },
+    { slot: 'Ring 2', id: 3, name: 'Plain', type: 'Ring', baseName: 'Simple Robe' },
+  ];
+
+  const context = {
+    ensureLuaClient: async () => {},
+    getLuaClient: () => ({
+      getItems: async () => equipped,
+      getSkills: async () => ({ groups: [{ index: 1, label: 'S', main: true, gems: [{ name: 'Vortex', level: 20, quality: 20 }] }] }),
+    }),
+  } as any;
+
+  it('detects socketed cluster jewels from baseName', async () => {
+    const { handleAnalyzeBuildClusterJewels } = await import('../../src/handlers/clusterJewelHandlers.js');
+    const result = await handleAnalyzeBuildClusterJewels(context);
+    const text = result.content.map((c: any) => c.text).join('');
+
+    expect(text).toContain('Perfect Large Cluster Jewel');
+    expect(text).toContain('Feasting Fiends');
+    expect(text).not.toContain('No cluster jewels detected');
+  });
+});

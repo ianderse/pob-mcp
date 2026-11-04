@@ -5,7 +5,6 @@
  */
 
 import type { OptimizationConstraints } from "../types/optimization.js";
-import type { ToolGate } from "./toolGate.js";
 import type { ContextBuilder } from "../utils/contextBuilder.js";
 import type { TradeApiClient } from "../services/tradeClient.js";
 import type { StatMapper } from "../services/statMapper.js";
@@ -39,7 +38,6 @@ import { handleFindItemUpgrades as handleFindItemUpgradesNew } from "../handlers
 import { handleClassifyItemAffixes, handleListCraftableMods, handleFindAffixTiers } from "../handlers/affixHandlers.js";
 
 export interface ToolRouterDependencies {
-  toolGate: ToolGate;
   contextBuilder: ContextBuilder;
   tradeClient: TradeApiClient | null;
   statMapper: StatMapper | null;
@@ -65,7 +63,6 @@ export async function routeToolCall(
   deps: ToolRouterDependencies
 ): ToolResponse {
   // Check tool gate first
-  deps.toolGate.checkGate(name);
 
   // Create handler contexts using contextBuilder
   const handlerContext = deps.contextBuilder.buildHandlerContext();

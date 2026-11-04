@@ -36,7 +36,6 @@ import { ItemRecommendationEngine } from "./services/itemRecommendationEngine.js
 import { ContextBuilder } from "./utils/contextBuilder.js";
 
 // Import server modules
-import { ToolGate } from "./server/toolGate.js";
 import { LuaClientManager } from "./server/luaClientManager.js";
 import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getConfigToolSchemas, getValidationToolSchemas, getExportToolSchemas, getSkillGemToolSchemas, getTradeToolSchemas, getPoeNinjaToolSchemas, getBuildGoalsToolSchemas } from "./server/toolSchemas.js";
 import { routeToolCall, type ToolRouterDependencies } from "./server/toolRouter.js";
@@ -62,7 +61,6 @@ class PoBMCPServer {
   private contextBuilder: ContextBuilder;
 
   // Server modules
-  private toolGate: ToolGate;
   private luaClientManager: LuaClientManager;
 
   constructor() {
@@ -111,7 +109,6 @@ class PoBMCPServer {
     }
 
     // Initialize server modules
-    this.toolGate = new ToolGate();
 
     const luaEnabled = process.env.POB_LUA_ENABLED === 'true';
     this.luaClientManager = new LuaClientManager(luaEnabled);
@@ -264,7 +261,6 @@ class PoBMCPServer {
       try {
         // Build router dependencies
         const routerDeps: ToolRouterDependencies = {
-          toolGate: this.toolGate,
           contextBuilder: this.contextBuilder,
           tradeClient: this.tradeClient,
           statMapper: this.statMapper,
