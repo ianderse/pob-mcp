@@ -4,14 +4,47 @@
  * Generates prioritized shopping lists from PoB builds with price estimates
  */
 
-import { PoBBuild } from '../types.js';
-import { TradeApiClient } from './tradeClient.js';
-import { StatMapper } from './statMapper.js';
-import { PoeNinjaClient } from './poeNinjaClient.js';
-import { TradeQueryBuilder } from './tradeQueryBuilder.js';
+import type { PoBBuild } from '../types.js';
+import { activeItemSetOf, activeItemSlotsOf, activeSpecTreeVersion, itemTextMapOf } from '../utils/pobXml.js';
+import { isEquippableGearSlot, isGearSlotVisible } from '../itemAnalyzer.js';
 
-export type UpgradePriority = 'critical' | 'high' | 'medium' | 'low';
+type UpgradePriority = 'critical' | 'high' | 'medium' | 'low';
 export type BudgetTier = 'budget' | 'medium' | 'endgame';
+
+/** Result of this service's light-weight item-text extraction (not itemParser's richer ParsedItem). */
+interface WeaponProperties {
+  physicalDamageMin: number;
+  physicalDamageMax: number;
+  fireDamageMin: number;
+  fireDamageMax: number;
+  coldDamageMin: number;
+  coldDamageMax: number;
+  lightningDamageMin: number;
+  lightningDamageMax: number;
+  chaosDamageMin: number;
+  chaosDamageMax: number;
+  attacksPerSecond: number;
+}
+
+interface ParsedSlotItem {
+  rarity: string;
+  name: string;
+  baseType: string;
+  life: number;
+  es: number;
+  resistances: { fire: number; cold: number; lightning: number; chaos: number };
+  mods: string[];
+  issues: string[];
+  weapon: WeaponProperties;
+}
+
+/** Build-level stat summary derived from `<PlayerStat>` entries. */
+interface BuildStatSummary {
+  life: number;
+  es: number;
+  resistances: { fire: number; cold: number; lightning: number; chaos: number };
+  dps: number;
+}
 
 export interface ShoppingListItem {
   slot: string;
@@ -35,7 +68,7 @@ export interface ShoppingListItem {
   };
 }
 
-export interface ItemRecommendation {
+interface ItemRecommendation {
   searchCriteria: string;
   estimatedPrice: {
     min: number;
@@ -77,44 +110,45 @@ export interface ShoppingList {
 }
 
 export class ShoppingListService {
-  constructor(
-    private tradeClient?: TradeApiClient,
-    private statMapper?: StatMapper,
-    private ninjaClient?: PoeNinjaClient
-  ) {}
-
   /**
    * Generate a shopping list from a PoB build
    */
   async generateShoppingList(
     build: PoBBuild,
     buildName: string,
-    league: string,
-    budget: BudgetTier = 'medium'
+    league: string
   ): Promise<ShoppingList> {
     // Extract build info
     const equippedItems = this.extractEquippedItems(build);
     const buildStats = this.analyzeBuildStats(build);
     const buildNeeds = this.calculateBuildNeeds(buildStats);
 
-    // Analyze each slot
+    // Analyze each slot - derived from the build's own slot list, not a
+    // frozen name table: hard-coded 3.27-era lists silently dropped Ring 3 /
+    // Graft slots and reported phantom empties for layouts a build lacks.
+    // PoB's serializer writes EVERY slot into each ItemSet regardless of
+    // visibility, so hidden-for-this-build empties are gated out too; a slot
+    // holding an item is always data (see isGearSlotVisible: no engine here,
+    // gate is XML-derivable only; treeVersion lives on the active <Spec>).
+    const treeVersion = activeSpecTreeVersion(build);
+    const slots: string[] = [];
+    const seenSlots = new Set<string>();
+    for (const slot of activeItemSlotsOf(build)) {
+      if (!slot.name) continue;
+      const name = this.normalizeSlotName(slot.name);
+      // flask slots keep their own handling elsewhere; sub-slot noise (Swap/
+      // Abyssal/Jewel/Cluster) is filtered by the shared predicate
+      if (/flask/i.test(name) || !isEquippableGearSlot(name) || seenSlots.has(name)) continue;
+      const filled = Boolean(slot.itemId && slot.itemId !== '0');
+      if (!isGearSlotVisible(name, { treeVersion, filled })) continue;
+      seenSlots.add(name);
+      slots.push(name);
+    }
     const shoppingItems: ShoppingListItem[] = [];
-    const slots = [
-      'Weapon 1',
-      'Weapon 2',
-      'Helmet',
-      'Body Armour',
-      'Gloves',
-      'Boots',
-      'Amulet',
-      'Ring 1',
-      'Ring 2',
-      'Belt',
-    ];
 
     for (const slot of slots) {
       const currentItem = equippedItems[slot];
-      const analysis = await this.analyzeSlot(slot, currentItem, buildNeeds, league);
+      const analysis = await this.analyzeSlot(slot, currentItem, buildNeeds);
 
       if (analysis) {
         shoppingItems.push(analysis);
@@ -146,30 +180,15 @@ export class ShoppingListService {
   /**
    * Extract equipped items from build
    */
-  private extractEquippedItems(build: PoBBuild): Record<string, any> {
-    const equipped: Record<string, any> = {};
+  private extractEquippedItems(build: PoBBuild): Record<string, ParsedSlotItem> {
+    const equipped: Record<string, ParsedSlotItem> = {};
 
-    const items = (build as any).Items;
-    if (!items || !items.ItemSet) return equipped;
+    const itemSet = activeItemSetOf(build);
+    if (!itemSet?.Slot) return equipped;
 
-    const itemSet = items.ItemSet;
-    if (!itemSet.Slot) return equipped;
+    const itemMap = itemTextMapOf(build);
 
-    // Build item map
-    const itemMap = new Map<string, string>();
-    if (items.Item) {
-      const itemList = Array.isArray(items.Item) ? items.Item : [items.Item];
-      for (const item of itemList) {
-        if (item.id && item['#text']) {
-          itemMap.set(item.id, item['#text']);
-        }
-      }
-    }
-
-    // Get slots
-    const slots = Array.isArray(itemSet.Slot) ? itemSet.Slot : [itemSet.Slot];
-
-    for (const slot of slots) {
+    for (const slot of activeItemSlotsOf(build)) {
       if (!slot.name || !slot.itemId) continue;
 
       const itemText = itemMap.get(slot.itemId);
@@ -207,9 +226,9 @@ export class ShoppingListService {
   /**
    * Parse item text from PoB format
    */
-  private parseItem(itemText: string): any {
+  private parseItem(itemText: string): ParsedSlotItem {
     const lines = itemText.split('\n');
-    const item: any = {
+    const item: ParsedSlotItem = {
       rarity: 'Unknown',
       name: '',
       baseType: '',
@@ -239,7 +258,9 @@ export class ShoppingListService {
 
       if (trimmed.startsWith('Rarity:')) {
         item.rarity = trimmed.replace('Rarity:', '').trim();
-      } else if (!item.name && trimmed && !trimmed.startsWith('Rarity:')) {
+      } else if (!item.name && trimmed && !trimmed.startsWith('Rarity:') && !trimmed.startsWith('Item Class:') && !trimmed.startsWith('----')) {
+        // PoB item text starts "Item Class: …\nRarity: …\n<name>" — the name
+        // is the FIRST line after Rarity; "Item Class:" is metadata.
         item.name = trimmed;
       } else if (trimmed.match(/\+\d+ to maximum Life/)) {
         const match = trimmed.match(/\+(\d+) to maximum Life/);
@@ -321,7 +342,7 @@ export class ShoppingListService {
   /**
    * Analyze build stats from PoB PlayerStat values
    */
-  private analyzeBuildStats(build: PoBBuild): any {
+  private analyzeBuildStats(build: PoBBuild): BuildStatSummary {
     const stats = {
       life: 0,
       es: 0,
@@ -370,7 +391,7 @@ export class ShoppingListService {
   /**
    * Calculate what the build needs
    */
-  private calculateBuildNeeds(buildStats: any): ShoppingList['buildNeeds'] {
+  private calculateBuildNeeds(buildStats: BuildStatSummary): ShoppingList['buildNeeds'] {
     // Target: 75% all res, 4500+ life or 6000+ ES
     const lifeTarget = 4500;
     const resTarget = 75;
@@ -393,9 +414,8 @@ export class ShoppingListService {
    */
   private async analyzeSlot(
     slot: string,
-    currentItem: any | undefined,
-    buildNeeds: ShoppingList['buildNeeds'],
-    league: string
+    currentItem: ParsedSlotItem | undefined,
+    buildNeeds: ShoppingList['buildNeeds']
   ): Promise<ShoppingListItem | null> {
     // Determine if slot needs upgrade
     const issues: string[] = currentItem?.issues || [];
@@ -470,7 +490,7 @@ export class ShoppingListService {
    */
   private generateRecommendations(
     slot: string,
-    currentItem: any,
+    currentItem: ParsedSlotItem | undefined,
     buildNeeds: ShoppingList['buildNeeds']
   ): ShoppingListItem['recommendations'] {
     // Budget recommendation
@@ -506,7 +526,7 @@ export class ShoppingListService {
     slot: string,
     buildNeeds: ShoppingList['buildNeeds'],
     tier: BudgetTier,
-    currentItem?: any
+    currentItem?: ParsedSlotItem
   ): string[] {
     const stats: string[] = [];
 
@@ -573,7 +593,7 @@ export class ShoppingListService {
    */
   private estimateNetImpact(
     slot: string,
-    currentItem: any,
+    currentItem: ParsedSlotItem | undefined,
     buildNeeds: ShoppingList['buildNeeds']
   ): ShoppingListItem['estimatedImpact'] {
     const impact: ShoppingListItem['estimatedImpact'] = {};
@@ -643,7 +663,7 @@ export class ShoppingListService {
   /**
    * Extract weapon DPS from parsed item properties
    */
-  private extractWeaponDPS(item: any): number {
+  private extractWeaponDPS(item: ParsedSlotItem | undefined): number {
     if (!item || !item.weapon) return 0;
 
     const weapon = item.weapon;

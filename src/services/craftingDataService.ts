@@ -18,7 +18,7 @@ export function parsePoedbText(html: string, base: string): string {
   return `=== poedb data for: ${base} ===\n\n${text.slice(0, 8000)}`;
 }
 
-export interface CraftingBaseData {
+interface CraftingBaseData {
   base: string;
   poedbUrl: string;
   modText: string;

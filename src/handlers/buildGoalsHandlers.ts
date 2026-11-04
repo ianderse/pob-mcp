@@ -1,8 +1,10 @@
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
+import { isEquippableGearSlot, isGearSlotVisible } from '../itemAnalyzer.js';
 import type { BuildIssue } from "../types.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
-export interface BuildGoalsHandlerContext {
+interface BuildGoalsHandlerContext {
   getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }
@@ -47,7 +49,7 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
     try {
       const buildInfo = await luaClient.getBuildInfo();
       buildLevel = buildInfo?.level ?? 1;
-    } catch { /* ignore - default to level 1 */ }
+    } catch (e) { noteIgnoredError('build level lookup (issues checked against level 1)', e); }
 
     if (buildLevel >= 80 && chaos < -20) {
       issues.push({ severity: 'error', category: 'resistance', message: `Chaos resist is ${chaos}% at level ${buildLevel} — critically low for endgame. Aim for at least 0%, ideally 20%+.` });
@@ -93,7 +95,7 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
     try {
       const tree = await luaClient.getTree();
       if (tree?.nodes && buildLevel > 1) {
-        const totalAllocated = (tree.nodes as any[]).length;
+        const totalAllocated = tree.nodes.length;
         const ascNodes = tree.ascendancyPointsUsed ?? 0;
         // Subtract: 1 class start + ascendancy start (if ascendancy allocated) + ascendancy nodes
         const regularNodes = totalAllocated - 1 - (ascNodes > 0 ? 1 : 0) - ascNodes;
@@ -108,39 +110,43 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
           issues.push({ severity: 'warning', category: 'defence', message: `~${unspent} passive points appear unspent (${regularNodes} regular nodes allocated, ~${expectedPoints} expected at level ${buildLevel}).` });
         }
       }
-    } catch { /* tree check is best-effort */ }
+    } catch (e) { noteIgnoredError("tree check is best-effort", e); }
 
     // Unequipped items & jewels check
     try {
       const items = await luaClient.getItems();
       if (Array.isArray(items)) {
         // Find jewel slots that are empty (id === 0)
-        const jewelSlots = items.filter((it: any) => it.slot && /jewel/i.test(it.slot));
-        const emptyJewelSlots = jewelSlots.filter((it: any) => !it.id || it.id === 0);
+        const jewelSlots = items.filter(it => it.slot && /jewel/i.test(it.slot));
+        const emptyJewelSlots = jewelSlots.filter(it => !it.id || it.id === 0);
         if (emptyJewelSlots.length > 0) {
           issues.push({
             severity: 'warning',
             category: 'items',
-            message: `${emptyJewelSlots.length} jewel socket(s) empty: ${emptyJewelSlots.map((j: any) => j.slot).join(', ')}. Jewels provide significant stats.`,
+            message: `${emptyJewelSlots.length} jewel socket(s) empty: ${emptyJewelSlots.map((j) => j.slot).join(', ')}. Jewels provide significant stats.`,
           });
         }
 
-        // Check for unequipped gear slots
-        const gearSlots = ['Weapon 1', 'Body Armour', 'Helmet', 'Gloves', 'Boots', 'Belt', 'Ring 1', 'Ring 2', 'Amulet'];
-        for (const slotName of gearSlots) {
-          const slot = items.find((it: any) => it.slot === slotName);
-          if (slot && (!slot.id || slot.id === 0)) {
-            issues.push({
-              severity: 'warning',
-              category: 'items',
-              message: `${slotName} slot is empty — equip an item for more stats.`,
-            });
-          }
+        // Check for unequipped gear slots. The engine's own slot output is
+        // the truth (this picks up Ring 3/Grafts on current PoB versions);
+        // empty flasks have their own check below and jewel sockets are
+        // covered by the emptyJewelSlots check, so both are excluded here.
+        // shown=false means PoB hides the slot for this build (not an empty).
+        for (const it of items) {
+          if ((it.id ?? 0) !== 0) continue;
+          if (!it.slot || !isEquippableGearSlot(it.slot)) continue;
+          if (!isGearSlotVisible(it.slot, { shown: it.shown })) continue;
+          if (/flask/i.test(it.slot)) continue;
+          issues.push({
+            severity: 'warning',
+            category: 'items',
+            message: `${it.slot} slot is empty — equip an item for more stats.`,
+          });
         }
 
         // Check for empty flask slots
-        const flaskSlots = items.filter((it: any) => it.slot && /flask/i.test(it.slot));
-        const emptyFlasks = flaskSlots.filter((it: any) => !it.id || it.id === 0);
+        const flaskSlots = items.filter(it => it.slot && /flask/i.test(it.slot));
+        const emptyFlasks = flaskSlots.filter(it => !it.id || it.id === 0);
         if (emptyFlasks.length > 0) {
           issues.push({
             severity: emptyFlasks.length >= 3 ? 'error' : 'warning',
@@ -149,24 +155,24 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
           });
         }
       }
-    } catch { /* items check is best-effort */ }
+    } catch (e) { noteIgnoredError("items check is best-effort", e); }
 
     // Gem coherence check - detect mixed damage scaling
     try {
       const skillsData = await luaClient.getSkills();
       if (skillsData?.groups) {
-        for (const group of skillsData.groups as any[]) {
+        for (const group of skillsData.groups) {
           if (!group.enabled || !group.gems || group.gems.length < 2) continue;
-          const gems = (group.gems as any[]).filter((g: any) => g.enabled);
-          const supports = gems.filter((g: any) => g.isSupport);
+          const gems = group.gems.filter(g => g.enabled);
+          const supports = gems.filter(g => g.isSupport);
           if (supports.length < 2) continue;
 
-          const supportNames = supports.map((g: any) => (g.name || '').toLowerCase());
+          const supportNames = supports.map(g => (g.name || '').toLowerCase());
 
           // Check for Brutality + elemental/chaos supports (direct conflict)
-          const hasBrutality = supportNames.some((n: string) => n.includes('brutality'));
+          const hasBrutality = supportNames.some((n) => n.includes('brutality'));
           if (hasBrutality) {
-            const eleOrChaos = supportNames.filter((n: string) =>
+            const eleOrChaos = supportNames.filter((n) =>
               n.includes('elemental') || n.includes('fire') || n.includes('cold') ||
               n.includes('lightning') || n.includes('chaos') || n.includes('void manipulation') ||
               n.includes('added fire') || n.includes('added cold') || n.includes('added lightning')
@@ -192,13 +198,13 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
           }
         }
       }
-    } catch { /* gem check is best-effort */ }
+    } catch (e) { noteIgnoredError("gem check is best-effort", e); }
 
     return { issues, stats };
   });
 }
 
-export function formatIssuesResponse(issues: BuildIssue[], stats: Record<string, any>) {
+export function formatIssuesResponse(issues: BuildIssue[], stats: Record<string, unknown>) {
   const errors = issues.filter(i => i.severity === 'error');
   const warnings = issues.filter(i => i.severity === 'warning');
   const infos = issues.filter(i => i.severity === 'info');
@@ -235,7 +241,7 @@ export function formatIssuesResponse(issues: BuildIssue[], stats: Record<string,
   text += `Life: ${stats.Life ?? 'N/A'}  |  ES: ${stats.EnergyShield ?? 'N/A'}  |  Mana: ${stats.Mana ?? 'N/A'}\n`;
   text += `Fire: ${stats.FireResist ?? 0}%  |  Cold: ${stats.ColdResist ?? 0}%  |  Lightning: ${stats.LightningResist ?? 0}%  |  Chaos: ${stats.ChaosResist ?? 0}%\n`;
   const dps = stats.CombinedDPS ?? stats.TotalDPS ?? 0;
-  const minionDps = stats.MinionTotalDPS ?? 0;
+  const minionDps = Number(stats.MinionTotalDPS ?? 0);
   text += `DPS: ${Number(dps).toLocaleString()}${minionDps > 0 ? `  |  Minion DPS: ${Number(minionDps).toLocaleString()}` : ''}\n`;
 
   return {

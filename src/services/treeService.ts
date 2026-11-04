@@ -56,8 +56,9 @@ export class TreeService {
     const url = `https://raw.githubusercontent.com/PathOfBuildingCommunity/PathOfBuilding/master/src/TreeData/${version}/tree.lua`;
 
     return new Promise((resolve, reject) => {
-      https.get(url, (response) => {
+      const req = https.get(url, (response) => {
         if (response.statusCode === 404) {
+          response.resume(); // drain so the socket can be reused
           // Version not found, try fallback to 3_26
           console.error(`[Tree Data] Version ${version} not found, falling back to 3_26`);
           if (version !== "3_26") {
@@ -68,6 +69,7 @@ export class TreeService {
           return;
         }
         if (response.statusCode !== 200) {
+          response.resume();
           reject(new Error(`Failed to fetch tree data: HTTP ${response.statusCode}`));
           return;
         }
@@ -89,6 +91,8 @@ export class TreeService {
       }).on('error', (error) => {
         reject(new Error(`Network error fetching tree data: ${error.message}`));
       });
+      // ~20 MB tree file: a stalled connection must not hang the caller forever.
+      req.setTimeout(120_000, () => req.destroy(new Error(`Timeout fetching tree data for ${version}`)));
     });
   }
 
@@ -417,8 +421,7 @@ export class TreeService {
   findShortestPaths(
     allocatedNodes: Set<string>,
     targetNodeId: string,
-    treeData: PassiveTreeData,
-    maxPaths: number = 1
+    treeData: PassiveTreeData
   ): Array<{ nodes: string[]; cost: number }> {
     // Multi-source BFS from all allocated nodes toward the target.
     // O(V+E) — correct and optimal for unit-weight graphs.
@@ -494,7 +497,7 @@ export class TreeService {
   }
 
   // Helper methods for optimization
-  private buildNodeGraph(allocatedNodes: PassiveTreeNode[], allTreeNodes: Map<string, PassiveTreeNode>): Map<string, string[]> {
+  private buildNodeGraph(allocatedNodes: PassiveTreeNode[]): Map<string, string[]> {
     const graph = new Map<string, string[]>();
     const allocatedIds = new Set(allocatedNodes.map(n => String(n.skill)));
 
@@ -533,7 +536,8 @@ export class TreeService {
     const visited = new Set<string>([start]);
 
     while (queue.length > 0) {
-      const current = queue.shift()!;
+      const current = queue[0];
+      queue.shift();
 
       const neighbors = graph.get(current.node) || [];
       for (const neighbor of neighbors) {
@@ -557,11 +561,29 @@ export class TreeService {
     keystones: PassiveTreeNode[],
     notables: PassiveTreeNode[],
     jewels: PassiveTreeNode[],
-    allTreeNodes: Map<string, PassiveTreeNode>
+    treeData: PassiveTreeData
   ): PathOptimization[] {
     const optimizations: PathOptimization[] = [];
-    const graph = this.buildNodeGraph(allocatedNodes, allTreeNodes);
-    const allocatedIds = new Set(allocatedNodes.map(n => String(n.skill)));
+
+    // Graph over the WHOLE tree, not just allocated nodes: the optimal route
+    // between two allocated nodes may run through unallocated ones, and that
+    // difference is exactly the saving worth reporting. The previous version
+    // pathfound within the allocation only, so current == optimal always,
+    // pointsSaved was always 0, and the suggestion text said so.
+    const fullGraph = new Map<string, string[]>();
+    const isNode = (id: string) => treeData.nodes.has(id);
+    for (const [id, node] of treeData.nodes) {
+      const neighbors: string[] = [];
+      for (const outId of node.out || []) {
+        if (isNode(outId) && !neighbors.includes(outId)) neighbors.push(outId);
+      }
+      for (const inId of node.in || []) {
+        if (isNode(inId) && !neighbors.includes(inId)) neighbors.push(inId);
+      }
+      fullGraph.set(id, neighbors);
+    }
+
+    const graph = this.buildNodeGraph(allocatedNodes);
 
     // Find starting node (usually ascendancy start or class start)
     const startNode = allocatedNodes.find(n => n.isAscendancyStart) || allocatedNodes[0];
@@ -570,36 +592,44 @@ export class TreeService {
     const startId = String(startNode.skill);
     const destinations = [...keystones, ...notables, ...jewels];
 
-    // For each destination, compare actual path length vs optimal
+    // For each destination, compare the allocated route against the cheapest
+    // route the tree offers. Only real savings are reported.
     for (const dest of destinations) {
       const destId = String(dest.skill);
       const shortestPath = this.findShortestPath(graph, startId, destId);
+      if (!shortestPath || shortestPath.length <= 1) continue;
+      const currentLength = shortestPath.length - 1; // edges, i.e. spent points
 
-      if (shortestPath && shortestPath.length > 1) {
-        // Calculate optimal length (this is already the shortest in allocated nodes)
-        const optimalLength = shortestPath.length - 1; // Subtract 1 for node count
+      const trueShortest = this.findShortestPath(fullGraph, startId, destId);
+      if (!trueShortest || trueShortest.length <= 1) continue;
+      const optimalLength = trueShortest.length - 1;
 
-        // For now, we can't calculate "true optimal" without pathfinding through unallocated nodes
-        // So we flag paths that seem long relative to destination value
-        if (optimalLength > 6) {
-          optimizations.push({
-            destination: dest.name || `Node ${destId}`,
-            currentLength: optimalLength,
-            optimalLength: optimalLength, // Same for now
-            pointsSaved: 0, // Would need advanced analysis
-            suggestion: `Path to ${dest.name || `Node ${destId}`} is ${optimalLength} points long. Consider checking if there's a more efficient route.`
-          });
-        }
+      const pointsSaved = currentLength - optimalLength;
+      if (pointsSaved > 0) {
+        optimizations.push({
+          destination: dest.name || `Node ${destId}`,
+          currentLength,
+          optimalLength,
+          pointsSaved,
+          suggestion: `The allocated route to ${dest.name || `Node ${destId}`} costs ${currentLength} points; the tree offers a ${optimalLength}-point route. Re-pathing could save ${pointsSaved} passive point(s).`
+        });
+      } else if (currentLength > 6) {
+        optimizations.push({
+          destination: dest.name || `Node ${destId}`,
+          currentLength,
+          optimalLength,
+          pointsSaved: 0,
+          suggestion: `Path to ${dest.name || `Node ${destId}`} is ${currentLength} points long and already matches the shortest route the tree offers — the cost is inherent to that node's position.`
+        });
       }
     }
 
+    // Cheapest routes first: those are the actionable ones.
+    optimizations.sort((a, b) => b.pointsSaved - a.pointsSaved);
     return optimizations;
   }
 
   private calculateEfficiencyScores(
-    allocatedNodes: PassiveTreeNode[],
-    keystones: PassiveTreeNode[],
-    notables: PassiveTreeNode[],
     normalNodes: PassiveTreeNode[]
   ): EfficiencyScore[] {
     const scores: EfficiencyScore[] = [];
@@ -796,13 +826,10 @@ export class TreeService {
           keystones,
           notables,
           jewels,
-          treeData.nodes
+          treeData
         );
 
         const efficiencyScores = this.calculateEfficiencyScores(
-          allocatedNodes,
-          keystones,
-          notables,
           normal
         );
 

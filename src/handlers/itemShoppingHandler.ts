@@ -7,9 +7,9 @@
  */
 
 import type { PoBLuaApiClient } from '../pobLuaBridge.js';
-import { wrapHandler } from '../utils/errorHandling.js';
+import { wrapHandler, noteIgnoredError,} from '../utils/errorHandling.js';
 
-export interface ItemShoppingContext {
+interface ItemShoppingContext {
   getLuaClient: () => PoBLuaApiClient | null;
 }
 
@@ -163,7 +163,6 @@ export async function handleFindItemUpgrades(
   context: ItemShoppingContext,
   args: {
     slot: string;
-    build_name?: string;
     priority?: 'dps' | 'defense' | 'resistance' | 'balanced';
   }
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
@@ -187,7 +186,6 @@ export async function handleFindItemUpgrades(
     let fireOverCap = 0;
     let coldOverCap = 0;
     let lightningOverCap = 0;
-    let totalDps = 0;
     let str = 0;
     let dex = 0;
     let int_ = 0;
@@ -200,14 +198,13 @@ export async function handleFindItemUpgrades(
         buildClass = info?.className && info?.ascendClassName
           ? `${info.className} (${info.ascendClassName})`
           : (info?.className ?? null);
-      } catch { /* build info unavailable */ }
+      } catch (e) { noteIgnoredError("build info unavailable", e); }
 
       try {
         const stats = await luaClient.getStats([
           'Life', 'EnergyShield',
           'FireResist', 'ColdResist', 'LightningResist', 'ChaosResist',
           'FireResistOverCap', 'ColdResistOverCap', 'LightningResistOverCap',
-          'TotalDPS', 'CombinedDPS',
           'Str', 'Dex', 'Int',
         ]);
         life = Number(stats?.Life ?? 0);
@@ -219,30 +216,28 @@ export async function handleFindItemUpgrades(
         fireOverCap = Number(stats?.FireResistOverCap ?? 0);
         coldOverCap = Number(stats?.ColdResistOverCap ?? 0);
         lightningOverCap = Number(stats?.LightningResistOverCap ?? 0);
-        totalDps = Number(stats?.CombinedDPS ?? stats?.TotalDPS ?? 0);
         str = Number(stats?.Str ?? 0);
         dex = Number(stats?.Dex ?? 0);
         int_ = Number(stats?.Int ?? 0);
-      } catch { /* stats unavailable */ }
+      } catch (e) { noteIgnoredError("stats unavailable", e); }
 
       try {
         const items = await luaClient.getItems();
         const equipped = Array.isArray(items)
-          ? items.find((i: any) => i.slot === slot)
+          ? items.find((i) => i.slot === slot)
           : null;
         if (equipped) {
-          currentItemName = equipped.name ?? equipped.title ?? null;
+          currentItemName = equipped.name ?? null;
           currentItemBase = equipped.baseName ?? null;
           currentItemRarity = equipped.rarity ?? null;
         }
-      } catch { /* items unavailable */ }
+      } catch (e) { noteIgnoredError("items unavailable", e); }
     }
 
     // Compute resistance gaps (to cap = 75%)
     const fireMissing = Math.max(0, 75 - fireResist);
     const coldMissing = Math.max(0, 75 - coldResist);
     const lightningMissing = Math.max(0, 75 - lightningResist);
-    const chaosMissing = Math.max(0, 0 - chaosResist); // chaos target is ≥ 0%
 
     // Life/ES assessment
     const isESBuild = es > life;
@@ -270,6 +265,13 @@ export async function handleFindItemUpgrades(
     text += '\n';
 
     // --- BUILD GAPS ---
+    // Without the Lua bridge there are no real stats: life=0/resists=75 are
+    // placeholders, not analysis. Say so instead of reporting fabricated gaps.
+    if (!luaClient) {
+      text += `## Build Gaps\n`;
+      text += `- Build stats unavailable — no build loaded in the Lua bridge, so resistance/life gaps are unknown. The mods below are generic for this slot.\n`;
+      text += `- Load a build with lua_load_build (or start the bridge with a build) for a real gap analysis.\n\n`;
+    } else {
     const gaps: string[] = [];
     if (!lifeGood) gaps.push(`${defenceLabel} is ${defenceValue.toLocaleString()} — target ${isESBuild ? '4000+' : '4500+'}`);
     if (fireMissing > 0) gaps.push(`Fire resist ${fireResist}% — ${fireMissing}% short of cap (${resistLabel(fireMissing)} priority)`);
@@ -282,12 +284,13 @@ export async function handleFindItemUpgrades(
       text += `## Build Gaps\n`;
       for (const g of gaps) text += `- ${g}\n`;
       text += '\n';
-    } else if (luaClient) {
+    } else {
       text += `## Build Status\n`;
       text += `- ${defenceLabel}: ${defenceValue.toLocaleString()} ✓\n`;
       text += `- Resistances: Fire ${fireResist}% / Cold ${coldResist}% / Lightning ${lightningResist}% / Chaos ${chaosResist}% ✓\n`;
       text += `- No critical gaps — this is a quality-of-life upgrade\n`;
       text += '\n';
+    }
     }
 
     // --- PRIORITY MODS ---

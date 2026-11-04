@@ -52,13 +52,13 @@ const GAME_CATALYST = /^Quality \(([A-Za-z ]+) Modifiers\)$/;
 /** A rolled range such as `(1-1.5)` or `+(30-50)`. */
 const RANGE_VALUE = /([+-]?)\((-?\d+\.?\d*)-(-?\d+\.?\d*)\)/g;
 
-export type UnknownReason =
+type UnknownReason =
   | "unrecognised-key"
   | "unrecognised-tag"
   | "unresolved-variant-group"
   | "approximated-catalyst";
 
-export interface UnknownLine {
+interface UnknownLine {
   /** The line exactly as it appeared, colour codes intact. */
   line: string;
   reason: UnknownReason;
@@ -66,7 +66,7 @@ export interface UnknownLine {
   detail: string;
 }
 
-export interface ParsedModLine {
+interface ParsedModLine {
   /** Display text: tags stripped, ranges resolved, colour codes removed. */
   text: string;
   /** The line as stored, before tag stripping. */
@@ -87,7 +87,7 @@ export interface ParsedModLine {
   catalystScalar: number;
 }
 
-export interface ParsedItem {
+interface ParsedItem {
   rarity: string;
   name: string;
   base: string;
@@ -195,25 +195,35 @@ const roundTo = (v: number, dp: number) => {
  * so a mod whose displayed precision differs from its written range can be out
  * in the last digit. Exact values are a Lua bridge job.
  */
-function applyRange(line: string, range: number | undefined, scalar: number): string {
+function applyRange(line: string, range: number | undefined, scalar: number, corrupted?: number): string {
   let precision = 0;
   let out = line;
+  // `corruptedRange` is the corruption multiplier (the item editor's 0.78..1.22
+  // roll slider, ItemsTab.lua), NOT a position in the roll. It lands between
+  // roll resolution and the catalyst scalar, rounded (not floored) at the
+  // line's precision — ItemTools.lua:applyValueScalar's order.
+  const corrupt = (v: number) =>
+    corrupted === undefined || corrupted === 1 ? v : roundTo(v * corrupted, precision);
   if (range !== undefined) {
     out = out.replace(RANGE_VALUE, (_m, sign: string, min: string, max: string) => {
       precision = Math.max(precision, inferredPrecision(min, max));
       let value = roundTo(Number(min) + range * (Number(max) - Number(min)), precision);
-      if (sign === "-") value *= -1;
+      if (sign === "-") value = corrupt(value * -1);
+      else value = corrupt(value);
       if (scalar !== 1) value = floorTo(value * scalar, precision);
       return sign === "+" && value > 0 ? `+${value}` : `${value}`;
     });
     return out;
   }
-  // No roll on the line: the values are already final, so only the catalyst
-  // applies. Whole numbers stay whole.
-  if (scalar !== 1) {
-    out = out.replace(/-?\d+\.?\d*/g, (m) =>
-      `${floorTo(Number(m) * scalar, (m.split(".")[1] ?? "").length)}`
-    );
+  // No roll on the line: the values are settled, but a corruption multiplier
+  // still scales them; then the catalyst. Same round-then-floor order.
+  if (corrupted !== undefined && corrupted !== 1 || scalar !== 1) {
+    out = out.replace(/-?\d+\.?\d*/g, (m) => {
+      const dp = (m.split(".")[1] ?? "").length;
+      let value = corrupt(Number(m));
+      if (scalar !== 1) value = floorTo(value * scalar, dp);
+      return `${value}`;
+    });
   }
   return out;
 }
@@ -396,7 +406,7 @@ export function parseItem(text: string): ParsedItem {
     const line = lines[i];
     if (line === "--------") continue;
     if (STANDALONE_FLAG_MAP.has(line)) {
-      item.itemFlags.push(STANDALONE_FLAG_MAP.get(line)!);
+      item.itemFlags.push(STANDALONE_FLAG_MAP.get(line) ?? line);
       continue;
     }
     const m = line.match(SPEC_LINE) ?? line.match(REQUIRES_LINE);
@@ -462,9 +472,10 @@ export function parseItem(text: string): ParsedItem {
     slotSelections.push(selectedVariant);
   }
   for (const suffix of altSuffixes) {
-    if (hasAlt.get(suffix) && selectedAlt.has(suffix)) {
-      active.add(selectedAlt.get(suffix)!);
-      slotSelections.push(selectedAlt.get(suffix)!);
+    const alt = selectedAlt.get(suffix);
+    if (hasAlt.get(suffix) && alt !== undefined) {
+      active.add(alt);
+      slotSelections.push(alt);
     }
   }
   item.selectedVariant = selectedVariant;
@@ -549,7 +560,7 @@ export function parseItem(text: string): ParsedItem {
     );
     // Count values on the range-resolved text: `(27-30)% increased Fire Damage`
     // is one value expressed as a roll, not two.
-    const unscaled = applyRange(body, parsed.range, 1);
+    const unscaled = applyRange(body, parsed.range, 1, parsed.corruptedRange);
     if (scalar !== 1 && (unscaled.match(/-?\d+\.?\d*/g) ?? []).length > 1) {
       // PoB restricts scaling to the values its scalability data marks; we scale
       // every number on the line, which can differ on multi-value mods.
@@ -575,7 +586,7 @@ export function parseItem(text: string): ParsedItem {
     else type = "explicit";
 
     const mod: ParsedModLine = {
-      text: applyRange(body, parsed.range, scalar),
+      text: applyRange(body, parsed.range, scalar, parsed.corruptedRange),
       raw: line,
       type,
       flags: parsed.flags,

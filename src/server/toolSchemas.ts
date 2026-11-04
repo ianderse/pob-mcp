@@ -5,14 +5,28 @@
  * These schemas describe the available tools, their parameters, and documentation.
  */
 
+/**
+ * One MCP tool advertisement. `inputSchema.properties` values are JSON Schema
+ * objects (arbitrary nesting — some properties carry `properties`,
+ * `additionalProperties`, or no `type` at all); the values reach the MCP SDK
+ * unchanged, so this is the wire contract, not a local invention.
+ */
 export interface ToolSchema {
   name: string;
   description: string;
   inputSchema: {
     type: "object";
-    properties: Record<string, { type: string; description?: string; enum?: string[]; items?: { type: string }; default?: unknown }>;
+    properties?: Record<string, Record<string, unknown>> & { type?: string };
     required?: string[];
   };
+  /**
+   * Server-side policy flag: large text responses from this tool are
+   * truncated to keep token use bounded. Declared per tool next to its
+   * definition (the previous hand-maintained name list in index.ts rotted -
+   * five unbounded-output tools had silently fallen outside it). Never sent
+   * over the wire; stripped in ListTools.
+   */
+  truncatable?: boolean;
 }
 
 /**
@@ -22,6 +36,7 @@ export function getToolSchemas(): ToolSchema[] {
   return [
     {
       name: "analyze_build",
+      truncatable: true,
       description: "Analyze a Path of Building build file and extract detailed information including stats, skills, gear, passive skill tree analysis with keystones, notables, jewel sockets, build archetype detection, and optimization suggestions",
       inputSchema: {
         type: "object",
@@ -177,10 +192,6 @@ export function getToolSchemas(): ToolSchema[] {
             type: "string",
             description: "ID of the target passive node",
           },
-          show_alternatives: {
-            type: "boolean",
-            description: "Return up to 3 alternative paths instead of just the shortest (default: false)",
-          },
         },
         required: ["target_node_id"],
       },
@@ -294,7 +305,7 @@ export function getToolSchemas(): ToolSchema[] {
 /**
  * Get Lua-specific tool schemas (only included if Lua is enabled)
  */
-export function getLuaToolSchemas(): any[] {
+export function getLuaToolSchemas(): ToolSchema[] {
   return [
     {
       name: "lua_get_capabilities",
@@ -480,6 +491,7 @@ export function getLuaToolSchemas(): any[] {
     },
     {
       name: "lua_get_stats",
+      truncatable: true,
       description: "Get comprehensive calculated stats from the currently loaded build (requires lua_load_build first). Use category='offense' for DPS details, category='defense' for survivability, category='all' only when you need everything at once. Avoid calling multiple times with different categories — pick the right one.",
       inputSchema: {
         type: "object",
@@ -493,6 +505,7 @@ export function getLuaToolSchemas(): any[] {
     },
     {
       name: "lua_get_tree",
+      truncatable: true,
       description: "Get passive tree allocation from currently loaded build",
       inputSchema: {
         type: "object",
@@ -615,8 +628,7 @@ export function getLuaToolSchemas(): any[] {
           },
           slot_name: {
             type: "string",
-            description: "Slot to equip in: Weapon 1, Weapon 2, Helmet, Body Armour, Gloves, Boots, Amulet, Ring 1, Ring 2, Belt, Flask 1-5",
-            enum: ["Weapon 1", "Weapon 2", "Helmet", "Body Armour", "Gloves", "Boots", "Amulet", "Ring 1", "Ring 2", "Belt", "Flask 1", "Flask 2", "Flask 3", "Flask 4", "Flask 5"],
+            description: "Slot to equip in, using PoB's exact slot names: Weapon 1, Weapon 2, Helmet, Body Armour, Gloves, Boots, Amulet, Ring 1, Ring 2, Belt, Flask 1-5, plus any version-specific slots (e.g. Ring 3, Graft 1/2) as reported by get_equipped_items. Unknown names fail with the item reported as added-but-not-equipped.",
           },
           no_auto_equip: {
             type: "boolean",
@@ -699,8 +711,7 @@ export function getLuaToolSchemas(): any[] {
           },
           slot: {
             type: "string",
-            description: "Item slot for sockets (e.g., 'Weapon 1', 'Body Armour')",
-            enum: ["Weapon 1", "Weapon 2", "Helmet", "Body Armour", "Gloves", "Boots", "Amulet", "Ring 1", "Ring 2", "Belt", "Flask 1", "Flask 2", "Flask 3", "Flask 4", "Flask 5"],
+            description: "Item the skill is socketed in - PoB's skill group slots: 'Weapon 1', 'Weapon 2', 'Weapon 1 Swap', 'Weapon 2 Swap', 'Helmet', 'Body Armour', 'Gloves', 'Boots', 'Amulet', 'Ring 1', 'Ring 2', 'Belt' (plus 'Ring 3' on newer PoB versions). Omit for an unattached group.",
           },
           enabled: {
             type: "boolean",
@@ -928,6 +939,7 @@ export function getLuaToolSchemas(): any[] {
     },
     {
       name: "plan_leveling",
+      truncatable: true,
       description: "Generate an act-by-act leveling progression guide for a build, including skill gem progression, lab timing, and passive tree priority order",
       inputSchema: {
         type: "object",
@@ -941,6 +953,7 @@ export function getLuaToolSchemas(): any[] {
     },
     {
       name: "find_item_upgrades",
+      truncatable: true,
       description: "Generate a shopping spec for a gear slot — describes what item type, base, and mods to look for based on the build's current gaps (resistances, life, ES, DPS). Works with a loaded build in the Lua bridge. No trade API required.",
       inputSchema: {
         type: "object",
@@ -948,10 +961,6 @@ export function getLuaToolSchemas(): any[] {
           slot: {
             type: "string",
             description: "Gear slot to get a shopping spec for (e.g., 'Helmet', 'Body Armour', 'Boots', 'Gloves', 'Belt', 'Amulet', 'Ring 1', 'Ring 2', 'Weapon 1', 'Weapon 2')",
-          },
-          build_name: {
-            type: "string",
-            description: "Build file to analyze (optional if a build is loaded via lua_load_build)",
           },
           priority: {
             type: "string",
@@ -968,10 +977,11 @@ export function getLuaToolSchemas(): any[] {
 /**
  * Get optimization tool schemas
  */
-export function getOptimizationToolSchemas(): any[] {
+export function getOptimizationToolSchemas(): ToolSchema[] {
   return [
     {
       name: "analyze_defenses",
+      truncatable: true,
       description: "Deep-dive into defensive layers (avoidance/mitigation/recovery): EHP, spell suppression, evasion, block, armour/PDR, life regen, leech. Use this when you specifically want detailed defense breakdown. validate_build already covers this — only call analyze_defenses separately if you need more defensive detail than validate_build provides.",
       inputSchema: {
         type: "object",
@@ -986,6 +996,7 @@ export function getOptimizationToolSchemas(): any[] {
     },
     {
       name: "suggest_optimal_nodes",
+      truncatable: true,
       description: "AI-powered suggestion of optimal passive nodes based on build goals",
       inputSchema: {
         type: "object",
@@ -1008,6 +1019,7 @@ export function getOptimizationToolSchemas(): any[] {
     },
     {
       name: "optimize_tree",
+      truncatable: true,
       description: "Full passive tree optimization - removes inefficient nodes and reallocates to better options",
       inputSchema: {
         type: "object",
@@ -1022,7 +1034,7 @@ export function getOptimizationToolSchemas(): any[] {
           },
           constraints: {
             type: "object",
-            description: "Constraints like minimum life, required keystones, etc.",
+            description: "Optional constraints: { minLife, minES, protectedNodes: string[] }. protectedNodes are excluded from recommendations; minLife/minES are evaluated against current stats and reported (suggestions are not stat-recalculated).",
           },
           max_points: {
             type: "number",
@@ -1038,6 +1050,7 @@ export function getOptimizationToolSchemas(): any[] {
     },
     {
       name: "analyze_items",
+      truncatable: true,
       description: "Analyze equipped items and suggest upgrades or improvements",
       inputSchema: {
         type: "object",
@@ -1052,6 +1065,7 @@ export function getOptimizationToolSchemas(): any[] {
     },
     {
       name: "optimize_skill_links",
+      truncatable: true,
       description: "Analyze skill gem setups for 'more' multipliers, penetration, and support gem synergies. Flags missing multiplicative damage supports and suggests clear-speed vs bossing balance.",
       inputSchema: {
         type: "object",
@@ -1066,6 +1080,7 @@ export function getOptimizationToolSchemas(): any[] {
     },
     {
       name: "create_budget_build",
+      truncatable: true,
       description: "Create a league-start/budget-friendly version of a build",
       inputSchema: {
         type: "object",
@@ -1088,7 +1103,7 @@ export function getOptimizationToolSchemas(): any[] {
 /**
  * Get configuration tool schemas (Phase 9)
  */
-export function getConfigToolSchemas(): any[] {
+export function getConfigToolSchemas(): ToolSchema[] {
   return [
     {
       name: "get_config",
@@ -1100,13 +1115,13 @@ export function getConfigToolSchemas(): any[] {
     },
     {
       name: "set_config",
-      description: "Modify configuration inputs. Common keys — Charges: usePowerCharges, useFrenzyCharges, useEnduranceCharges | Conditions: conditionFortify, conditionLeeching, conditionOnFullLife, conditionOnFullEnergyShield | Buffs: buffOnslaught | Enemy: enemyIsBoss ('Shaper'/'Pinnacle'/false), enemyLevel | Build: bandit ('None'/'Oak'/'Alira'/'Kraityn'), pantheonMajorGod, pantheonMinorGod. Call get_config to see all current values.",
+      description: "Modify configuration inputs. Common keys — Charges: usePowerCharges, useFrenzyCharges, useEnduranceCharges | Conditions: buffFortification, conditionLeeching, conditionFullLife, conditionFullEnergyShield | Buffs: buffOnslaught | Enemy: enemyIsBoss ('None'/'Boss'/'Pinnacle'/'Uber'; legacy names 'Shaper'/'Sirus' map to 'Pinnacle', 'Atziri'/'Uber Atziri' to 'Boss'), enemyLevel | Build: bandit ('None'/'Oak'/'Alira'/'Kraityn'), pantheonMajorGod, pantheonMinorGod. Values outside an option's accepted set are rejected per key, never silently ignored. Call get_config to see all current values.",
       inputSchema: {
         type: "object",
         properties: {
           config_name: {
             type: "string",
-            description: "Name of configuration input to change (e.g., 'usePowerCharges', 'enemyIsBoss', 'conditionFortify')",
+            description: "Name of configuration input to change (e.g., 'usePowerCharges', 'enemyIsBoss', 'buffFortification')",
           },
           value: {
             description: "New value (boolean for most flags, number for counts)",
@@ -1194,10 +1209,11 @@ export function getConfigToolSchemas(): any[] {
 /**
  * Get build validation tool schemas (Phase 7)
  */
-export function getValidationToolSchemas(): any[] {
+export function getValidationToolSchemas(): ToolSchema[] {
   return [
     {
       name: "validate_build",
+      truncatable: true,
       description: "Comprehensive build validation: resistances, life pool, defensive layers (avoidance/mitigation/recovery), mana sustain, accuracy, flask immunities, damage scaling. Provides prioritized critical/warning/info recommendations. PREFER this over get_build_issues + analyze_defenses — it covers both in one call. Do not call all three.",
       inputSchema: {
         type: "object",
@@ -1215,10 +1231,11 @@ export function getValidationToolSchemas(): any[] {
 /**
  * Get skill gem analysis tool schemas (Phase 11)
  */
-export function getSkillGemToolSchemas(): any[] {
+export function getSkillGemToolSchemas(): ToolSchema[] {
   return [
     {
       name: "analyze_skill_links",
+      truncatable: true,
       description: "Analyze skill gem setup and evaluate support gem choices. Detects build archetype, rates each support gem, and identifies issues with current setup.",
       inputSchema: {
         type: "object",
@@ -1237,6 +1254,7 @@ export function getSkillGemToolSchemas(): any[] {
     },
     {
       name: "suggest_support_gems",
+      truncatable: true,
       description: "Get intelligent support gem recommendations based on build archetype. Provides ranked suggestions with DPS estimates, cost, and reasoning.",
       inputSchema: {
         type: "object",
@@ -1267,6 +1285,7 @@ export function getSkillGemToolSchemas(): any[] {
     },
     {
       name: "compare_gem_setups",
+      truncatable: true,
       description: "Compare multiple gem configurations side-by-side to evaluate different options. NOTE: Full DPS comparison requires Lua bridge integration (future enhancement).",
       inputSchema: {
         type: "object",
@@ -1318,6 +1337,7 @@ export function getSkillGemToolSchemas(): any[] {
     },
     {
       name: "find_optimal_links",
+      truncatable: true,
       description: "Auto-generate the best support gem combination for a skill based on budget and optimization goal. Provides step-by-step upgrade path.",
       inputSchema: {
         type: "object",
@@ -1337,10 +1357,6 @@ export function getSkillGemToolSchemas(): any[] {
           budget: {
             type: "string",
             description: "Budget tier: 'league_start', 'mid_league', or 'endgame' (default: 'endgame')",
-          },
-          optimize_for: {
-            type: "string",
-            description: "Optimization target: 'dps', 'clear_speed', 'bossing', or 'defense' (default: 'dps')",
           },
         },
         required: ["build_name", "link_count"],
@@ -1369,7 +1385,7 @@ export function getSkillGemToolSchemas(): any[] {
 /**
  * Get export and persistence tool schemas (Phase 8)
  */
-export function getExportToolSchemas(): any[] {
+export function getExportToolSchemas(): ToolSchema[] {
   return [
     {
       name: "export_build",
@@ -1387,7 +1403,7 @@ export function getExportToolSchemas(): any[] {
           },
           output_directory: {
             type: "string",
-            description: "Target directory (optional, defaults to POB_DIRECTORY/.pob-mcp/exports)",
+            description: "Sub-directory under POB_DIRECTORY to export into (optional, defaults to POB_DIRECTORY/.pob-mcp/exports). Paths outside POB_DIRECTORY are rejected.",
           },
           overwrite: {
             type: "boolean",
@@ -1508,7 +1524,7 @@ export function getExportToolSchemas(): any[] {
 /**
  * Get Trade API tool schemas (require POE_TRADE_ENABLED=true)
  */
-export function getTradeToolSchemas(): any[] {
+export function getTradeToolSchemas(): ToolSchema[] {
   return [
     {
       name: "find_weighted_trade_items",
@@ -1517,6 +1533,7 @@ export function getTradeToolSchemas(): any[] {
     },
     {
       name: "search_trade_items",
+      truncatable: true,
       description: "Search the Path of Exile trade site for items with filters. Returns matching items with prices, stats, and seller information. Default limit is 5 items to minimize token usage. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
       inputSchema: {
         type: "object",
@@ -1642,6 +1659,7 @@ export function getTradeToolSchemas(): any[] {
     },
     {
       name: "compare_trade_items",
+      truncatable: true,
       description: "Compare trade listings side by side with DPS/defense calculations. Takes listing ids from a prior search_trade_items result. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
       inputSchema: {
         type: "object",
@@ -1673,6 +1691,7 @@ export function getTradeToolSchemas(): any[] {
     },
     {
       name: "find_resistance_gear",
+      truncatable: true,
       description: "Find trade listings that efficiently cover elemental or chaos resistance gaps within a per-item and total budget. REQUIRES: POE_TRADE_ENABLED=true.",
       inputSchema: {
         type: "object",
@@ -1693,6 +1712,7 @@ export function getTradeToolSchemas(): any[] {
     },
     {
       name: "search_cluster_jewels",
+      truncatable: true,
       description: "Search for cluster jewels with specific enchants and notables. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
       inputSchema: {
         type: "object",
@@ -1729,6 +1749,7 @@ export function getTradeToolSchemas(): any[] {
     },
     {
       name: "generate_shopping_list",
+      truncatable: true,
       description: "Generate a prioritized shopping list of items to upgrade for a build within a budget. REQUIRES: POE_TRADE_ENABLED environment variable set to true.",
       inputSchema: {
         type: "object",
@@ -1740,10 +1761,6 @@ export function getTradeToolSchemas(): any[] {
           league: {
             type: "string",
             description: "EXACT league name as specified by user",
-          },
-          budget: {
-            type: "number",
-            description: "Total budget in Chaos Orbs",
           },
           budget_tier: {
             type: "string",
@@ -1760,10 +1777,11 @@ export function getTradeToolSchemas(): any[] {
 /**
  * Get build goals/diagnostics tool schemas (require Lua bridge, no Trade API dependency)
  */
-export function getBuildGoalsToolSchemas(): any[] {
+export function getBuildGoalsToolSchemas(): ToolSchema[] {
   return [
     {
       name: "get_build_issues",
+      truncatable: true,
       description: "Quick issue scan: uncapped resistances, low life, over-reserved mana, incomplete spell suppression. Lighter than validate_build. Use this for a fast check; use validate_build when you want full analysis including flask immunities and damage scaling. Do NOT call both.",
       inputSchema: {
         type: "object",
@@ -1772,6 +1790,7 @@ export function getBuildGoalsToolSchemas(): any[] {
     },
     {
       name: "get_passive_upgrades",
+      truncatable: true,
       description: "Find the best unallocated notable passives to pick up next, ranked by their actual stat impact. Uses calcWith to simulate each candidate and scores by relative DPS/EHP gain.",
       inputSchema: {
         type: "object",
@@ -1790,16 +1809,19 @@ export function getBuildGoalsToolSchemas(): any[] {
     },
     {
       name: "suggest_masteries",
+      truncatable: true,
       description: "Evaluate the effects available on allocated mastery nodes against the live PoB build and rank the strongest DPS and defence choices. Requires a loaded build.",
       inputSchema: { type: "object", properties: {} },
     },
     {
       name: "find_best_anointment",
+      truncatable: true,
       description: "Rank anointable notables for an equipped Amulet or anointable Belt using upstream PoB's non-destructive live stat simulation. Requires a loaded build with the selected item equipped.",
       inputSchema: { type: "object", properties: { slot: { type: "string", enum: ["Amulet", "Belt"] }, focus: { type: "string", enum: ["dps", "defence", "both"] }, max_results: { type: "number" } }, required: ["slot"] },
     },
     {
       name: "analyze_build_cluster_jewels",
+      truncatable: true,
       description: "Analyze the cluster jewels currently equipped in the build, evaluate which notables synergize with the build archetype, and flag wasted notables",
       inputSchema: {
         type: "object",
@@ -1885,7 +1907,7 @@ export function getBuildGoalsToolSchemas(): any[] {
 /**
  * Get poe.ninja API tool schemas
  */
-export function getPoeNinjaToolSchemas(): any[] {
+export function getPoeNinjaToolSchemas(): ToolSchema[] {
   return [
     {
       name: "get_currency_rates",

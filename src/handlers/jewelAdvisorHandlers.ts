@@ -1,7 +1,7 @@
-import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import type { PoBLuaApiClient, SocketGroupEntry } from "../pobLuaBridge.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
-export interface JewelAdvisorContext {
+interface JewelAdvisorContext {
   getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }
@@ -68,11 +68,11 @@ const WATCHERS_EYE_MODS: Record<string, WatchersEyeMod[]> = {
 
 const KNOWN_AURA_NAMES = new Set(Object.keys(WATCHERS_EYE_MODS));
 
-function detectActiveAuras(groups: any[]): string[] {
+function detectActiveAuras(groups: SocketGroupEntry[]): string[] {
   const found: string[] = [];
   for (const group of groups) {
     for (const gem of (group.gems ?? [])) {
-      const name: string = gem.name || gem || '';
+      const name: string = gem.name || '';
       if (KNOWN_AURA_NAMES.has(name)) found.push(name);
       // Handle "Purity of Elements" which has an underscore key
       if (name === 'Purity of Elements') found.push('Purity_of_Elements');
@@ -88,7 +88,7 @@ export async function handleSuggestWatchersEye(context: JewelAdvisorContext) {
   if (!luaClient) throw new Error('Lua bridge not active. Use lua_load_build first.');
 
   const skills = await luaClient.getSkills();
-  const groups: any[] = skills?.groups ?? [];
+  const groups: SocketGroupEntry[] = skills?.groups ?? [];
   const activeAuras = detectActiveAuras(groups);
 
   let output = "=== Watcher's Eye Recommendations ===\n\n";

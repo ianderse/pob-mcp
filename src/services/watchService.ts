@@ -1,7 +1,6 @@
 import chokidar from "chokidar";
 import path from "path";
 import type { BuildService } from "./buildService.js";
-import type { TreeService } from "./treeService.js";
 
 interface RecentChange {
   file: string;

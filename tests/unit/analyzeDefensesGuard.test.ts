@@ -1,5 +1,7 @@
 import { describe, it, expect } from '@jest/globals';
 import { handleAnalyzeDefenses } from '../../src/handlers/optimizationHandlers.js';
+type OptContext = Parameters<typeof handleAnalyzeDefenses>[0];
+import type { StatsExport } from '../../src/pobLuaBridge.js';
 
 /** Measured against a real PoB engine. Chaos Inoculation sets Life to 1. */
 const CI_BUILD = {
@@ -9,17 +11,17 @@ const CI_BUILD = {
   FireResist: 75, ColdResist: 80, LightningResist: 81, ChaosResist: 28,
 };
 
-const context = () => ({
-  buildService: {} as any,
-  treeService: {} as any,
+const context = (): OptContext => ({
+  buildService: {} as OptContext['buildService'],
+  treeService: {} as OptContext['treeService'],
   pobDirectory: '/nonexistent',
   getLuaClient: () => ({
     getBuildInfo: async () => ({ name: 'fixture' }),
-    getStats: async () => CI_BUILD,
-    listSpecs: async () => ({ specs: [] }),
-    listItemSets: async () => ({ itemSets: [] }),
+    getStats: async (): Promise<StatsExport> => CI_BUILD,
+    listSpecs: async () => ({ specs: [], activeSpec: 1 }),
+    listItemSets: async () => ({ itemSets: [], activeItemSetId: 1 }),
     getItems: async () => [],
-  }) as any,
+  }) as unknown as NonNullable<ReturnType<OptContext['getLuaClient']>>,
   ensureLuaClient: async () => {},
 });
 
@@ -27,6 +29,6 @@ describe('handleAnalyzeDefenses empty-state guard', () => {
   it('analyses a Chaos Inoculation build, whose Life is 1', async () => {
     const result = await handleAnalyzeDefenses(context(), 'fixture');
 
-    expect(result.content[0].text).toContain('Defensive Analysis');
+    expect(result.content[0]?.text).toContain('Defensive Analysis');
   });
 });

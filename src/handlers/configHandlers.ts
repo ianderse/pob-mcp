@@ -1,10 +1,12 @@
-import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import { toFiniteNumber, type ConfigValues, type PoBLuaApiClient } from "../pobLuaBridge.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { wrapHandler } from "../utils/errorHandling.js";
+import { atomicWriteFile } from '../utils/atomicWrite.js';
 import { sanitizeBuildName } from "../utils/pathSanitizer.js";
 
-export interface ConfigHandlerContext {
+interface ConfigHandlerContext {
   getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }
@@ -31,7 +33,9 @@ export async function handleSaveConfigPreset(context: ConfigPresetContext, name:
 
   const config = await luaClient.getConfig();
   const filePath = await getPresetPath(context.pobDirectory, name);
-  await fs.writeFile(filePath, JSON.stringify(config, null, 2), 'utf-8');
+  // Atomic commit: re-saving a preset must never leave a truncated file that
+  // loads as a corrupt preset on the next start.
+  await atomicWriteFile(filePath, JSON.stringify(config, null, 2), true);
 
   return {
     content: [{
@@ -49,12 +53,19 @@ export async function handleLoadConfigPreset(context: ConfigPresetContext, name:
   if (!luaClient) throw new Error('Lua bridge not active. Use lua_load_build first.');
 
   const filePath = await getPresetPath(context.pobDirectory, name);
-  let config: Record<string, any>;
+  let config: Record<string, string | number | boolean>;
+  let raw: string;
   try {
-    const raw = await fs.readFile(filePath, 'utf-8');
-    config = JSON.parse(raw);
+    raw = await fs.readFile(filePath, 'utf-8');
   } catch {
     throw new Error(`Preset "${name}" not found. Use save_config_preset to create it first.`);
+  }
+  try {
+    config = JSON.parse(raw) as Record<string, string | number | boolean>;
+  } catch {
+    // Distinct from "missing": telling the user to save the preset again would
+    // overwrite — i.e. destroy — the file they actually have.
+    throw new Error(`Preset "${name}" exists but is not valid JSON (corrupt?). Re-save it with save_config_preset.`);
   }
 
   await luaClient.setConfig(config);
@@ -74,7 +85,7 @@ export async function handleListConfigPresets(context: ConfigPresetContext) {
   let files: string[] = [];
   try {
     files = await fs.readdir(dir);
-  } catch { /* dir doesn't exist yet */ }
+  } catch (e) { noteIgnoredError("dir doesn't exist yet", e); }
   const presets = files.filter(f => f.endsWith('.json')).map(f => f.replace('.json', ''));
 
   return {
@@ -133,8 +144,7 @@ export async function handleSetConfig(
   const oldValue = currentConfig[args.config_name];
 
   // Set new value - build params object dynamically
-  const params: Record<string, any> = {};
-  params[args.config_name] = args.value;
+  const params: Record<string, string | number | boolean> = { [args.config_name]: args.value };
   const result = await luaClient.setConfig(params);
 
   // Get updated stats
@@ -163,9 +173,9 @@ export async function handleSetConfig(
 
   if (newStats.TotalDPS != null) {
     output += `=== Current Stats ===\n`;
-    output += `Total DPS: ${formatNumber(newStats.TotalDPS)}\n`;
-    if (newStats.Life) output += `Life: ${formatNumber(newStats.Life)}\n`;
-    if (newStats.EnergyShield) output += `Energy Shield: ${formatNumber(newStats.EnergyShield)}\n`;
+    output += `Total DPS: ${formatNumber(toFiniteNumber(newStats.TotalDPS) ?? 0)}\n`;
+    if (newStats.Life) output += `Life: ${formatNumber(toFiniteNumber(newStats.Life) ?? 0)}\n`;
+    if (newStats.EnergyShield) output += `Energy Shield: ${formatNumber(toFiniteNumber(newStats.EnergyShield) ?? 0)}\n`;
   }
 
   return {
@@ -203,65 +213,73 @@ export async function handleSetEnemyStats(
 
   // Get current DPS and config before changes
   const oldStats = await luaClient.getStats(['TotalDPS', 'CombinedDPS', 'Life', 'EnergyShield']);
-  let currentConfig: Record<string, any> = {};
+  let currentConfig: ConfigValues = {};
   try {
     currentConfig = await luaClient.getConfig() ?? {};
-  } catch { /* old values unavailable — omit them from output */ }
+  } catch (e) { noteIgnoredError("old values unavailable — omit them from output", e); }
 
-  // Build config update params
-  const params: Record<string, any> = {};
-  const changesSummary: Array<{key: string; old: any; new: any}> = [];
+  // Build config update params. `paramKey` is PoB's own config option name —
+  // set_config rejects anything outside its whitelist, so these must match.
+  const params: Record<string, string | number | boolean> = {};
+  const changesSummary: Array<{ paramKey: string; label: string; old: unknown; new: unknown }> = [];
 
   if (args.level !== undefined) {
-    changesSummary.push({ key: "Enemy Level", old: currentConfig.enemyLevel, new: args.level });
+    changesSummary.push({ paramKey: "enemyLevel", label: "Enemy Level", old: currentConfig.enemyLevel, new: args.level });
     params.enemyLevel = args.level;
   }
   if (args.fire_resist !== undefined) {
-    changesSummary.push({ key: "Fire Resist", old: currentConfig.enemyFireResistance, new: args.fire_resist });
-    params.enemyFireResistance = args.fire_resist;
+    changesSummary.push({ paramKey: "enemyFireResist", label: "Fire Resist", old: currentConfig.enemyFireResist, new: args.fire_resist });
+    params.enemyFireResist = args.fire_resist;
   }
   if (args.cold_resist !== undefined) {
-    changesSummary.push({ key: "Cold Resist", old: currentConfig.enemyColdResistance, new: args.cold_resist });
-    params.enemyColdResistance = args.cold_resist;
+    changesSummary.push({ paramKey: "enemyColdResist", label: "Cold Resist", old: currentConfig.enemyColdResist, new: args.cold_resist });
+    params.enemyColdResist = args.cold_resist;
   }
   if (args.lightning_resist !== undefined) {
-    changesSummary.push({ key: "Lightning Resist", old: currentConfig.enemyLightningResistance, new: args.lightning_resist });
-    params.enemyLightningResistance = args.lightning_resist;
+    changesSummary.push({ paramKey: "enemyLightningResist", label: "Lightning Resist", old: currentConfig.enemyLightningResist, new: args.lightning_resist });
+    params.enemyLightningResist = args.lightning_resist;
   }
   if (args.chaos_resist !== undefined) {
-    changesSummary.push({ key: "Chaos Resist", old: currentConfig.enemyChaosResistance, new: args.chaos_resist });
-    params.enemyChaosResistance = args.chaos_resist;
+    changesSummary.push({ paramKey: "enemyChaosResist", label: "Chaos Resist", old: currentConfig.enemyChaosResist, new: args.chaos_resist });
+    params.enemyChaosResist = args.chaos_resist;
   }
   if (args.armor !== undefined) {
-    changesSummary.push({ key: "Armor", old: currentConfig.enemyArmour, new: args.armor });
+    changesSummary.push({ paramKey: "enemyArmour", label: "Armor", old: currentConfig.enemyArmour, new: args.armor });
     params.enemyArmour = args.armor;
   }
   if (args.evasion !== undefined) {
-    changesSummary.push({ key: "Evasion", old: currentConfig.enemyEvasion, new: args.evasion });
+    changesSummary.push({ paramKey: "enemyEvasion", label: "Evasion", old: currentConfig.enemyEvasion, new: args.evasion });
     params.enemyEvasion = args.evasion;
   }
 
-  // Apply changes
-  await luaClient.setConfig(params);
+  // Apply changes — PoB reports per-key outcomes; a rejected key leaves the
+  // build unchanged, so the header must reflect what actually landed.
+  const result = await luaClient.setConfig(params);
+  const rejected = new Map(Object.entries(result?.rejected ?? {}));
 
   // Get updated stats
   const newStats = await luaClient.getStats(['TotalDPS', 'CombinedDPS', 'Life', 'EnergyShield']);
 
   // Format output
-  let output = `=== Enemy Configuration Updated ===\n\n`;
+  let output = rejected.size
+    ? `=== Enemy Configuration Partially/NOT Updated ===\n\n`
+    : `=== Enemy Configuration Updated ===\n\n`;
 
   for (const change of changesSummary) {
-    const suffix = change.key.includes("Resist") ? "%" : "";
-    if (change.old != null) {
-      output += `${change.key}: ${change.old}${suffix} → ${change.new}${suffix}\n`;
+    const suffix = change.label.includes("Resist") ? "%" : "";
+    const rejection = rejected.get(change.paramKey);
+    if (rejection !== undefined) {
+      output += `${change.label}: ❌ rejected by Path of Building (${rejection})\n`;
+    } else if (change.old != null) {
+      output += `${change.label}: ${change.old}${suffix} → ${change.new}${suffix}\n`;
     } else {
-      output += `${change.key}: ${change.new}${suffix}\n`;
+      output += `${change.label}: ${change.new}${suffix}\n`;
     }
   }
 
   output += `\n=== DPS Update ===\n`;
-  const oldDPS = oldStats.TotalDPS || 0;
-  const newDPS = newStats.TotalDPS || 0;
+  const oldDPS = toFiniteNumber(oldStats.TotalDPS) ?? 0;
+  const newDPS = toFiniteNumber(newStats.TotalDPS) ?? 0;
   const percentChange = oldDPS > 0 ? ((newDPS - oldDPS) / oldDPS * 100) : 0;
 
   output += `Previous DPS: ${formatNumber(oldDPS)}\n`;
@@ -298,7 +316,7 @@ export async function handleSetEnemyStats(
 /**
  * Format configuration output
  */
-function formatConfigOutput(config: any, labels: Record<string, string> = {}): string {
+function formatConfigOutput(config: ConfigValues, labels: Record<string, string> = {}): string {
   if (!config || typeof config !== 'object') {
     return "=== Configuration State ===\n\nNo configuration data available.\n";
   }
@@ -389,15 +407,18 @@ function formatConfigOutput(config: any, labels: Record<string, string> = {}): s
 }
 
 /**
- * Format a value for display
+ * Format a value for display. Input is any JSON value read off the wire
+ * (config values are boolean/number/string on the PoB side).
  */
-function formatValue(value: any): string {
+function formatValue(value: unknown): string {
   if (typeof value === 'boolean') {
     return value ? 'Yes' : 'No';
   }
   if (typeof value === 'number') {
     return formatNumber(value);
   }
+  if (value === null || value === undefined) return String(value);
+  if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
 }
 

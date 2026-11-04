@@ -4,7 +4,7 @@
  * Utilities for formatting and processing MCP tool responses
  */
 
-export type ToolResponse = {
+type ToolResponse = {
   content: Array<{
     type: string;
     text: string;
@@ -19,7 +19,7 @@ export type ToolResponse = {
  * @param maxLength - Maximum length before truncation (default: 5000 to minimize tokens)
  * @returns Truncated text with helpful message if truncated
  */
-export function truncateResponse(text: string, maxLength: number = 5000): string {
+function truncateResponse(text: string, maxLength: number = 5000): string {
   if (text.length <= maxLength) {
     return text;
   }
@@ -52,4 +52,16 @@ export function wrapWithTruncation(
     }
   }
   return result;
+}
+
+/**
+ * Whether a tool's responses should be truncated, per its own schema flag.
+ * The flag lives with the tool definition (see ToolSchema.truncatable) so a
+ * new large-output tool cannot silently fall outside a hand-maintained list.
+ */
+export function shouldTruncate(
+  toolName: string,
+  tools: Array<{ name: string; truncatable?: boolean }>
+): boolean {
+  return tools.some((t) => t.name === toolName && t.truncatable === true);
 }

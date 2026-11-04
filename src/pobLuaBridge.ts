@@ -1,7 +1,7 @@
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
+import { noteIgnoredError } from './utils/errorHandling.js';
 import { EventEmitter } from "events";
 import path from "path";
-import os from "os";
 import zlib from "zlib";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
@@ -12,6 +12,240 @@ import { resolvePoBLayout } from "./utils/pobLayout.js";
 type LuaRequest = { action: string; params?: Record<string, unknown> };
 /** Lua bridge response envelope — always an object with at minimum `ok: boolean` */
 type LuaResponse = { ok: boolean; error?: string; [key: string]: unknown };
+
+// ============================================================================
+// Typed bridge results. Each interface mirrors the exact table returned by the
+// corresponding M.<action>() in lua/pob_ops.lua (or a stdio handler) — keep
+// them in sync when changing the Lua side. Optional fields are those the Lua
+// layer only sets when the underlying PoB state has them.
+// ============================================================================
+
+/** get_build_info */
+export interface BuildInfo {
+  name?: string;
+  level?: number;
+  className?: string;
+  ascendClassName?: string;
+  treeVersion?: string;
+}
+
+/** get_tree / set_tree / update_tree_delta .tree */
+export interface TreeState {
+  treeVersion?: string;
+  classId: number;
+  ascendClassId: number;
+  secondaryAscendClassId: number;
+  nodes: number[];
+  masteryEffects: Record<string, number>;
+  /**
+   * Allocated ascendancy nodes minus the free ascendancy-start node. Computed
+   * by the Lua bridge (pob_ops.lua M.get_tree); backs the max-8 cap guard and
+   * unspent-point estimates.
+   */
+  ascendancyPointsUsed?: number;
+}
+
+/** export_stats meta block (string fields nested under _meta, not numeric) */
+interface StatsMeta {
+  treeVersion?: string;
+  level?: number;
+  buildName?: string;
+}
+
+/**
+ * get_stats: PoB's calculator output for the requested fields. Values are
+ * numbers by contract; `string` stays in the type because PoB's raw output
+ * table can carry display strings for a few fields, and consumers coerce.
+ * `_meta` is the only non-numeric member (treeVersion/level/buildName).
+ */
+export type StatsExport = { [stat: string]: number | string | undefined } & { _meta?: StatsMeta };
+
+/**
+ * Coerce a PoB stat to a finite number. PoB's output table is stringly typed
+ * in a handful of fields and the JSON round-trip can widen/shape values, so
+ * every numeric consumer must narrow through this helper (or Number()) rather
+ * than assume the wire type. NaN/undefined => not reported by PoB.
+ */
+export function toFiniteNumber(v: unknown): number | undefined {
+  if (v === null || v === undefined || v === '') return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * calc_with raw PoB output: numeric stats plus the nested Minion table and
+ * functions stripped by sanitize_for_json.
+ */
+type CalcOutput = { [stat: string]: number | undefined } & {
+  Minion?: { [stat: string]: number | undefined };
+  _meta?: StatsMeta;
+};
+
+/** get_items entry (M.get_items) */
+interface EquippedItem {
+  slot: string;
+  id: number;
+  name?: string;
+  baseName?: string;
+  type?: string;
+  rarity?: string;
+  /** PoB's raw item line, when present */
+  raw?: string;
+  /** flask/tincture activation; only meaningful for flask slots */
+  active?: boolean;
+  /**
+   * PoB's ItemsTab visibility gate for this slot (Control:IsShown parity).
+   * false = the slot does not apply to this build (Ring 3 without the
+   * AdditionalRingSlot flag, Grafts on pre-3_27 trees, inactive weapon set)
+   * — empty-but-hidden must not be reported as an empty gear slot.
+   */
+  shown?: boolean;
+}
+
+/** get_skills */
+interface SkillGemEntry {
+  index: number;
+  name: string;
+  level: number;
+  quality: number;
+  qualityId: string;
+  enabled: boolean;
+  isSupport: boolean;
+}
+
+export interface SocketGroupEntry {
+  index: number;
+  label?: string;
+  slot?: string;
+  enabled?: boolean;
+  includeInFullDPS?: boolean;
+  mainActiveSkill?: number;
+  skills: string[];
+  gems: SkillGemEntry[];
+}
+
+export interface SkillsOutput {
+  mainSocketGroup?: number;
+  calcsSkillNumber?: number;
+  groups: SocketGroupEntry[];
+}
+
+/** search_nodes */
+interface SearchNodesResult {
+  nodes: SearchedNode[];
+  count: number;
+}
+
+export interface SearchedNode {
+  id: number | string;
+  name: string;
+  type: 'keystone' | 'notable' | 'jewel' | 'mastery' | 'ascendancy' | 'normal' | string;
+  stats: string[];
+  allocated: boolean;
+  x: number;
+  y: number;
+  orbit?: string;
+  orbitIndex?: number;
+  /** PoB's tree data carries both spellings depending on data vintage. */
+  ascendancy?: string;
+  ascendancyName?: string;
+  isMastery?: boolean;
+  isBlighted?: boolean;
+}
+
+/** list_specs / create_spec / select_spec / delete_spec / rename_spec */
+export interface SpecEntry {
+  index: number;
+  title: string;
+  active: boolean;
+  className?: string;
+  ascendClassName?: string;
+  treeVersion?: string;
+  nodeCount: number;
+}
+
+interface SpecList {
+  specs: SpecEntry[];
+  activeSpec: number;
+}
+
+/** list_item_sets / select_item_set */
+export interface ItemSetEntry {
+  id: number;
+  title: string;
+  active: boolean;
+  useSecondWeaponSet: boolean;
+}
+
+interface ItemSetList {
+  itemSets: ItemSetEntry[];
+  activeItemSetId: number;
+}
+
+/** get_config / set_config .config */
+export interface ConfigValues {
+  [key: string]: string | number | boolean | undefined;
+}
+
+/** get_capabilities (plus the offline fallback shape) */
+interface BridgeCapabilities {
+  mode?: string;
+  adapter?: string;
+  actions?: string[];
+  /** set only by the offline fallback (no bridge answered) */
+  capabilitiesReported?: boolean;
+}
+
+/** add_item_text */
+interface AddedItem {
+  id: number;
+  name?: string;
+  slot?: string;
+}
+
+/** create_socket_group */
+interface CreatedSocketGroup {
+  index: number;
+  label?: string;
+  enabled?: boolean;
+  [key: string]: unknown;
+}
+
+/** add_gem */
+interface AddedGem {
+  gemIndex: number;
+  name?: string;
+}
+
+/** get_mastery_options */
+interface MasteryOptionEffect {
+  effectId: number;
+  stat: string;
+}
+
+interface MasteryOptionNode {
+  nodeId: number | string;
+  nodeName: string;
+  allocatedEffect?: number;
+  availableEffects: MasteryOptionEffect[];
+}
+
+interface MasteryOptions {
+  masteries: MasteryOptionNode[];
+}
+
+/** new_build / load_build_xml / import_code envelope result (state facts only) */
+interface BuildLoadResult {
+  ok: true;
+}
+
+/** save_build */
+interface SavedBuild {
+  path: string;
+  /** byte size of the XML PoB serialized */
+  size: number;
+}
+
 
 const ROCK_BY_LUA_MODULE: Record<string, string> = {
   "lua-utf8": "luautf8",
@@ -31,13 +265,16 @@ function missingLuaModuleMessage(moduleName: string): string {
   );
 }
 
-export interface PoBLuaApiOptions {
+interface PoBLuaApiOptions {
   cwd?: string;
   cmd?: string; // default: 'luajit'
   args?: string[]; // default: ['HeadlessWrapper.lua']
   env?: Record<string, string>;
   timeoutMs?: number; // per-request timeout
 }
+
+/** Constructor input with every defaulted field resolved — what the client stores. */
+type ResolvedOptions = Required<Omit<PoBLuaApiOptions, 'cwd'>> & { cwd?: string };
 
 /**
  * A non-damaging ailment as the engine sees it. `appliedEffect` is what the
@@ -76,7 +313,7 @@ export class PoBLuaApiClient {
 
   getLoadedFilePath(): string | undefined { return this.loadedFilePath; }
   private proc: ChildProcessWithoutNullStreams | null = null;
-  private options: PoBLuaApiOptions;
+  private options: ResolvedOptions;
   private buffer = "";
   private ready = false;
   private isSending = false;
@@ -129,13 +366,14 @@ export class PoBLuaApiClient {
 
     let child: ChildProcessWithoutNullStreams;
     try {
-      child = spawn(this.options.cmd!, this.options.args!, {
+      child = spawn(this.options.cmd, this.options.args, {
         cwd: this.options.cwd,
         env,
         stdio: ["pipe", "pipe", "pipe"],
       });
-    } catch (error: any) {
-      throw new Error(`Failed to spawn LuaJIT process: ${error.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to spawn LuaJIT process: ${message}`);
     }
     this.proc = child;
 
@@ -171,11 +409,6 @@ export class PoBLuaApiClient {
     });
 
     try {
-      // In Jest short-timeout scenarios, simulate missing ready banner to allow timeout test to pass
-      if (process.env.JEST_WORKER_ID && (this.options.timeoutMs ?? 0) <= 150) {
-        throw new Error("Failed to find valid ready banner");
-      }
-
       // Wait for ready banner (skip non-JSON lines like log messages)
       let ready: string = "";
       let attempts = 0;
@@ -236,7 +469,7 @@ export class PoBLuaApiClient {
       // Don't leak the spawned process when startup fails
       this.proc = null;
       this.killed = true;
-      try { child.kill(); } catch {}
+      try { child.kill(); } catch (e) { noteIgnoredError("kill during startup cleanup (process likely already exited)", e); }
       throw err;
     }
   }
@@ -249,13 +482,12 @@ export class PoBLuaApiClient {
     this.dataEmitter.emit("data");
   }
 
-  private readLineWithTimeout(timeoutMs?: number): Promise<string> {
-    const ms = timeoutMs ?? this.options.timeoutMs!;
+  private readLineWithTimeout(timeoutMs = this.options.timeoutMs): Promise<string> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         cleanup();
         reject(new Error("Timed out waiting for response"));
-      }, ms);
+      }, timeoutMs);
 
       const tryRead = (): boolean => {
         const idx = this.buffer.indexOf("\n");
@@ -315,7 +547,7 @@ export class PoBLuaApiClient {
           if (err instanceof Error && /Timed out/.test(err.message)) {
             this.killed = true;
             this.buffer = "";
-            try { this.proc?.kill(); } catch {}
+            try { this.proc?.kill(); } catch (e) { noteIgnoredError("kill on stop (process likely already exited)", e); }
             throw new Error("Timed out waiting for response; the PoB bridge was terminated to avoid protocol desync and will restart on the next call");
           }
           throw err;
@@ -348,21 +580,24 @@ export class PoBLuaApiClient {
     return !!res.ok;
   }
 
-  async getCapabilities(): Promise<any> {
+  async getCapabilities(): Promise<BridgeCapabilities> {
     const res = await this.send({ action: "get_capabilities" });
-    if (!res.ok) return { mode: 'fork', adapter: 'native', capabilitiesReported: false };
-    return res.capabilities;
+    if (!res.ok) return { mode: 'unreported', adapter: 'unknown', capabilitiesReported: false };
+    // An ok response that carries no capabilities block means the bridge predates
+    // this action — claiming 'fork/native' there would be fabricated.
+    return (res.capabilities as BridgeCapabilities | undefined)
+      ?? { mode: 'unreported', adapter: 'unknown', capabilitiesReported: false };
   }
 
-  async newBuild(params?: { className?: string; ascendancy?: string }): Promise<any> {
+  async newBuild(params?: { className?: string; ascendancy?: string }): Promise<BuildLoadResult> {
     const res = await this.send({ action: "new_build", params: params || {} });
     if (!res.ok) throw new Error(res.error || "new_build failed");
     this.loadedFilePath = undefined;
     this.buildGeneration++;
-    return res;
+    return { ok: true };
   }
 
-  async saveBuild(filePath: string, overwrite = false): Promise<any> {
+  async saveBuild(filePath: string, overwrite = false): Promise<SavedBuild> {
     const destination = path.resolve(filePath);
     const mayReplace = overwrite || this.loadedFilePath === destination;
     const generation = this.buildGeneration;
@@ -373,25 +608,27 @@ export class PoBLuaApiClient {
       const xml = await fs.readFile(temporary, 'utf8');
       await atomicWriteFile(destination, xml, mayReplace);
       if (this.buildGeneration === generation) this.loadedFilePath = destination;
-      return { ...res.result as any, path: destination };
-    } catch (error: any) {
-      if (error.code === 'EEXIST') {
+      // size/path from the Lua save result are for the temp write; the
+      // authoritative facts for callers are the final destination + bytes.
+      return { path: destination, size: xml.length };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
         throw new Error(`Refusing to overwrite existing build "${destination}". Pass overwrite: true to replace it, or choose a new name.`);
       }
       throw error;
     } finally {
-      await fs.unlink(temporary).catch((error: any) => { if (error.code !== 'ENOENT') throw error; });
+      await fs.unlink(temporary).catch((error: unknown) => { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; });
     }
   }
 
-  async loadBuildXml(xml: string, name = "API Build", sourcePath?: string): Promise<any> {
+  async loadBuildXml(xml: string, name = "API Build", sourcePath?: string): Promise<BuildLoadResult> {
     // A failed import may already have closed the previous native build.
     this.loadedFilePath = undefined;
     this.buildGeneration++;
     const res = await this.send({ action: "load_build_xml", params: { xml, name } });
     if (!res.ok) throw new Error(res.error || "load_build_xml failed");
     this.loadedFilePath = sourcePath ? path.resolve(sourcePath) : undefined;
-    return res;
+    return { ok: true };
   }
 
   /**
@@ -402,7 +639,7 @@ export class PoBLuaApiClient {
    * return "" — the real implementation lives in the native SimpleGraphic
    * host the desktop app links against, which headless mode has none of.
    */
-  async importCode(code: string, name = "Imported Build"): Promise<any> {
+  async importCode(code: string, name = "Imported Build"): Promise<BuildLoadResult> {
     const b64 = code.trim().replace(/-/g, "+").replace(/_/g, "/");
     const compressed = Buffer.from(b64, "base64");
 
@@ -421,33 +658,33 @@ export class PoBLuaApiClient {
     return this.loadBuildXml(xml, name);
   }
 
-  async getStats(fields?: string[]): Promise<Record<string, any>> {
+  async getStats(fields?: string[]): Promise<StatsExport> {
     const res = await this.send({ action: "get_stats", params: { fields } });
     if (!res.ok) throw new Error(res.error || "get_stats failed");
-    return res.stats as Record<string, any>;
+    return res.stats as StatsExport;
   }
 
-  async getTree(): Promise<any> {
+  async getTree(): Promise<TreeState> {
     const res = await this.send({ action: "get_tree" });
     if (!res.ok) throw new Error(res.error || "get_tree failed");
-    return res.tree;
+    return res.tree as TreeState;
   }
 
   
 
-  async getItems(): Promise<any[]> {
+  async getItems(): Promise<EquippedItem[]> {
     const res = await this.send({ action: "get_items" });
     if (!res.ok) throw new Error(res.error || "get_items failed");
-    return res.items as any[];
+    return res.items as EquippedItem[];
   }
 
-  async addItem(itemText: string, slotName?: string, noAutoEquip?: boolean): Promise<any> {
+  async addItem(itemText: string, slotName?: string, noAutoEquip?: boolean): Promise<AddedItem> {
     const res = await this.send({
       action: "add_item_text",
       params: { text: itemText, slotName, noAutoEquip },
     });
     if (!res.ok) throw new Error(res.error || "add_item_text failed");
-    return res.item;
+    return res.item as AddedItem;
   }
 
   async setFlaskActive(flaskIndex: number, active: boolean): Promise<void> {
@@ -458,10 +695,10 @@ export class PoBLuaApiClient {
     if (!res.ok) throw new Error(res.error || "set_flask_active failed");
   }
 
-  async getSkills(): Promise<any> {
+  async getSkills(): Promise<SkillsOutput> {
     const res = await this.send({ action: "get_skills" });
     if (!res.ok) throw new Error(res.error || "get_skills failed");
-    return res.skills;
+    return res.skills as SkillsOutput;
   }
 
   async setMainSelection(params: {
@@ -480,10 +717,10 @@ async setTree(params: {
     nodes: number[];
     masteryEffects?: Record<number, number>;
     treeVersion?: string;
-  }): Promise<any> {
+  }): Promise<TreeState> {
     const res = await this.send({ action: "set_tree", params });
     if (!res.ok) throw new Error(res.error || "set_tree failed");
-    return res.tree;
+    return res.tree as TreeState;
   }
 
   async exportBuildXml(): Promise<string> {
@@ -492,10 +729,10 @@ async setTree(params: {
     return res.xml as string;
   }
 
-  async getBuildInfo(): Promise<any> {
+  async getBuildInfo(): Promise<BuildInfo> {
     const res = await this.send({ action: "get_build_info" });
     if (!res.ok) throw new Error(res.error || "get_build_info failed");
-    return res.info;
+    return res.info as BuildInfo;
   }
 
   async setLevel(level: number): Promise<void> {
@@ -503,10 +740,10 @@ async setTree(params: {
     if (!res.ok) throw new Error(res.error || "set_level failed");
   }
 
-  async getConfig(): Promise<any> {
+  async getConfig(): Promise<ConfigValues> {
     const res = await this.send({ action: "get_config" });
     if (!res.ok) throw new Error(res.error || "get_config failed");
-    return res.config;
+    return res.config as ConfigValues;
   }
 
   /** Human-facing labels for dropdown config values (bandit "None" -> "Kill all"). */
@@ -516,30 +753,30 @@ async setTree(params: {
     return (res.labels as Record<string, string>) ?? {};
   }
 
-  async setConfig(params: Record<string, any>): Promise<{
-    applied: Record<string, any>;
+  async setConfig(params: Record<string, string | number | boolean>): Promise<{
+    applied: ConfigValues;
     rejected: Record<string, string>;
-    config: Record<string, any>;
+    config: ConfigValues;
   }> {
     const res = await this.send({ action: "set_config", params });
     if (!res.ok) throw new Error(res.error || "set_config failed");
     return {
-      applied: (res.applied as Record<string, any>) ?? {},
+      applied: (res.applied as ConfigValues) ?? {},
       rejected: (res.rejected as Record<string, string>) ?? {},
-      config: (res.config as Record<string, any>) ?? {},
+      config: (res.config as ConfigValues) ?? {},
     };
   }
 
-  async createSocketGroup(params?: { label?: string; slot?: string; enabled?: boolean; includeInFullDPS?: boolean }): Promise<any> {
+  async createSocketGroup(params?: { label?: string; slot?: string; enabled?: boolean; includeInFullDPS?: boolean }): Promise<CreatedSocketGroup> {
     const res = await this.send({ action: "create_socket_group", params: params || {} });
     if (!res.ok) throw new Error(res.error || "create_socket_group failed");
-    return res.socketGroup;
+    return res.socketGroup as CreatedSocketGroup;
   }
 
-  async addGem(params: { groupIndex: number; gemName: string; level?: number; quality?: number; qualityId?: string; enabled?: boolean; count?: number }): Promise<any> {
+  async addGem(params: { groupIndex: number; gemName: string; level?: number; quality?: number; qualityId?: string; enabled?: boolean; count?: number }): Promise<AddedGem> {
     const res = await this.send({ action: "add_gem", params });
     if (!res.ok) throw new Error(res.error || "add_gem failed");
-    return res.gem;
+    return res.gem as AddedGem;
   }
 
   async setGemLevel(params: { groupIndex: number; gemIndex: number; level: number }): Promise<void> {
@@ -562,10 +799,10 @@ async setTree(params: {
     if (!res.ok) throw new Error(res.error || "remove_gem failed");
   }
 
-  async setSocketGroupEnabled(params: { groupIndex: number; enabled: boolean }): Promise<{ groupIndex: number; label: string; enabled: boolean }> {
+  async setSocketGroupEnabled(params: { groupIndex: number; enabled: boolean }): Promise<{ groupIndex: number; label?: string; enabled: boolean }> {
     const res = await this.send({ action: "set_socket_group_enabled", params });
     if (!res.ok) throw new Error(res.error || "set_socket_group_enabled failed");
-    return res.result as { groupIndex: number; label: string; enabled: boolean };
+    return res.result as { groupIndex: number; label?: string; enabled: boolean };
   }
 
   async setGemEnabled(params: { groupIndex: number; gemIndex: number; enabled: boolean }): Promise<void> {
@@ -573,33 +810,31 @@ async setTree(params: {
     if (!res.ok) throw new Error(res.error || "set_gem_enabled failed");
   }
 
-  async searchNodes(params: { keyword: string; nodeType?: string; maxResults?: number; includeAllocated?: boolean }): Promise<any> {
+  async searchNodes(params: { keyword: string; nodeType?: string; maxResults?: number; includeAllocated?: boolean }): Promise<SearchNodesResult> {
     const res = await this.send({ action: "search_nodes", params });
     if (!res.ok) throw new Error(res.error || "search_nodes failed");
-    return res.results;
+    return res.results as SearchNodesResult;
   }
 
-  async updateTreeDelta(params: { addNodes?: number[]; removeNodes?: number[]; masteryEffects?: Record<string, number>; classId?: number; ascendClassId?: number; secondaryAscendClassId?: number; treeVersion?: string; }): Promise<{ tree: any; autoPathedNodes?: number[]; skippedAscendancyNodes?: number[]; droppedNodes?: number[] }> {
+  async updateTreeDelta(params: { addNodes?: Array<number | string>; removeNodes?: Array<number | string>; masteryEffects?: Record<string, number>; classId?: number; ascendClassId?: number; secondaryAscendClassId?: number; treeVersion?: string; }): Promise<{ tree: TreeState; droppedNodes?: number[] }> {
     const res = await this.send({ action: "update_tree_delta", params });
     if (!res.ok) throw new Error(res.error || "update_tree_delta failed");
     return {
-      tree: res.tree,
-      autoPathedNodes: res.autoPathedNodes as number[] | undefined,
-      skippedAscendancyNodes: res.skippedAscendancyNodes as number[] | undefined,
+      tree: res.tree as TreeState,
       droppedNodes: res.droppedNodes as number[] | undefined,
     };
   }
 
-  async calcWith(params: { addNodes?: number[]; removeNodes?: number[]; masteryEffects?: Record<string | number, number>; useFullDPS?: boolean }): Promise<any> {
+  async calcWith(params: { addNodes?: Array<number | string>; removeNodes?: Array<number | string>; masteryEffects?: Record<string | number, number>; useFullDPS?: boolean }): Promise<CalcOutput> {
     const res = await this.send({ action: "calc_with", params });
     if (!res.ok) throw new Error(res.error || "calc_with failed");
-    return res.output;
+    return res.output as CalcOutput;
   }
 
-  async getMasteryOptions(): Promise<any> {
+  async getMasteryOptions(): Promise<MasteryOptions> {
     const res = await this.send({ action: "get_mastery_options" });
     if (!res.ok) throw new Error(res.error || "get_mastery_options failed");
-    return res.result;
+    return res.result as MasteryOptions;
   }
 
   async getAilments(): Promise<{ ailments: AilmentReport[] }> {
@@ -618,7 +853,13 @@ async setTree(params: {
   }> {
     const res = await this.send({ action: 'evaluate_anoint_candidates', params });
     if (!res.ok) throw new Error(res.error || 'evaluate_anoint_candidates failed');
-    return res as any;
+    // The bridge handler replies with the result fields at the envelope top
+    // level (no nested `result`), hence reading from `res` itself.
+    const { ok: _ok, ...result } = res;
+    return result as unknown as {
+      candidates: Array<{ nodeId: number | string; name: string; dpsDelta: number; ehpDelta: number; score: number; recipe?: string[] }>;
+      base: { CombinedDPS: number; TotalEHP: number }; evaluated: number; skipped: number; slot: string; baseType: string; focus: string;
+    };
   }
 
   async generateWeightedTradeQuery(slot: string, options?: Record<string, unknown>): Promise<{ query: unknown; warning?: string }> {
@@ -628,53 +869,53 @@ async setTree(params: {
     return { query, warning: typeof res.warning === 'string' ? res.warning : undefined };
   }
 
-  async createSpec(params?: { title?: string; copyFrom?: number; activate?: boolean }): Promise<any> {
+  async createSpec(params?: { title?: string; copyFrom?: number; activate?: boolean }): Promise<SpecList> {
     const res = await this.send({ action: "create_spec", params: params || {} });
     if (!res.ok) throw new Error(res.error || "create_spec failed");
-    return res.result;
+    return res.result as SpecList;
   }
 
-  async listSpecs(): Promise<any> {
+  async listSpecs(): Promise<SpecList> {
     const res = await this.send({ action: "list_specs" });
     if (!res.ok) throw new Error(res.error || "list_specs failed");
-    return res.result;
+    return res.result as SpecList;
   }
 
-  async selectSpec(index: number): Promise<any> {
+  async selectSpec(index: number): Promise<SpecList> {
     const res = await this.send({ action: "select_spec", params: { index } });
     if (!res.ok) throw new Error(res.error || "select_spec failed");
-    return res.result;
+    return res.result as SpecList;
   }
 
-  async deleteSpec(index: number): Promise<any> {
+  async deleteSpec(index: number): Promise<SpecList> {
     const res = await this.send({ action: "delete_spec", params: { index } });
     if (!res.ok) throw new Error(res.error || "delete_spec failed");
-    return res.result;
+    return res.result as SpecList;
   }
 
-  async renameSpec(index: number, title: string): Promise<any> {
+  async renameSpec(index: number, title: string): Promise<SpecList> {
     const res = await this.send({ action: "rename_spec", params: { index, title } });
     if (!res.ok) throw new Error(res.error || "rename_spec failed");
-    return res.result;
+    return res.result as SpecList;
   }
 
-  async listItemSets(): Promise<any> {
+  async listItemSets(): Promise<ItemSetList> {
     const res = await this.send({ action: "list_item_sets" });
     if (!res.ok) throw new Error(res.error || "list_item_sets failed");
-    return res.result;
+    return res.result as ItemSetList;
   }
 
-  async selectItemSet(id: number): Promise<any> {
+  async selectItemSet(id: number): Promise<ItemSetList> {
     const res = await this.send({ action: "select_item_set", params: { id } });
     if (!res.ok) throw new Error(res.error || "select_item_set failed");
-    return res.result;
+    return res.result as ItemSetList;
   }
 
   async stop(): Promise<void> {
     if (!this.proc) return;
     try {
       await this.send({ action: "quit" });
-    } catch {}
+    } catch (e) { noteIgnoredError('graceful quit handshake (hard kill follows)', e); }
     this.proc.kill();
     this.proc = null;
   }

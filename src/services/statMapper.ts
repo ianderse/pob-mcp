@@ -5,7 +5,7 @@
  * Provides fuzzy matching and search capabilities
  */
 
-export interface StatMapping {
+interface StatMapping {
   pobName: string;
   tradeId: string;
   category: 'pseudo' | 'explicit' | 'implicit' | 'enchant' | 'crafted' | 'fractured';
@@ -16,7 +16,7 @@ export interface StatMapping {
 /**
  * Comprehensive stat mappings between PoB and Trade API
  */
-export const STAT_MAPPINGS: StatMapping[] = [
+const STAT_MAPPINGS: StatMapping[] = [
   // ========================================
   // Pseudo Stats (most commonly used)
   // ========================================
@@ -424,7 +424,6 @@ export class StatMapper {
   private mappingsByTradeId: Map<string, StatMapping>;
   private allAliases: Map<string, StatMapping>;
   private allStats: StatMapping[] = [];
-  private loaded: boolean = false;
 
   constructor() {
     this.mappingsByPobName = new Map();
@@ -443,55 +442,6 @@ export class StatMapper {
       this.addMapping(mapping);
     }
     this.allStats = [...STAT_MAPPINGS];
-    this.loaded = true;
-  }
-
-  /**
-   * Load stats dynamically from official PoE trade API data
-   */
-  async loadFromTradeAPI(statData: any): Promise<void> {
-    // Clear existing mappings
-    this.mappingsByPobName.clear();
-    this.mappingsByTradeId.clear();
-    this.allAliases.clear();
-    this.allStats = [];
-
-    // Process each stat category from the API
-    if (statData && statData.result) {
-      for (const category of statData.result) {
-        const categoryType = this.getCategoryType(category.label);
-
-        for (const entry of category.entries || []) {
-          const mapping: StatMapping = {
-            pobName: entry.id, // Use the ID as the PoB name for now
-            tradeId: entry.id,
-            category: categoryType,
-            aliases: [entry.text, entry.id],
-            description: entry.text,
-          };
-
-          this.addMapping(mapping);
-          this.allStats.push(mapping);
-        }
-      }
-    }
-
-    this.loaded = true;
-    console.error(`[StatMapper] Loaded ${this.allStats.length} stats from trade API`);
-  }
-
-  /**
-   * Determine category type from API label
-   */
-  private getCategoryType(label: string): 'pseudo' | 'explicit' | 'implicit' | 'enchant' | 'crafted' | 'fractured' {
-    const lowerLabel = label.toLowerCase();
-    if (lowerLabel.includes('pseudo')) return 'pseudo';
-    if (lowerLabel.includes('explicit')) return 'explicit';
-    if (lowerLabel.includes('implicit')) return 'implicit';
-    if (lowerLabel.includes('enchant')) return 'enchant';
-    if (lowerLabel.includes('crafted')) return 'crafted';
-    if (lowerLabel.includes('fractured')) return 'fractured';
-    return 'explicit'; // Default
   }
 
   /**
@@ -505,22 +455,6 @@ export class StatMapper {
     for (const alias of mapping.aliases) {
       this.allAliases.set(alias.toLowerCase(), mapping);
     }
-  }
-
-  /**
-   * Get Trade API stat ID from PoB stat name
-   */
-  getTradeId(pobStatName: string): string | null {
-    const mapping = this.mappingsByPobName.get(pobStatName.toLowerCase());
-    return mapping ? mapping.tradeId : null;
-  }
-
-  /**
-   * Get PoB stat name from Trade API ID
-   */
-  getPobName(tradeId: string): string | null {
-    const mapping = this.mappingsByTradeId.get(tradeId.toLowerCase());
-    return mapping ? mapping.pobName : null;
   }
 
   /**
@@ -587,53 +521,5 @@ export class StatMapper {
     results.sort((a, b) => b.score - a.score);
 
     return results.slice(0, limit).map(r => r.mapping);
-  }
-
-  /**
-   * Get all mappings in a category
-   */
-  getByCategory(category: StatMapping['category']): StatMapping[] {
-    return STAT_MAPPINGS.filter(m => m.category === category);
-  }
-
-  /**
-   * Get all mappings
-   */
-  getAllMappings(): StatMapping[] {
-    return [...STAT_MAPPINGS];
-  }
-
-  /**
-   * Convert a PoB stat requirement to Trade API stat filter
-   */
-  pobStatToTradeFilter(pobStatName: string, min?: number, max?: number): { id: string; min?: number; max?: number } | null {
-    const tradeId = this.getTradeId(pobStatName);
-    if (!tradeId) {
-      return null;
-    }
-
-    return {
-      id: tradeId,
-      min,
-      max,
-    };
-  }
-
-  /**
-   * Batch convert multiple PoB stats to Trade API filters
-   */
-  pobStatsToTradeFilters(
-    stats: Array<{ name: string; min?: number; max?: number }>
-  ): Array<{ id: string; min?: number; max?: number }> {
-    const results: Array<{ id: string; min?: number; max?: number }> = [];
-
-    for (const stat of stats) {
-      const filter = this.pobStatToTradeFilter(stat.name, stat.min, stat.max);
-      if (filter) {
-        results.push(filter);
-      }
-    }
-
-    return results;
   }
 }

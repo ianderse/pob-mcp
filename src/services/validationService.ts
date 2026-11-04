@@ -1,5 +1,21 @@
 import type { PoBBuild, BuildValidation, ValidationIssue, FlaskAnalysis } from "../types.js";
 
+/**
+ * Stats view consumed by the validators: Lua bridge's flat stat object
+ * (values may arrive as numbers or numeric strings) or the Map extracted
+ * from XML `<PlayerStat>` entries. `statValue`/`getResist` are the only
+ * accessors and they normalise the numeric-string case.
+ */
+type ValidationStats = Record<string, unknown> | Map<string, number>;
+
+/** Numeric value of a stat, or null when absent or non-numeric. */
+function statValue(stats: ValidationStats, key: string): number | null {
+  const raw = stats instanceof Map ? stats.get(key) : (stats as Record<string, unknown>)[key];
+  if (raw === undefined || raw === null || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 export class ValidationService {
   /**
    * Validate a complete build and return all issues found
@@ -11,7 +27,7 @@ export class ValidationService {
   validateBuild(
     build: PoBBuild,
     flaskAnalysis: FlaskAnalysis | null = null,
-    luaStats?: any
+    luaStats?: ValidationStats
   ): BuildValidation {
     const criticalIssues: ValidationIssue[] = [];
     const warnings: ValidationIssue[] = [];
@@ -23,9 +39,9 @@ export class ValidationService {
     // Run validation rules
     this.validateResistances(stats, criticalIssues, warnings);
     this.validateDefenses(stats, build, criticalIssues, warnings);
-    this.validateMana(stats, build, criticalIssues, warnings, recommendations);
-    this.validateAccuracy(stats, build, criticalIssues, warnings);
-    this.validateImmunities(flaskAnalysis, criticalIssues, warnings, recommendations);
+    this.validateMana(stats, criticalIssues, warnings, recommendations);
+    this.validateAccuracy(stats, criticalIssues, warnings);
+    this.validateImmunities(flaskAnalysis, warnings, recommendations);
     this.validateDefensiveLayers(stats, warnings, recommendations);
     this.validateDamageScaling(build, recommendations);
 
@@ -34,7 +50,7 @@ export class ValidationService {
     const isValid = criticalIssues.length === 0;
 
     // Generate summary
-    const summary = this.generateSummary(overallScore, criticalIssues, warnings);
+    const summary = this.generateSummary(overallScore);
 
     return {
       isValid,
@@ -68,20 +84,14 @@ export class ValidationService {
   }
 
   private validateResistances(
-    stats: any,
+    stats: ValidationStats,
     criticalIssues: ValidationIssue[],
     warnings: ValidationIssue[]
   ): void {
     // Get resist value (works with both Lua stats object and Map from XML).
     // Returns null when the stat is absent so callers can skip checks rather
     // than treating a missing stat as 0% (which would be a false positive).
-    const getResist = (key: string): number | null => {
-      if (typeof stats.get === 'function') {
-        const v = stats.get(key);
-        return v != null ? Number(v) : null;
-      }
-      return stats[key] != null ? Number(stats[key]) : null;
-    };
+    const getResist = (key: string): number | null => statValue(stats, key);
 
     const resistCap = 75;
     const resistances = [
@@ -147,15 +157,13 @@ export class ValidationService {
   }
 
   private validateDefenses(
-    stats: any,
+    stats: ValidationStats,
     build: PoBBuild,
     criticalIssues: ValidationIssue[],
     warnings: ValidationIssue[]
   ): void {
     // Get defense stats (works with both Lua stats object and Map from XML)
-    const getDefense = (key: string): number => {
-      return typeof stats.get === 'function' ? (stats.get(key) || 0) : (stats[key] || 0);
-    };
+    const getDefense = (key: string): number => statValue(stats, key) ?? 0;
 
     const life = getDefense('Life');
     const es = getDefense('EnergyShield');
@@ -217,16 +225,13 @@ export class ValidationService {
   }
 
   private validateMana(
-    stats: any,
-    build: PoBBuild,
+    stats: ValidationStats,
     criticalIssues: ValidationIssue[],
     warnings: ValidationIssue[],
     recommendations: ValidationIssue[]
   ): void {
     // Get mana stats (works with both Lua stats object and Map from XML)
-    const getMana = (key: string): number => {
-      return typeof stats.get === 'function' ? (stats.get(key) || 0) : (stats[key] || 0);
-    };
+    const getMana = (key: string): number => statValue(stats, key) ?? 0;
 
     const mana = getMana('Mana');
     const manaUnreserved = getMana('ManaUnreserved');
@@ -292,15 +297,12 @@ export class ValidationService {
   }
 
   private validateAccuracy(
-    stats: any,
-    build: PoBBuild,
+    stats: ValidationStats,
     criticalIssues: ValidationIssue[],
     warnings: ValidationIssue[]
   ): void {
     // Get accuracy stats (works with both Lua stats object and Map from XML)
-    const getAccuracy = (key: string): number => {
-      return typeof stats.get === 'function' ? (stats.get(key) || 0) : (stats[key] || 0);
-    };
+    const getAccuracy = (key: string): number => statValue(stats, key) ?? 0;
 
     const hitChance = getAccuracy('HitChance');
     const accuracy = getAccuracy('Accuracy');
@@ -349,7 +351,6 @@ export class ValidationService {
 
   private validateImmunities(
     flaskAnalysis: FlaskAnalysis | null,
-    criticalIssues: ValidationIssue[],
     warnings: ValidationIssue[],
     recommendations: ValidationIssue[]
   ): void {
@@ -412,12 +413,11 @@ export class ValidationService {
    *   Recovery (regen, leech)
    */
   private validateDefensiveLayers(
-    stats: any,
+    stats: ValidationStats,
     warnings: ValidationIssue[],
     recommendations: ValidationIssue[]
   ): void {
-    const getS = (key: string): number =>
-      typeof stats.get === 'function' ? (stats.get(key) || 0) : (stats[key] || 0);
+    const getS = (key: string): number => statValue(stats, key) ?? 0;
 
     const evasion = getS('Evasion');
     const spellSuppression = getS('SpellSuppressionChance');
@@ -506,8 +506,8 @@ export class ValidationService {
       const mainSkill = skillArray[0];
       const gems = Array.isArray(mainSkill.Gem) ? mainSkill.Gem : mainSkill.Gem ? [mainSkill.Gem] : [];
       const supportNames = gems
-        .filter((g: any) => (g.nameSpec ?? g.name)?.toLowerCase().includes('support'))
-        .map((g: any) => (g.nameSpec ?? g.name ?? '').toLowerCase());
+        .filter((g) => (g.nameSpec ?? g.name)?.toLowerCase().includes('support'))
+        .map((g) => (g.nameSpec ?? g.name ?? '').toLowerCase());
 
       if (supportNames.length < 2) continue; // Not enough gems to evaluate
 
@@ -591,9 +591,7 @@ export class ValidationService {
   }
 
   private generateSummary(
-    score: number,
-    criticalIssues: ValidationIssue[],
-    warnings: ValidationIssue[]
+    score: number
   ): string {
     if (score >= 9) {
       return 'Build is in excellent shape! Only minor improvements possible.';

@@ -1,7 +1,7 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { TreeService } from '../src/services/treeService';
 import { BuildService } from '../src/services/buildService';
-import type { PassiveTreeNode, PassiveTreeData, PoBBuild } from '../src/types';
+import type { PassiveTreeNode, PassiveTreeData, PoBBuild, TreeDataCache } from '../src/types';
 
 // Mock BuildService
 jest.mock('../src/services/buildService');
@@ -9,6 +9,9 @@ jest.mock('../src/services/buildService');
 describe('TreeService', () => {
   let treeService: TreeService;
   let mockBuildService: jest.Mocked<BuildService>;
+
+  // Tests that manipulate the private version cache (refresh/staleness).
+  const cache = () => (treeService as unknown as { treeDataCache: Map<string, TreeDataCache> }).treeDataCache;
 
   beforeEach(() => {
     mockBuildService = new BuildService('/test/pob') as jest.Mocked<BuildService>;
@@ -331,24 +334,21 @@ describe('TreeService', () => {
         nodes: new Map(),
         version: '3_26',
       };
-      (treeService as any).treeDataCache.set('3_26', {
-        data: treeData,
-        timestamp: Date.now(),
-      });
+      cache().set('3_26', { data: treeData, timestamp: Date.now() });
 
       await treeService.refreshTreeData('3_26');
 
-      expect((treeService as any).treeDataCache.has('3_26')).toBe(false);
+      expect(cache().has('3_26')).toBe(false);
     });
 
     it('should clear all versions when no version specified', async () => {
       // Add multiple versions
-      (treeService as any).treeDataCache.set('3_25', { data: {}, timestamp: Date.now() });
-      (treeService as any).treeDataCache.set('3_26', { data: {}, timestamp: Date.now() });
+      cache().set('3_25', { data: {} as PassiveTreeData, timestamp: Date.now() });
+      cache().set('3_26', { data: {} as PassiveTreeData, timestamp: Date.now() });
 
       await treeService.refreshTreeData();
 
-      expect((treeService as any).treeDataCache.size).toBe(0);
+      expect(cache().size).toBe(0);
     });
   });
 
@@ -365,7 +365,7 @@ describe('TreeService', () => {
       };
 
       const allocatedNodes = new Set(['1', '2']);
-      const result = treeService.findShortestPaths(allocatedNodes, '4', treeData, 1);
+      const result = treeService.findShortestPaths(allocatedNodes, '4', treeData);
 
       expect(result).toHaveLength(1);
       expect(result[0].nodes).toEqual(['3', '4']);
@@ -384,7 +384,7 @@ describe('TreeService', () => {
       };
 
       const allocatedNodes = new Set(['1', '2']);
-      const result = treeService.findShortestPaths(allocatedNodes, '4', treeData, 1);
+      const result = treeService.findShortestPaths(allocatedNodes, '4', treeData);
 
       expect(result).toHaveLength(0);
     });
@@ -399,10 +399,125 @@ describe('TreeService', () => {
       };
 
       const allocatedNodes = new Set(['1', '2']);
-      const result = treeService.findShortestPaths(allocatedNodes, '2', treeData, 1);
+      const result = treeService.findShortestPaths(allocatedNodes, '2', treeData);
 
       // A zero-cost path makes the already-allocated state explicit to callers.
       expect(result).toEqual([{ nodes: [], cost: 0 }]);
+    });
+  });
+
+  describe('analyzePathOptimizations', () => {
+    // Private; called through a typed accessor like the version-cache one.
+    const analyze = (args: {
+      allocated: PassiveTreeNode[];
+      keystones?: PassiveTreeNode[];
+      notables?: PassiveTreeNode[];
+      jewels?: PassiveTreeNode[];
+      tree: PassiveTreeData;
+    }) =>
+      (treeService as unknown as {
+        analyzePathOptimizations(
+          allocatedNodes: PassiveTreeNode[],
+          keystones: PassiveTreeNode[],
+          notables: PassiveTreeNode[],
+          jewels: PassiveTreeNode[],
+          treeData: PassiveTreeData
+        ): { destination: string; currentLength: number; optimalLength: number; pointsSaved: number; suggestion: string }[];
+      }).analyzePathOptimizations(
+        args.allocated,
+        args.keystones ?? [],
+        args.notables ?? [],
+        args.jewels ?? [],
+        args.tree
+      );
+
+    // Allocated chain 0->1->...->8 (8 points) to a notable at 8, while the
+    // tree also offers 0->9->8 through unallocated node 9: the honest optimum
+    // is 2, and the 6-point saving is exactly what the analysis must report.
+    const chain = (ids: number[]): PassiveTreeNode[] =>
+      ids.map((id) => ({ skill: id, out: [String(id + 1)], in: id > 0 ? [String(id - 1)] : [] }));
+
+    it('reports the point saving of re-pathing through unallocated nodes', () => {
+      // Allocated route 0->...->8 costs 8; the tree offers 0->9->8 (2 steps)
+      // through unallocated node 9 — the 6-point saving is what the analysis
+      // must report. The pre-fix version pathfound only within the allocation,
+      // so it could never observe a saving at all.
+      const chainNodes: PassiveTreeNode[] = [
+        { skill: 0, out: ['1'], in: ['9'] },
+        { skill: 1, out: ['2'], in: ['0'] },
+        { skill: 2, out: ['3'], in: ['1'] },
+        { skill: 3, out: ['4'], in: ['2'] },
+        { skill: 4, out: ['5'], in: ['3'] },
+        { skill: 5, out: ['6'], in: ['4'] },
+        { skill: 6, out: ['7'], in: ['5'] },
+        { skill: 7, out: ['8'], in: ['6'] },
+      ];
+      const notable: PassiveTreeNode = { skill: 8, name: 'Remote Notable', isNotable: true, out: [], in: ['7', '9'] };
+      const tree: PassiveTreeData = {
+        version: '3_26',
+        nodes: new Map<string, PassiveTreeNode>([
+          ...chainNodes.map((n) => [String(n.skill), n] as [string, PassiveTreeNode]),
+          ['8', notable],
+          ['9', { skill: 9, out: ['0', '8'], in: [] }],
+        ]),
+      };
+
+      const result = analyze({ allocated: [...chainNodes, notable], notables: [notable], tree });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ destination: 'Remote Notable', currentLength: 8, optimalLength: 2, pointsSaved: 6 });
+      expect(result[0].suggestion).toContain('6 passive point');
+    });
+
+    it('states an optimal long path is inherent instead of urging a review', () => {
+      // Same chain, but the tree offers no shortcut: current === optimal.
+      const allocated = chain([0, 1, 2, 3, 4, 5, 6, 7]);
+      const notable: PassiveTreeNode = { skill: 8, name: 'Far Notable', isNotable: true, out: [], in: ['7'] };
+      const tree: PassiveTreeData = {
+        version: '3_26',
+        nodes: new Map<string, PassiveTreeNode>([
+          ...chain([0, 1, 2, 3, 4, 5, 6, 7, 8]).map((n) => [String(n.skill), n] as [string, PassiveTreeNode]),
+        ]),
+      };
+
+      const result = analyze({ allocated: [...allocated, notable], notables: [notable], tree });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ currentLength: 8, optimalLength: 8, pointsSaved: 0 });
+      expect(result[0].suggestion).toContain('already matches the shortest route');
+    });
+
+    it('reports each destination saving over the tree-optimal route', () => {
+      const chainNodes: PassiveTreeNode[] = [
+        { skill: 0, out: ['1'], in: ['9', '18'] },
+        { skill: 1, out: ['2'], in: ['0'] },
+        { skill: 2, out: ['3'], in: ['1'] },
+        { skill: 3, out: ['4'], in: ['2'] },
+        { skill: 4, out: ['5'], in: ['3'] },
+        { skill: 5, out: ['6'], in: ['4'] },
+        { skill: 6, out: ['7'], in: ['5'] },
+        { skill: 7, out: ['8', '20'], in: ['6'] },
+      ];
+      const far: PassiveTreeNode = { skill: 8, name: 'Far', isNotable: true, out: [], in: ['7', '9'] };
+      const reached: PassiveTreeNode = { skill: 20, name: 'Reached', isNotable: true, out: [], in: ['7', '18'] };
+      const tree: PassiveTreeData = {
+        version: '3_26',
+        nodes: new Map<string, PassiveTreeNode>([
+          ...chainNodes.map((n) => [String(n.skill), n] as [string, PassiveTreeNode]),
+          ['7', chainNodes[7]!],
+          ['8', far],
+          // 0 -> 9 -> 8 : Far is 2 steps from the start.
+          ['9', { skill: 9, out: ['0', '8'], in: [] }],
+          // 0 -> 18 -> 20 : Reached is 2 steps; chain route 0..8 steps.
+          ['18', { skill: 18, out: ['0', '20'], in: [] }],
+          ['20', reached],
+        ]),
+      };
+
+      const result = analyze({ allocated: [...chainNodes, far, reached], notables: [far, reached], tree });
+
+      expect(result.map((r) => r.destination)).toEqual(['Far', 'Reached']);
+      expect(result.map((r) => r.pointsSaved)).toEqual([6, 6]);
     });
   });
 });

@@ -1,20 +1,20 @@
-import type { PoBLuaApiClient } from '../pobLuaBridge.js';
+import type { PoBLuaApiClient, StatsExport } from '../pobLuaBridge.js';
 import type { PoeNinjaClient } from '../services/poeNinjaClient.js';
 import { fetchBaseModData } from '../services/craftingDataService.js';
-import { wrapHandler } from '../utils/errorHandling.js';
+import { wrapHandler, noteIgnoredError,} from '../utils/errorHandling.js';
 
-export interface CraftingAdvisorContext {
+interface CraftingAdvisorContext {
   getLuaClient: () => PoBLuaApiClient | null;
   ninjaClient: PoeNinjaClient;
 }
 
-export interface CraftingResponseInput {
+interface CraftingResponseInput {
   base: string;
   slot: string;
   desiredMods: string[];
   modData: string;
-  currencyRates: { chaos: number; divine: number };
-  buildContext: Record<string, any> | null;
+  currencyRates: { chaos: number; divine: number; live: boolean };
+  buildContext: StatsExport | null;
   ilvl?: number;
   budget?: 'low' | 'medium' | 'high';
 }
@@ -65,7 +65,7 @@ export function buildCraftingResponse(input: CraftingResponseInput): string {
   }
 
   text += `## Currency Rates\n`;
-  text += `- 1 Divine Orb = ${currencyRates.divine} Chaos Orb\n\n`;
+  text += `- 1 Divine Orb = ${currencyRates.divine} Chaos Orb${currencyRates.live ? '' : '  ⚠ fallback rate — poe.ninja was unavailable; verify before costing the craft'}\n\n`;
 
   text += CRAFTING_METHODS + '\n';
 
@@ -99,7 +99,7 @@ export async function handleSuggestCrafting(
     const { slot, desired_mods = [], league = 'Standard' } = args;
 
     let base = args.base;
-    let buildContext: Record<string, any> | null = null;
+    let buildContext: StatsExport | null = null;
 
     const luaClient = context.getLuaClient();
     if (luaClient) {
@@ -119,15 +119,11 @@ export async function handleSuggestCrafting(
               ring: 'Ring 1', amulet: 'Amulet', belt: 'Belt',
             };
             const slotName = slotMap[slot.toLowerCase()];
-            const item = items.find((i: any) => i.slot === slotName);
-            if (item?.baseName || item?.base) base = item.baseName ?? item.base;
-          } catch {
-            // No item in slot — fine, continue without auto-detected base
-          }
+            const item = items.find((i) => i.slot === slotName);
+            if (item?.baseName) base = item.baseName;
+          } catch (e) { noteIgnoredError("No item in slot — fine, continue without auto-detected base", e); }
         }
-      } catch {
-        // PoB not loaded — fine, continue without build context
-      }
+      } catch (e) { noteIgnoredError("PoB not loaded — fine, continue without build context", e); }
     }
 
     if (!base) {
@@ -139,21 +135,19 @@ export async function handleSuggestCrafting(
       };
     }
 
-    let currencyRates = { chaos: 1, divine: 200 };
+    let currencyRates = { chaos: 1, divine: 200, live: false };
     try {
       const rateMap = await context.ninjaClient.getCurrencyExchangeMap(league);
       const divineRate = rateMap.get('Divine Orb');
-      if (divineRate) currencyRates = { chaos: 1, divine: Math.round(divineRate) };
-    } catch {
-      // poe.ninja unavailable — use fallback rates
-    }
+      if (divineRate) currencyRates = { chaos: 1, divine: Math.round(divineRate), live: true };
+    } catch (e) { noteIgnoredError("poe.ninja unavailable — use fallback rates (labelled as such in the response)", e); }
 
     let modData = '';
     try {
       const data = await fetchBaseModData(base);
       modData = data.modText;
-    } catch (err: any) {
-      modData = `(Could not fetch poedb data for "${base}": ${err.message})`;
+    } catch (err) {
+      modData = `(Could not fetch poedb data for "${base}": ${err instanceof Error ? err.message : String(err)})`;
     }
 
     const responseText = buildCraftingResponse({

@@ -6,3 +6,5 @@ build/
 settings.local.json
 jest-output.json
 coverage/
+
+coverage/

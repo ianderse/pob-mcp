@@ -29,10 +29,10 @@ describe('parsePoedbText', () => {
 });
 
 describe('fetchBaseModData', () => {
-  let fetchSpy: any;
+  let fetchSpy: jest.SpiedFunction<typeof fetch>;
 
   beforeEach(() => {
-    fetchSpy = jest.spyOn(global, 'fetch' as any);
+    fetchSpy = jest.spyOn(globalThis, 'fetch');
   });
 
   afterEach(() => {
@@ -40,10 +40,7 @@ describe('fetchBaseModData', () => {
   });
 
   it('returns CraftingBaseData on success', async () => {
-    fetchSpy.mockResolvedValue({
-      ok: true,
-      text: async () => '<html><body>some mod data</body></html>',
-    } as any);
+    fetchSpy.mockResolvedValue(new Response('<html><body>some mod data</body></html>', { status: 200 }));
 
     const result = await fetchBaseModData('Hubris Circlet');
     expect(result.base).toBe('Hubris Circlet');
@@ -52,10 +49,7 @@ describe('fetchBaseModData', () => {
   });
 
   it('throws on non-OK response', async () => {
-    fetchSpy.mockResolvedValue({
-      ok: false,
-      status: 404,
-    } as any);
+    fetchSpy.mockResolvedValue(new Response('not found', { status: 404 }));
 
     await expect(fetchBaseModData('Fake Base')).rejects.toThrow('404');
   });

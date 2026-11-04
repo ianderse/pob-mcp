@@ -7,6 +7,7 @@
  */
 
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { PoBBuild, PoBGem, PoBSkill } from "../types.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { activeSkillSet, asArray } from "../utils/xmlCollections.js";
@@ -109,7 +110,7 @@ export async function handlePlanLeveling(
         const skills = await luaClient.getSkills();
         if (skills?.groups?.length > 0) {
           const mainGroup =
-            skills.groups.find((g: any) => g.index === skills.mainSocketGroup) ||
+            skills.groups.find((g) => g.index === skills.mainSocketGroup) ||
             skills.groups[0];
           mainSkill =
             mainGroup?.gems?.[0]?.name ||
@@ -117,9 +118,7 @@ export async function handlePlanLeveling(
             'your main skill';
         }
       }
-    } catch {
-      // Fall through and use whatever was provided in args
-    }
+    } catch (e) { noteIgnoredError("Fall through and use whatever was provided in args", e); }
   }
 
   // Defaults when neither Lua nor args provide a value

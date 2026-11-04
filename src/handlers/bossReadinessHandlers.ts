@@ -1,7 +1,7 @@
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
-export interface BossReadinessContext {
+interface BossReadinessContext {
   getLuaClient: () => PoBLuaApiClient | null;
   ensureLuaClient: () => Promise<void>;
 }

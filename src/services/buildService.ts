@@ -1,7 +1,8 @@
 import { XMLParser } from "fast-xml-parser";
 import fs from "fs/promises";
 import path from "path";
-import type { PoBBuild, CachedBuild, ParsedConfiguration, ConfigInput, ConfigSet, Flask, FlaskAnalysis, Jewel, JewelAnalysis } from "../types.js";
+import type { PoBBuild, CachedBuild, ParsedConfiguration, ConfigInput, ConfigSet, Flask, FlaskAnalysis, Jewel, JewelAnalysis, TreeSpec } from "../types.js";
+import { asArray, activeItemSetOf, itemSetsOf, itemTextMapOf } from "../utils/pobXml.js";
 import { resolveBuildFile } from "../utils/pathSanitizer.js";
 import { parseItem, itemLabel } from "./itemParser.js";
 import { TIMELESS_SEED_PHRASES } from "../data/itemFormat.generated.js";
@@ -113,20 +114,17 @@ export class BuildService {
 
     // Skills — handle single SkillSet or array of SkillSets
     {
-      const skillSetRaw = build.Skills?.SkillSet;
-      const skillSets: any[] = skillSetRaw
-        ? (Array.isArray(skillSetRaw) ? skillSetRaw : [skillSetRaw])
-        : [];
-      const activeSkillSetId = String((build.Skills as any)?.activeSkillSet ?? '1');
-      const activeSkillSet = skillSets.find((ss: any) => String(ss.id) === activeSkillSetId) ?? skillSets[0];
+      const skillSets = asArray(build.Skills?.SkillSet);
+      const activeSkillSetId = String(build.Skills?.activeSkillSet ?? '1');
+      const activeSkillSet = skillSets.find((ss) => String(ss.id) === activeSkillSetId) ?? skillSets[0];
       if (activeSkillSet?.Skill) {
         const setLabel = skillSets.length > 1 ? ` (Set ${activeSkillSetId} of ${skillSets.length})` : '';
         summary += `=== Skills${setLabel} ===\n`;
-        const skills = Array.isArray(activeSkillSet.Skill) ? activeSkillSet.Skill : [activeSkillSet.Skill];
+        const skills = asArray(activeSkillSet.Skill);
         for (const skill of skills) {
           if (skill.Gem) {
-            const gems = Array.isArray(skill.Gem) ? skill.Gem : [skill.Gem];
-            summary += gems.map((g: any) => `${g.nameSpec || g.name || 'Unknown'} (${g.level}/${g.quality})`).join(" - ");
+            const gems = asArray(skill.Gem);
+            summary += gems.map((g) => `${g.nameSpec || g.name || 'Unknown'} (${g.level}/${g.quality})`).join(" - ");
             summary += "\n";
           }
         }
@@ -136,35 +134,23 @@ export class BuildService {
 
     // Items — build an id→text map from the Item array, then render by slot
     if (build.Items) {
-      const rawItems = build.Items.Item
-        ? (Array.isArray(build.Items.Item) ? build.Items.Item : [build.Items.Item])
-        : [];
-      const itemMap = new Map<string, string>();
-      for (const item of rawItems) {
-        if (item.id && item['#text']) {
-          itemMap.set(item.id, item['#text']);
-        }
-      }
+      const itemMap = itemTextMapOf(build);
 
-      // Handle single ItemSet or array of ItemSets
-      const itemSetRaw = build.Items.ItemSet;
-      const itemSets: any[] = itemSetRaw
-        ? (Array.isArray(itemSetRaw) ? itemSetRaw : [itemSetRaw])
-        : [];
-      const activeItemSetId = String((build.Items as any)?.activeItemSet ?? '1');
-      const activeItemSet = itemSets.find((is: any) => String(is.id) === activeItemSetId) ?? itemSets[0];
+      const itemSets = itemSetsOf(build);
+      const activeItemSet = activeItemSetOf(build);
+      const activeItemSetId = String(build.Items.activeItemSet ?? activeItemSet?.id ?? '1');
 
-      const slots: any[] = activeItemSet?.Slot
-        ? (Array.isArray(activeItemSet.Slot) ? activeItemSet.Slot : [activeItemSet.Slot])
-        : [];
+      const slots = asArray(activeItemSet?.Slot);
 
-      const equippedSlots = slots.filter((s: any) => s.itemId && itemMap.has(s.itemId));
+      const equippedSlots = slots.filter((s) => s.itemId && itemMap.has(s.itemId));
       const unrecognised: string[] = [];
       if (equippedSlots.length > 0) {
         const setLabel = itemSets.length > 1 ? ` (Set ${activeItemSetId} of ${itemSets.length})` : '';
         summary += `=== Items${setLabel} ===\n`;
         for (const slot of equippedSlots) {
-          const parsed = parseItem(itemMap.get(slot.itemId!)!);
+          // equippedSlots is filtered to `s.itemId && itemMap.has(s.itemId)`,
+          // so the get() below always hits; `?? ''` only satisfies the checker.
+          const parsed = parseItem(itemMap.get(slot.itemId as string) ?? '');
           summary += `${slot.name}: ${itemLabel(parsed)}\n`;
           for (const mod of parsed.mods) {
             summary += `    ${mod.text}\n`;
@@ -203,7 +189,8 @@ export class BuildService {
     return summary;
   }
 
-  getActiveSpec(build: PoBBuild): any {
+  /** The active tree <Spec>; the Sockets variant where both share the element type. */
+  getActiveSpec(build: PoBBuild): TreeSpec | null {
     if (!build.Tree) {
       return null;
     }
@@ -381,7 +368,7 @@ export class BuildService {
     return isNaN(num) ? undefined : num;
   }
 
-  private getInputValue(input: ConfigInput): any {
+  private getInputValue(input: ConfigInput): boolean | number | string | undefined {
     return input.boolean !== undefined ? this.parseBoolean(input.boolean) :
            input.number !== undefined ? this.parseNumber(input.number) :
            input.string;
@@ -470,38 +457,19 @@ export class BuildService {
    * Extracts all equipped flasks with their mods and identifies immunities
    */
   parseFlasks(build: PoBBuild): FlaskAnalysis | null {
-    // Handle single ItemSet or array of ItemSets (pick the active set, else the first)
-    const itemSetRaw = build.Items?.ItemSet;
-    const itemSets: any[] = itemSetRaw
-      ? (Array.isArray(itemSetRaw) ? itemSetRaw : [itemSetRaw])
-      : [];
-    const activeItemSetId = String((build.Items as any)?.activeItemSet ?? '1');
-    const activeItemSet = itemSets.find((is: any) => String(is.id) === activeItemSetId) ?? itemSets[0];
+    const activeItemSet = activeItemSetOf(build);
 
     if (!activeItemSet?.Slot) {
       return null;
     }
 
     // Build a map of items by ID
-    const itemMap = new Map<string, string>();
-    if (build.Items!.Item) {
-      const items = Array.isArray(build.Items!.Item)
-        ? build.Items!.Item
-        : [build.Items!.Item];
+    const itemMap = itemTextMapOf(build);
 
-      for (const item of items) {
-        if (item.id && item['#text']) {
-          itemMap.set(item.id, item['#text']);
-        }
-      }
-    }
-
-    const slots: any[] = Array.isArray(activeItemSet.Slot)
-      ? activeItemSet.Slot
-      : [activeItemSet.Slot];
+    const slots = asArray(activeItemSet.Slot);
 
     // Find flask slots (Flask 1-5)
-    const flaskSlots = slots.filter((slot: any) =>
+    const flaskSlots = slots.filter((slot) =>
       slot.name && slot.name.startsWith('Flask ')
     );
 
@@ -630,15 +598,7 @@ export class BuildService {
     const baseType = parsed.base || this.extractFlaskBase(parsed.name);
 
     // Prefix/suffix hold PoB's internal mod ids, not display text.
-    let prefix: string | undefined;
-    let suffix: string | undefined;
-    for (const line of lines) {
-      if (line.startsWith('Prefix:') && !line.includes('None')) {
-        prefix = line.replace(/Prefix:\s*{[^}]*}/, '').trim();
-      } else if (line.startsWith('Suffix:') && !line.includes('None')) {
-        suffix = line.replace(/Suffix:\s*{[^}]*}/, '').trim();
-      }
-    }
+    const { prefix, suffix } = this.affixIds(lines);
 
     return {
       id: `flask_${slotNumber}`,
@@ -657,6 +617,24 @@ export class BuildService {
         ? String(parsed.selectedVariants[parsed.selectedVariants.length - 1])
         : undefined,
     };
+  }
+
+  /**
+   * PoB writes its internal mod ids on `Prefix:`/`Suffix:` lines, sometimes
+   * prefixed by a `{tag}` group marker; "None" means the slot is empty. Shared
+   * by the flask and jewel parsers, which used to carry this block verbatim.
+   */
+  private affixIds(lines: string[]): { prefix?: string; suffix?: string } {
+    let prefix: string | undefined;
+    let suffix: string | undefined;
+    for (const line of lines) {
+      if (line.startsWith('Prefix:') && !line.includes('None')) {
+        prefix = line.replace(/Prefix:\s*{[^}]*}/, '').trim();
+      } else if (line.startsWith('Suffix:') && !line.includes('None')) {
+        suffix = line.replace(/Suffix:\s*{[^}]*}/, '').trim();
+      }
+    }
+    return { prefix, suffix };
   }
 
   private extractFlaskBase(name: string): string {
@@ -772,27 +750,14 @@ export class BuildService {
 
     // Items.ItemSet is an array whenever a build has more than one gear set,
     // which is almost always. Reading it as a single object found no slots at
-    // all, so every such build reported zero jewels.
-    const itemSetRaw = build.Items.ItemSet;
-    const itemSets: any[] = Array.isArray(itemSetRaw) ? itemSetRaw : [itemSetRaw];
-    const activeItemSetId = String((build.Items as any)?.activeItemSet ?? '1');
-    const itemSet = itemSets.find((is: any) => String(is?.id) === activeItemSetId) ?? itemSets[0];
+    // all, so every such build reported zero jewels. (Shared util handles both
+    // shapes.)
+    const itemSet = activeItemSetOf(build);
     if (!itemSet) return null;
-    const slots = itemSet.Slot ? (Array.isArray(itemSet.Slot) ? itemSet.Slot : [itemSet.Slot]) : [];
+    const slots = asArray(itemSet.Slot);
 
     // Build a map of items by ID so slots referencing an itemId can be resolved
-    const jewelItemMap = new Map<string, string>();
-    if (build.Items.Item) {
-      const items = Array.isArray(build.Items.Item)
-        ? build.Items.Item
-        : [build.Items.Item];
-
-      for (const item of items) {
-        if (item.id && item['#text']) {
-          jewelItemMap.set(item.id, item['#text']);
-        }
-      }
-    }
+    const jewelItemMap = itemTextMapOf(build);
     // Jewels socketed into the passive tree live in the *tree spec*, as
     // `<Sockets><Socket nodeId itemId/></Sockets>` on the active <Spec> — not in
     // the item set. The item set's <SocketIdURL> lists node ids with no itemId,
@@ -924,16 +889,7 @@ export class BuildService {
     const levelRequirement = Number(parsed.meta.get('LevelReq') ?? 0) || 0;
 
     // Parse prefix and suffix
-    let prefix: string | undefined;
-    let suffix: string | undefined;
-
-    for (const line of lines) {
-      if (line.startsWith('Prefix:') && !line.includes('None')) {
-        prefix = line.replace(/Prefix:\s*{[^}]*}/, '').trim();
-      } else if (line.startsWith('Suffix:') && !line.includes('None')) {
-        suffix = line.replace(/Suffix:\s*{[^}]*}/, '').trim();
-      }
-    }
+    const { prefix, suffix } = this.affixIds(lines);
 
     // Parse cluster jewel specifics
     let clusterJewelSkill: string | undefined;

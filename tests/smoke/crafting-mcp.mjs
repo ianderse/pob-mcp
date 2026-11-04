@@ -1,31 +1,12 @@
 // Opt-in live MCP smoke test for crafting advice data sources.
 // Usage: npm run build && npm run test:smoke:crafting
-import { spawn } from 'node:child_process';
-import { resolve } from 'node:path';
+import { startMcpServer } from './mcpClient.mjs';
 
-const child = spawn('node', [resolve('build/index.js')], {
-  env: { ...process.env, POB_LUA_ENABLED: 'true' },
-  stdio: ['pipe', 'pipe', 'pipe'],
-});
-let buffer = ''; let nextId = 1; const pending = new Map();
-child.stdout.setEncoding('utf8');
-child.stdout.on('data', (chunk) => {
-  buffer += chunk;
-  for (;;) {
-    const newline = buffer.indexOf('\n'); if (newline < 0) return;
-    const message = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1);
-    pending.get(message.id)?.(message); pending.delete(message.id);
-  }
-});
-const request = (method, params) => new Promise((resolveRequest, reject) => {
-  const id = nextId++; pending.set(id, resolveRequest);
-  child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
-  setTimeout(() => { if (pending.delete(id)) reject(new Error(`timed out: ${method}`)); }, 60_000);
-});
+const { child, request, notify } = startMcpServer();
 
 try {
   await request('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'crafting-smoke', version: '1.0' } });
-  child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }) + '\n');
+  notify('notifications/initialized', {});
   const listed = await request('tools/list', {});
   if (!listed.result.tools.some((tool) => tool.name === 'suggest_crafting')) throw new Error('suggest_crafting was not advertised with the Lua integration enabled');
   const response = await request('tools/call', { name: 'suggest_crafting', arguments: {

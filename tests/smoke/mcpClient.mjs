@@ -35,7 +35,12 @@ export function startMcpServer(env = {}) {
     const id = nextId++;
     pending.set(id, resolveRequest);
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
-    setTimeout(() => { if (pending.delete(id)) reject(new Error(`timed out: ${method}`)); }, 60_000);
+    // Keep the timer handle so a resolved request does not pin the event loop
+    // for a full minute after the smoke test already passed.
+    const timer = setTimeout(() => {
+      if (pending.delete(id)) reject(new Error(`timed out: ${method}`));
+    }, 60_000);
+    timer.unref?.();
   });
 
   const notify = (method, params) =>

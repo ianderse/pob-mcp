@@ -1,10 +1,11 @@
 import type { BuildService } from "../services/buildService.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { BuildExportService } from "../services/buildExportService.js";
-import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import type { BuildInfo, PoBLuaApiClient, SkillsOutput, StatsExport, TreeState } from "../pobLuaBridge.js";
 import type { ExportContext } from "../utils/contextBuilder.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
-export interface ExportHandlerContext {
+interface ExportHandlerContext {
   buildService: BuildService;
   exportService: BuildExportService;
   luaClient?: PoBLuaApiClient;
@@ -66,7 +67,7 @@ export async function handleSaveTree(
   return wrapHandler('save tree', async () => {
   const { exportService, buildService } = context;
 
-  const result = await exportService.saveTree(buildService, {
+  const result = await exportService.saveTree({
     buildName: args.build_name,
     nodes: args.nodes,
     masteryEffects: args.mastery_effects,
@@ -101,9 +102,9 @@ export async function handleSnapshotBuild(
   }
 ) {
   return wrapHandler('snapshot build', async () => {
-  const { exportService, buildService } = context;
+  const { exportService } = context;
 
-  const result = await exportService.snapshotBuild(buildService, {
+  const result = await exportService.snapshotBuild({
     buildName: args.build_name,
     description: args.description,
     tag: args.tag,
@@ -214,12 +215,12 @@ export async function handleExportBuildSummary(context: ExportContext) {
   if (!luaClient) throw new Error('Lua bridge not active. Use lua_load_build first.');
 
   // Lua bridge only supports one request at a time — must be sequential
-  let info: any = null;
-  let stats: Record<string, any> = {};
-  let skills: any = null;
-  let tree: any = null;
+  let info: BuildInfo | null = null;
+  let stats: StatsExport = {};
+  let skills: SkillsOutput | null = null;
+  let tree: TreeState | null = null;
 
-  try { info = await luaClient.getBuildInfo(); } catch { /* best effort */ }
+  try { info = await luaClient.getBuildInfo(); } catch (e) { noteIgnoredError("build info for export template (fields fall back to Unknown)", e); }
   try {
     stats = await luaClient.getStats([
       'Life', 'EnergyShield', 'Mana', 'ManaUnreserved',
@@ -228,9 +229,9 @@ export async function handleExportBuildSummary(context: ExportContext) {
       'Armour', 'Evasion', 'PhysicalDamageReduction', 'TotalEHP',
       'LifeRegen', 'SpellSuppressionChance', 'BlockChance',
     ]) ?? {};
-  } catch { /* best effort */ }
-  try { skills = await luaClient.getSkills(); } catch { /* best effort */ }
-  try { tree = await luaClient.getTree(); } catch { /* best effort */ }
+  } catch (e) { noteIgnoredError("defensive stats for export template (rows omitted)", e); }
+  try { skills = await luaClient.getSkills(); } catch (e) { noteIgnoredError("skill groups for export template (section omitted)", e); }
+  try { tree = await luaClient.getTree(); } catch (e) { noteIgnoredError("tree summary for export template (class falls back to build info)", e); }
 
   const classNames = ['Scion', 'Marauder', 'Ranger', 'Witch', 'Duelist', 'Templar', 'Shadow'];
   const className = (tree?.classId != null ? classNames[tree.classId] : null) || info?.className || 'Unknown';
@@ -262,17 +263,32 @@ export async function handleExportBuildSummary(context: ExportContext) {
   output += '\n';
 
   // Main skill setup
-  const mainGroup = skills?.groups?.find((g: any) => g.index === skills.mainSocketGroup) || skills?.groups?.[0];
+  const mainGroup = skills?.groups?.find(g => g.index === skills.mainSocketGroup) || skills?.groups?.[0];
   if (mainGroup) {
-    const gemNames = (mainGroup.gems || []).map((g: any) => g.name || g).filter(Boolean);
+    const gemNames = (mainGroup.gems || []).map(g => g.name || g).filter(Boolean);
     output += `## Main Skill\n\n`;
     output += `**${mainGroup.label || 'Main'}:** ${gemNames.join(' + ')}\n\n`;
   }
 
-  // Keystone passives
-  if (Array.isArray(tree?.keystones) && tree.keystones.length > 0) {
-    output += `## Keystones\n\n`;
-    output += tree.keystones.map((k: string) => `- ${k}`).join('\n') + '\n\n';
+  // Keystones: get_tree reports node IDs only, so names are derived from the
+  // same passive-tree data the tree tools use. Fetch/parse failures degrade
+  // like every other optional section here (omitted, logged) rather than
+  // failing the export.
+  try {
+    if (tree) {
+      // get_tree failing entirely means UNKNOWN, not 'no keystones' - only
+      // render when the tree state was actually retrieved.
+      const nodeIds = (tree.nodes ?? []).map((id) => String(id));
+      let keystoneNames: string[] = [];
+      if (nodeIds.length > 0) {
+        const treeData = await context.treeService.getTreeData(tree.treeVersion);
+        const { nodes } = await context.treeService.mapNodesToDetails(nodeIds, treeData);
+        keystoneNames = nodes.filter((n) => n.isKeystone).map((n) => n.name || `Node ${n.skill}`);
+      }
+      output += `## Keystones\n\n${keystoneNames.length > 0 ? keystoneNames.map((k) => `- ${k}`).join('\n') : '_None allocated_'}\n\n`;
+    }
+  } catch (e) {
+    noteIgnoredError("keystone derivation for export summary (section omitted)", e);
   }
 
   output += `---\n_Generated with pob-mcp-server_\n`;

@@ -89,14 +89,44 @@ if (branch && commit) oracle.pobRevision = `${branch} @ ${commit}`;
 const normalised = JSON.stringify(oracle, null, 2) + "\n";
 
 if (checkOnly) {
+  // Provenance stamps (release number, git revision) move with every checkout
+  // bump while parsing behaviour can be identical; comparing them made --check
+  // fail on any machine at a different commit with a message blaming PoB's
+  // parsing. The samples are what the parser tests actually consume, so those
+  // decide pass/fail here — a stamp mismatch is reported, not fatal.
+  const { pobRevision: _rev, pobVersion: _ver, samples } = oracle;
+  const withoutStamps = JSON.stringify({ samples }, null, 2) + "\n";
+  const stripStamps = (text) => {
+    try {
+      const { pobRevision: _r, pobVersion: _v, samples: s } = JSON.parse(text);
+      return JSON.stringify({ samples: s }, null, 2) + "\n";
+    } catch {
+      return text;
+    }
+  };
   const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, "utf-8") : "";
-  if (current !== normalised) {
+  if (stripStamps(current) !== withoutStamps) {
     fail(
       "tests/fixtures/item-oracle.json is out of date.\n" +
         "PoB now parses these items differently. Run: node scripts/generate-item-oracle.mjs"
     );
   }
-  console.log("generate-item-oracle: up to date.");
+  let recordedStamp = null;
+  try {
+    const recorded = JSON.parse(current);
+    recordedStamp = recorded.pobRevision ?? recorded.pobVersion ?? null;
+  } catch {
+    /* fall through to the mismatch note below */
+  }
+  const stamp = oracle.pobRevision ?? oracle.pobVersion ?? null;
+  if (recordedStamp !== stamp) {
+    console.log(
+      `generate-item-oracle: samples match; provenance differs (fixture: ${recordedStamp ?? 'unstamped'}, this run: ${stamp ?? 'unstamped'}). ` +
+        `PoB parses identically here, so this passes; run the generator to refresh the stamp.`
+    );
+  } else {
+    console.log("generate-item-oracle: up to date.");
+  }
 } else {
   fs.writeFileSync(OUT, normalised);
   const { pobVersion, samples } = JSON.parse(normalised);

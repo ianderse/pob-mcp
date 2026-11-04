@@ -34,7 +34,7 @@ describe('build persistence', () => {
 
   it('edits only the active spec, keeps XML semantics, and retries without drift', async () => {
     const options = { buildName: 'fixture', nodes: ['6338', '456'], masteryEffects: { 6338: 31556 } };
-    const first = await exports.saveTree(builds, options);
+    const first = await exports.saveTree(options);
     const saved = await fs.readFile(path.join(directory, 'fixture.xml'), 'utf8');
     const before = parse(original), after = parse(saved);
     for (const name of ['Build', 'Notes', 'Items', 'Skills', 'Config']) expect(after[name]).toEqual(before[name]);
@@ -45,11 +45,11 @@ describe('build persistence', () => {
     expect(after.Tree.Spec[1]['@_masteryEffects']).toBe('{6338,31556}');
     expect(after.Tree.Spec[1].MasteryEffect).toBeUndefined();
     expect(await fs.readFile(first.backupPath!, 'utf8')).toBe(original);
-    const second = await exports.saveTree(builds, options);
+    const second = await exports.saveTree(options);
     expect(second.backupPath).not.toBe(first.backupPath);
     expect(await fs.readFile(path.join(directory, 'fixture.xml'), 'utf8')).toBe(saved);
     expect((await new BuildService(directory).readBuild('fixture')).Notes).toBe('Original & <notes>');
-    await exports.saveTree(builds, { ...options, masteryEffects: {} });
+    await exports.saveTree({ ...options, masteryEffects: {} });
     expect(parse(await builds.readBuildXml('fixture')).Tree.Spec[1]['@_masteryEffects']).toBe('');
   });
 
@@ -62,6 +62,19 @@ describe('build persistence', () => {
     expect(parse(saved).Tree).toEqual(parse(original).Tree);
     expect(build.Notes).toBe('Original & <notes>');
     expect(await builds.readBuildXml('fixture')).toBe(original);
+  });
+
+  it('confines exports with an output_directory to the PoB directory', async () => {
+    const build = await builds.readBuild('fixture');
+    await expect(
+      exports.exportBuild(build, { outputName: 'evil', outputDirectory: os.tmpdir() }, original)
+    ).rejects.toThrow('Build name must be relative');
+    await expect(
+      exports.exportBuild(build, { outputName: 'evil', outputDirectory: '../escape' }, original)
+    ).rejects.toThrow('path traversal');
+    const nested = await exports.exportBuild(build, { outputName: 'copy', outputDirectory: 'sub/deep' }, original);
+    expect(nested.filePath.startsWith(path.resolve(directory) + path.sep)).toBe(true);
+    expect(nested.filePath).toBe(path.join(path.resolve(directory), 'sub', 'deep', 'copy.xml'));
   });
 
   it('canonicalizes cache aliases and invalidates both spellings', async () => {
@@ -86,7 +99,7 @@ describe('build persistence', () => {
     await fs.mkdir(legacy, { recursive: true });
     await fs.writeFile(path.join(legacy, 'old_legacy.xml'), original);
     await fs.writeFile(path.join(legacy, 'old_metadata.json'), JSON.stringify({ tag: 'legacy', timestamp: '2020-01-01' }));
-    const current = await exports.snapshotBuild(builds, { buildName: 'fixture.xml', tag: 'current' });
+    const current = await exports.snapshotBuild({ buildName: 'fixture.xml', tag: 'current' });
     expect((await exports.listSnapshots('fixture')).total).toBe(2);
     expect((await exports.listSnapshots('fixture.xml')).total).toBe(2);
     await exports.restoreSnapshot({ buildName: 'fixture.xml', snapshotId: 'old' });
@@ -94,9 +107,49 @@ describe('build persistence', () => {
     expect(current.snapshotPath).toContain('fixture.xml');
   });
 
+  it.each([
+    { label: 'one cached stat', xml: '<PlayerStat stat="Life" value="4000"/>', stats: { life: 4000, allocatedNodes: 2 } },
+    { label: 'multiple cached stats', xml: '<PlayerStat stat="Life" value="4000"/><PlayerStat stat="TotalDPS" value="123456"/>', stats: { life: 4000, dps: 123456, allocatedNodes: 2 } },
+    { label: 'zero DPS', xml: '<PlayerStat stat="Life" value="4000"/><PlayerStat stat="TotalDPS" value="0"/>', stats: { life: 4000, dps: 0, allocatedNodes: 2 } },
+    { label: 'no cached stats', xml: '', stats: { allocatedNodes: 2 } },
+  ])('persists snapshot metadata from $label through a fresh service', async ({ xml, stats }) => {
+    const source = original.replace('<PlayerStat stat="Life" value="4000"/>', xml);
+    await fs.writeFile(path.join(directory, 'fixture.xml'), source);
+    const created = await exports.snapshotBuild({ buildName: 'fixture' });
+
+    const restarted = new BuildExportService(directory);
+    const listed = await restarted.listSnapshots('fixture');
+    expect(listed.total).toBe(1);
+    expect(listed.snapshots[0]?.id).toBe(created.snapshotId);
+    expect(listed.snapshots[0]?.metadata.statsSnapshot).toEqual(stats);
+    expect(await fs.readFile(created.snapshotPath, 'utf8')).toBe(source);
+    expect(restarted.formatSnapshotList(listed)).toContain(
+      `Life: ${stats.life?.toLocaleString() ?? 'N/A'} | DPS: ${stats.dps?.toLocaleString() ?? 'N/A'} | Nodes: 2`
+    );
+  });
+
+  it('lists healthy snapshots when one metadata file is corrupt', async () => {
+    const dir = path.join(directory, '.pob-mcp', 'snapshots', 'fixture.xml');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'good_metadata.json'), JSON.stringify({ tag: 'good', timestamp: '2021-01-01' }));
+    await fs.writeFile(path.join(dir, 'good_good.xml'), original);
+    await exports.snapshotBuild({ buildName: 'fixture.xml', tag: 'other' }); // a real second snapshot
+    // A torn write mid-metadata — exactly what atomic writes prevent for NEW
+    // files, but hand-edits or pre-atomic leftovers can still hit the list.
+    await fs.writeFile(path.join(dir, 'torn_metadata.json'), '{"tag":"torn","timest');
+
+    const listed = await exports.listSnapshots('fixture.xml');
+    const ids = listed.snapshots.map((sn) => sn.id);
+    expect(ids).toContain('good');
+    expect(ids).not.toContain('torn');
+    expect(ids.length).toBeGreaterThanOrEqual(2); // the snapshotBuild one survived too
+  });
+
   it('forgets the old source when a native import fails', async () => {
     const client = new PoBLuaApiClient();
-    const send = jest.spyOn(client as any, 'send').mockResolvedValue({ ok: true });
+    const send = jest.spyOn(client as unknown as {
+      send(req: unknown): Promise<{ ok: boolean; error?: string; [k: string]: unknown }>;
+    }, 'send').mockResolvedValue({ ok: true });
     await client.loadBuildXml(original, 'fixture', path.join(directory, 'fixture.xml'));
     expect(client.getLoadedFilePath()).toBeDefined();
     send.mockResolvedValueOnce({ ok: false, error: 'PoB did not initialize the build' });
@@ -105,34 +158,34 @@ describe('build persistence', () => {
   });
 
   it.each([false, true])('reports the live reload outcome after restore (fails=%s)', async (fail) => {
-    const snapshot = await exports.snapshotBuild(builds, { buildName: 'fixture' });
+    const snapshot = await exports.snapshotBuild({ buildName: 'fixture' });
     await fs.writeFile(path.join(directory, 'fixture.xml'), original.replace('4000', '2000'));
     const loadBuildXml = jest.fn(async () => { if (fail) throw new Error('bridge unavailable'); });
     const context = { buildService: builds, exportService: exports, luaClient: {
       getLoadedFilePath: () => path.join(directory, 'fixture.xml'), loadBuildXml,
     } };
-    const result = await handleRestoreSnapshot(context as any, { build_name: 'fixture', snapshot_id: snapshot.snapshotId });
+    const result = await handleRestoreSnapshot(context as unknown as Parameters<typeof handleRestoreSnapshot>[0], { build_name: 'fixture', snapshot_id: snapshot.snapshotId });
     expect(result.isError).toBe(fail);
     expect(loadBuildXml).toHaveBeenCalledWith(original, 'fixture', path.join(directory, 'fixture.xml'));
     expect(await builds.readBuildXml('fixture')).toBe(original);
-    if (fail) expect(result.content[0].text).toContain('file was restored, but the live reload FAILED');
+    if (fail) expect(result.content[0]?.text).toContain('file was restored, but the live reload FAILED');
   });
 
   it('does not replace another in-memory build while restoring a file', async () => {
-    const snapshot = await exports.snapshotBuild(builds, { buildName: 'fixture' });
+    const snapshot = await exports.snapshotBuild({ buildName: 'fixture' });
     const loadBuildXml = jest.fn();
     const result = await handleRestoreSnapshot({ buildService: builds, exportService: exports, luaClient: {
       getLoadedFilePath: () => path.join(directory, 'other.xml'), loadBuildXml,
-    } } as any, { build_name: 'fixture', snapshot_id: snapshot.snapshotId });
+    } } as unknown as Parameters<typeof handleRestoreSnapshot>[0], { build_name: 'fixture', snapshot_id: snapshot.snapshotId });
     expect(loadBuildXml).not.toHaveBeenCalled();
-    expect(result.content[0].text).toContain('left unchanged');
+    expect(result.content[0]?.text).toContain('left unchanged');
   });
 
   it('protects unrelated save targets, permits explicit replacement, and tracks source identity', async () => {
     const client = new PoBLuaApiClient();
-    (client as any).send = jest.fn(async (request: any) => {
+    (client as unknown as { send: (request: { action: string; params?: { path?: string } }) => Promise<unknown> }).send = jest.fn(async (request: { action: string; params?: { path?: string } }) => {
       if (request.action === 'save_build') {
-        await fs.writeFile(request.params.path, original.replace('4000', '6000'));
+        await fs.writeFile(request.params!.path!, original.replace('4000', '6000'));
         return { ok: true, result: { size: 123 } };
       }
       return { ok: true };

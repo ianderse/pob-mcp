@@ -17,14 +17,14 @@ const matchesText = (entry: ModEntry, needle: string): boolean => {
   );
 };
 
-export interface CraftableQuery {
+interface CraftableQuery {
   itemClass: string;
   itemLevel: number;
   affixType?: AffixSlot;
   search?: string;
 }
 
-export interface CraftableResult {
+interface CraftableResult {
   /** Bench crafts the base can take at this item level. */
   mods: ModEntry[];
   /** Crafts for this class that the item level locks out, so the caller can say why. */
@@ -56,7 +56,7 @@ export function findCraftableMods(query: CraftableQuery): CraftableResult {
 const byGroupThenLevel = (a: ModEntry, b: ModEntry): number =>
   a.group.localeCompare(b.group) || a.level - b.level;
 
-export interface TierQuery {
+interface TierQuery {
   search: string;
   affixType?: AffixSlot;
   /** Base tags from `weightKey`, e.g. "ring" or "int_armour". Matches any of them. */
@@ -66,7 +66,7 @@ export interface TierQuery {
   limit: number;
 }
 
-export interface TierResult {
+interface TierResult {
   /** Matching tiers grouped by affix group, highest tier last. */
   groups: Array<{ group: string; type: AffixSlot; tiers: ModEntry[] }>;
   totalGroups: number;

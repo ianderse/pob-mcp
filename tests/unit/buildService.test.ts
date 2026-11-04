@@ -263,7 +263,7 @@ describe('BuildService', () => {
 
       const spec = buildService.getActiveSpec(build);
       expect(spec).toBeDefined();
-      expect(spec.nodes).toBe('1,2,3');
+      expect(spec?.nodes).toBe('1,2,3');
     });
 
     it('should return active spec from array', () => {
@@ -278,7 +278,7 @@ describe('BuildService', () => {
       };
 
       const spec = buildService.getActiveSpec(build);
-      expect(spec.nodes).toBe('1,2,3');
+      expect(spec?.nodes).toBe('1,2,3');
     });
 
     it('should return first spec if activeSpec not specified', () => {
@@ -293,7 +293,7 @@ describe('BuildService', () => {
 
       const spec = buildService.getActiveSpec(build);
       // When activeSpec is not specified, it defaults to "0" which means first spec
-      expect(spec.nodes).toBe('1,2,3');
+      expect(spec?.nodes).toBe('1,2,3');
     });
   });
 

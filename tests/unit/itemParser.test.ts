@@ -551,3 +551,64 @@ describe("stripColourCodes", () => {
     expect(stripColourCodes("^xE05030WARNING^7 text")).toBe("WARNING text");
   });
 });
+
+describe("itemParser — corruption multiplier ({corruptedRange})", () => {
+  // {corruptedRange} is NOT a position in the roll — it is the corruption
+  // multiplier from PoB's corrupt dialog (slider 0.78..1.22, ItemsTab.lua) and
+  // applies between roll resolution and the catalyst, rounded at the line's
+  // precision (applyValueScalar), before the catalyst floor. Before this was
+  // wired up, the tag parsed and fell on the floor: values silently ignored it.
+
+  const ring = (...modLines: string[]) =>
+    item(`
+      Rarity: RARE
+      Attribute Ring
+      Ruby Ring
+      ${modLines.join("\n      ")}
+    `);
+
+  it("scales the resolved roll by the multiplier", () => {
+    // range:1 resolves (20-30) to 30; x1.22 = 36.6 -> rounded to 37.
+    const parsed = parseItem(ring(
+      "Implicits: 0",
+      "{corruptedRange:1.22}{range:1}+(20-30)% to Fire Resistance"
+    ));
+    expect(parsed.mods[0].corruptedRange).toBe(1.22);
+    expect(parsed.mods[0].text).toBe("+37% to Fire Resistance");
+  });
+
+  it("applies over a fixed (unrolled) value too", () => {
+    // No (min-max) on the line: PoB still scales it — applyValueScalar runs
+    // whenever the multiplier is present, rounded at each number's own
+    // precision (whole numbers stay whole).
+    const parsed = parseItem(ring(
+      "Implicits: 0",
+      "{corruptedRange:1.2}+20 to maximum Life"
+    ));
+    // 24.0 written unrounded as "24.0" matches upstream tostring(24.0 * 1.2).
+    expect(parsed.mods[0].text).toBe("+24 to maximum Life");
+  });
+
+  it("applies before the catalyst: round(corrupt), then floor(catalyst)", () => {
+    const parsed = parseItem(item(`
+      Rarity: RARE
+      Attribute Ring
+      Ruby Ring
+      Catalyst: Intrinsic
+      CatalystQuality: 20
+      Implicits: 0
+      {corruptedRange:1.22}{tags:attribute}{range:1}+(10-13) to all Attributes
+    `));
+    // 13 -> x1.22 = 15.86 -> round 16 -> x1.2 = 19.2 -> floor 19.
+    expect(parsed.mods[0].catalystScalar).toBeCloseTo(1.2);
+    expect(parsed.mods[0].text).toBe("+19 to all Attributes");
+  });
+
+  it("leaves lines alone when the multiplier is 1 (PoB drops the tag there)", () => {
+    const parsed = parseItem(ring(
+      "Implicits: 0",
+      "{corruptedRange:1}{range:0.5}+(20-30)% to Fire Resistance"
+    ));
+    expect(parsed.mods[0].text).toBe("+25% to Fire Resistance");
+  });
+});

@@ -2,7 +2,7 @@ import { describe, it, expect } from '@jest/globals';
 import { handlePlanLeveling, type LevelingContext } from '../../src/handlers/levelingHandlers.js';
 import type { PoBBuild } from '../../src/types.js';
 
-const textOf = (result: any) => result.content[0].text as string;
+import { textOf } from '../helpers/response.js';
 
 const gem = (nameSpec: string, support = false) => ({
   nameSpec,
@@ -45,7 +45,8 @@ describe('handlePlanLeveling', () => {
 
   it('honours mainActiveSkill when a group holds several actives', async () => {
     const second = JSON.parse(JSON.stringify(build)) as PoBBuild;
-    (second.Skills!.SkillSet as any).Skill[1].mainActiveSkill = '2';
+    const skillSet = second.Skills!.SkillSet as NonNullable<NonNullable<PoBBuild['Skills']>['SkillSet']> & { Skill: Array<{ mainActiveSkill?: string }> };
+    skillSet.Skill[1]!.mainActiveSkill = '2';
 
     const result = await handlePlanLeveling(contextFor(second), { build_name: 'zappicus.xml' });
 

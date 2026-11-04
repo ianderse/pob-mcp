@@ -1,11 +1,12 @@
 import type { BuildService } from "../services/buildService.js";
+import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { ValidationService } from "../services/validationService.js";
-import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import type { PoBLuaApiClient, StatsExport } from "../pobLuaBridge.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { resolveBuildFile } from "../utils/pathSanitizer.js";
 import { readNamedBuild } from "../utils/namedBuild.js";
 
-export interface ValidationHandlerContext {
+interface ValidationHandlerContext {
   buildService: BuildService;
   validationService: ValidationService;
   pobDirectory?: string;
@@ -21,7 +22,7 @@ export async function handleValidateBuild(
   args?: { build_name?: string }
 ) {
   return wrapHandler('validate build', async () => {
-  const { buildService, validationService, getLuaClient, ensureLuaClient } = context;
+  const { buildService, validationService, getLuaClient } = context;
 
   let buildData;
   let luaStats;
@@ -46,10 +47,10 @@ export async function handleValidateBuild(
             const requested = buildName.replace(/\.xml$/i, '');
             const loaded    = loadedName.replace(/\.xml$/i, '');
             otherBuildInMemory = Boolean(loaded) && loaded !== requested;
-          } catch { /* no build loaded — safe to load */ }
+          } catch (e) { noteIgnoredError("no build loaded — safe to load", e); }
 
           if (!otherBuildInMemory) {
-            await luaClient.loadBuildXml(namedBuildXml, buildName, resolveBuildFile(buildName, context.pobDirectory!));
+            await luaClient.loadBuildXml(namedBuildXml, buildName, context.pobDirectory ? resolveBuildFile(buildName, context.pobDirectory) : undefined);
           }
         }
         // A different in-memory build is never replaced, to protect unsaved work,
@@ -60,12 +61,12 @@ export async function handleValidateBuild(
 
           // Get flask immunities from the same build as the live stats.
           try {
-            const items = await (luaClient as any).getItems();
+            const items = await luaClient.getItems();
             if (Array.isArray(items)) {
-              const flaskItems = items.filter((it: any) =>
+              const flaskItems = items.filter((it) =>
                 it.slot && it.slot.startsWith('Flask') && it.raw
               );
-              const allFlaskText = flaskItems.map((it: any) => (it.raw || '').toLowerCase()).join(' ');
+              const allFlaskText = flaskItems.map((it) => (it.raw || '').toLowerCase()).join(' ');
               luaFlaskImmunities = {
                 bleed: allFlaskText.includes('bleed') || allFlaskText.includes('corrupted blood'),
                 freeze: allFlaskText.includes('freeze') || allFlaskText.includes('chill'),
@@ -73,13 +74,9 @@ export async function handleValidateBuild(
                 curse: allFlaskText.includes('curse'),
               };
             }
-          } catch {
-            // Flask immunity check via Lua unavailable — fall back to XML parsing
-          }
+          } catch (e) { noteIgnoredError("Flask immunity check via Lua unavailable — fall back to XML parsing", e); }
         }
-      } catch {
-        // Lua stats unavailable
-      }
+      } catch (e) { noteIgnoredError("Lua stats unavailable", e); }
     }
   }
 
@@ -87,9 +84,7 @@ export async function handleValidateBuild(
   if (buildName) {
     try {
       buildData = await buildService.readBuild(buildName);
-    } catch {
-      // File not found — fall back to Lua-only validation below
-    }
+    } catch (e) { noteIgnoredError("File not found — fall back to Lua-only validation below", e); }
   }
 
   // If no build data and no lua stats, we can't do anything useful
@@ -135,7 +130,7 @@ export async function handleValidateBuild(
     formattedOutput = validationService.formatValidation(validation);
   } else {
     // Lua-stats-only validation (in-memory build, no file)
-    formattedOutput = formatLuaOnlyValidation(luaStats!);
+    formattedOutput = formatLuaOnlyValidation(luaStats ?? {});
   }
 
   return {
@@ -152,7 +147,7 @@ export async function handleValidateBuild(
 /**
  * Lightweight validation using only Lua bridge stats (no build XML available).
  */
-function formatLuaOnlyValidation(stats: Record<string, any>): string {
+function formatLuaOnlyValidation(stats: StatsExport): string {
   const lines: string[] = ['=== Build Validation (Lua Bridge Stats) ===\n'];
   const issues: string[] = [];
   const warnings: string[] = [];

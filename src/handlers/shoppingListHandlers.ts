@@ -6,7 +6,7 @@
 
 import { wrapHandler } from '../utils/errorHandling.js';
 import { BuildService } from '../services/buildService.js';
-import { ShoppingListService, BudgetTier } from '../services/shoppingListService.js';
+import { ShoppingListService, type BudgetTier, type ShoppingList, type ShoppingListItem } from '../services/shoppingListService.js';
 import { TradeApiClient } from '../services/tradeClient.js';
 import { StatMapper } from '../services/statMapper.js';
 import { PoeNinjaClient } from '../services/poeNinjaClient.js';
@@ -41,14 +41,10 @@ export async function handleGenerateShoppingList(
     const build = await context.buildService.readBuild(build_name);
 
     // Create shopping list service
-    const shoppingService = new ShoppingListService(
-      context.tradeClient,
-      context.statMapper,
-      context.ninjaClient
-    );
+    const shoppingService = new ShoppingListService();
 
     // Generate the list
-    const shoppingList = await shoppingService.generateShoppingList(build, build_name, league, budget);
+    const shoppingList = await shoppingService.generateShoppingList(build, build_name, league);
 
     // Format output
     const output = formatShoppingList(shoppingList, budget);
@@ -67,7 +63,7 @@ export async function handleGenerateShoppingList(
 /**
  * Format shopping list for output
  */
-function formatShoppingList(list: any, selectedBudget: BudgetTier): string {
+function formatShoppingList(list: ShoppingList, selectedBudget: BudgetTier): string {
   let output = `=== Shopping List: ${list.buildName} ===\n`;
   output += `League: ${list.league}\n`;
   output += `Budget: ${selectedBudget}\n\n`;
@@ -81,7 +77,7 @@ function formatShoppingList(list: any, selectedBudget: BudgetTier): string {
   output += `Endgame Cost: ~${list.summary.totalEndgameCost} chaos\n\n`;
 
   // Build Needs
-  if (list.buildNeeds.lifeNeeded > 0 || Object.values(list.buildNeeds.resistanceGaps).some((v: any) => v > 0)) {
+  if (list.buildNeeds.lifeNeeded > 0 || Object.values(list.buildNeeds.resistanceGaps).some((v) => v > 0)) {
     output += `⚠️  BUILD NEEDS\n`;
     if (list.buildNeeds.lifeNeeded > 0) {
       output += `Life: Need +${list.buildNeeds.lifeNeeded} more (target 4500+)\n`;
@@ -104,7 +100,7 @@ function formatShoppingList(list: any, selectedBudget: BudgetTier): string {
   if (list.priorities.immediate.length > 0) {
     output += `🔴 IMMEDIATE (Critical)\n`;
     for (const slot of list.priorities.immediate) {
-      const item = list.items.find((i: any) => i.slot === slot);
+      const item = list.items.find((i) => i.slot === slot);
       if (item) {
         output += formatShoppingItem(item, selectedBudget, true);
       }
@@ -115,7 +111,7 @@ function formatShoppingList(list: any, selectedBudget: BudgetTier): string {
   if (list.priorities.shortTerm.length > 0) {
     output += `🟡 SHORT TERM (High Priority)\n`;
     for (const slot of list.priorities.shortTerm) {
-      const item = list.items.find((i: any) => i.slot === slot);
+      const item = list.items.find((i) => i.slot === slot);
       if (item) {
         output += formatShoppingItem(item, selectedBudget, true);
       }
@@ -126,7 +122,7 @@ function formatShoppingList(list: any, selectedBudget: BudgetTier): string {
   if (list.priorities.longTerm.length > 0) {
     output += `🟢 LONG TERM (Medium/Low Priority)\n`;
     for (const slot of list.priorities.longTerm) {
-      const item = list.items.find((i: any) => i.slot === slot);
+      const item = list.items.find((i) => i.slot === slot);
       if (item) {
         output += formatShoppingItem(item, selectedBudget, false);
       }
@@ -141,7 +137,7 @@ function formatShoppingList(list: any, selectedBudget: BudgetTier): string {
 /**
  * Format individual shopping item
  */
-function formatShoppingItem(item: any, budget: BudgetTier, detailed: boolean): string {
+function formatShoppingItem(item: ShoppingListItem, budget: BudgetTier, detailed: boolean): string {
   let output = `\n${item.slot}`;
 
   if (item.currentItem) {

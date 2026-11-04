@@ -303,9 +303,18 @@ function M.get_tree()
     nodes = {},
     masteryEffects = {},
   }
+  local ascendancyPointsUsed = 0
   for id, _ in pairs(spec.allocNodes or {}) do
     table.insert(out.nodes, id)
+    -- Ascendancy points spent = allocated ascendancy nodes, minus the free
+    -- ascendancy-start node every chosen ascendancy grants. TS-side guards
+    -- (max-8 cap, unspent-point estimates) treat it exactly this way.
+    local node = spec.nodes and spec.nodes[id]
+    if node and node.ascendancyName and node.isAscendancyStart ~= true then
+      ascendancyPointsUsed = ascendancyPointsUsed + 1
+    end
   end
+  out.ascendancyPointsUsed = ascendancyPointsUsed
   for mastery, effect in pairs(spec.masterySelections or {}) do
     out.masteryEffects[mastery] = effect
   end
@@ -472,7 +481,7 @@ end
 -- params: { addNodes?: number[], removeNodes?: number[], masteryEffects?: {[nodeId]: effectId}, useFullDPS?: boolean }
 function M.calc_with(params)
   if not build or not build.calcsTab then return nil, 'build not initialized' end
-  local calcFunc, baseOut = build.calcsTab:GetMiscCalculator()
+  local calcFunc = build.calcsTab:GetMiscCalculator()
   local override = {}
   if params and type(params.addNodes) == 'table' then
     override.addNodes = {}
@@ -503,12 +512,34 @@ function M.calc_with(params)
       build.spec.masterySelections[tonumber(nodeId)] = effectId
     end
   end
-  local out = calcFunc(override, params and params.useFullDPS)
-  -- Restore original mastery selections
+  -- pcall returns (ok, result...): the first value is the success flag, not
+  -- the stats table. Reading it as the result made every simulation silently
+  -- return the caller's CURRENT stats regardless of the override.
+  local calcOk, out = pcall(calcFunc, override, params and params.useFullDPS)
+  -- Restore original mastery selections on EVERY path: if calcFunc raised and
+  -- we skipped the restore, the next get_tree/save_build would report and
+  -- persist masteries the caller never committed.
   if origMastery then
     build.spec.masterySelections = origMastery
   end
-  return M.sanitize_for_json(out), M.sanitize_for_json(baseOut)
+  if not calcOk then
+    return nil, 'calc_with failed: ' .. tostring(out)
+  end
+  -- The MiscCalculator returns a metatable-backed live object: `pairs()` on it
+  -- yields only hand-set keys (nothing), so a direct sanitize would return an
+  -- empty object. A table copy strips the metatable so pairs() exposes every
+  -- computed stat.
+  local function shallowcopy(t)
+    local copy = {}
+    for k, v in pairs(t) do copy[k] = v end
+    return copy
+  end
+  -- No fallback to baseline stats here: a simulation that produced no stats
+  -- table must fail loudly, not pose as the unmodified build.
+  if type(out) ~= 'table' then
+    return nil, 'calc_with produced no stats table'
+  end
+  return M.sanitize_for_json(shallowcopy(out))
 end
 
 
@@ -557,7 +588,22 @@ function M.set_config(params)
 
   local applied, rejected = {}, {}
   local changed = false
+  -- PoB's saved-XML import (ConfigTab) maps legacy boss names onto the
+  -- current enemyIsBoss list ('Uber Atziri'->'Boss', 'Shaper'/'Sirus' ->
+  -- 'Pinnacle'). Doing the same here keeps the tool contract stable for
+  -- callers who still speak the old names, instead of failing with
+  -- 'not a valid option for this list' while the UI accepts the build file.
+  local LEGACY_BOSS_ALIASES = {
+    ['shaper'] = 'Pinnacle',
+    ['sirus'] = 'Pinnacle',
+    ['uber atziri'] = 'Boss',
+    ['atziri'] = 'Boss',
+  }
   for key, value in pairs(params) do
+    if key == 'enemyIsBoss' and type(value) == 'string' then
+      local alias = LEGACY_BOSS_ALIASES[value:lower()]
+      if alias then value = alias end
+    end
     -- enemyLevel lives on the tab itself, not in the input table.
     if key == 'enemyLevel' then
       local n = tonumber(value)
@@ -672,10 +718,15 @@ function M.add_item_text(params)
   build.itemsTab:AddItem(item, params.noAutoEquip == true)
   if params.slotName then
     local slot = tostring(params.slotName)
-    if build.itemsTab.slots[slot] then
-      build.itemsTab.slots[slot]:SetSelItemId(item.id)
-      build.itemsTab:PopulateSlots()
+    if not build.itemsTab.slots[slot] then
+      -- Never claim a slot we did not equip into: an unknown name used to
+      -- fall through silently while the response echoed the requested slot.
+      -- The item IS already in the build (above), so say so - a plain error
+      -- would invite a retry that duplicates the item.
+      return nil, string.format('unknown slot "%s" (item was added to the build as id %d but NOT equipped) - use the exact slot names reported by get_equipped_items (they vary with the PoB version)', slot, item.id)
     end
+    build.itemsTab.slots[slot]:SetSelItemId(item.id)
+    build.itemsTab:PopulateSlots()
   end
   build.itemsTab:AddUndoState()
   build.buildFlag = true
@@ -722,6 +773,30 @@ function M.get_items()
     if not slotCtrl then return end
     local selId = slotCtrl.selItemId or 0
     local entry = { slot = slotName, id = selId }
+    -- PoB's own slot visibility gate (Control:IsShown evaluates .shown, a
+    -- boolean or function): ItemsTab hides Ring 3 (AdditionalRingSlot flag),
+    -- Graft 1/2 (pre-3_27 trees) and the inactive weapon-set variants.
+    -- Consumers need shown=false to tell "empty" from "does not apply to
+    -- this build". A gate that errors stays shown: analysis must not
+    -- silently lose data.
+    local gate = slotCtrl.shown
+    local vis = true
+    if type(gate) == 'function' then
+      local okGate, v = pcall(gate)
+      if okGate then
+        vis = v ~= false and v ~= nil
+      else
+        -- A failing gate stays shown so analysis never loses data silently,
+        -- EXCEPT the version-flagged slots: their gates dereference calcs
+        -- state (Ring 3 reads mainEnv.modDB) that may not exist yet, and a
+        -- wrongly-shown Ring 3 is the exact false 'slot is empty' this
+        -- gate exists to prevent. For those three, unknown means hidden.
+        vis = not (slotName == 'Ring 3' or slotName == 'Graft 1' or slotName == 'Graft 2')
+      end
+    elseif gate ~= nil then
+      vis = gate ~= false
+    end
+    entry.shown = vis
     if selId > 0 then
       local it = itemsTab.items[selId]
       if it then
@@ -1006,8 +1081,9 @@ function M.save_build(params)
   if not xml then return nil, 'failed to compose xml' end
   local f, ferr = io.open(params.path, 'w')
   if not f then return nil, 'failed to open file: ' .. tostring(ferr) end
-  f:write(xml)
+  local ok, werr = f:write(xml)
   f:close()
+  if not ok then return nil, 'failed to write file: ' .. tostring(werr) end
   return { path = params.path, size = #xml }
 end
 

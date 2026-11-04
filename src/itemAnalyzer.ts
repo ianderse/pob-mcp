@@ -5,7 +5,7 @@
  * Works with both XML builds and Lua bridge for more accurate analysis.
  */
 
-export interface ItemSlotAnalysis {
+interface ItemSlotAnalysis {
   slot: string;
   currentItem: {
     name: string;
@@ -18,7 +18,7 @@ export interface ItemSlotAnalysis {
   priority: 'high' | 'medium' | 'low';
 }
 
-export interface ItemUpgradeRecommendation {
+interface ItemUpgradeRecommendation {
   summary: string;
   buildType: string;
   totalIssues: number;
@@ -37,6 +37,58 @@ export interface BuildStats {
   lightningRes?: number;
   chaosRes?: number;
   [key: string]: number | undefined;
+}
+
+/**
+ * Is this PoB slot a real equippable gear slot (vs. UI sub-slots)?
+ *
+ * PoB's slot table mixes base slots with synthetic controls ("Weapon 1 Swap",
+ * "Weapon 1Swap Abyssal Socket 5", jewel sockets reached via items). Hard-
+ * coding a slot list drifted out of date the moment PoB added Ring 3/Grafts,
+ * so consumers filter this predicate over the engine's OWN slot output
+ * instead.
+ */
+export function isEquippableGearSlot(slot: string): boolean {
+  return !/swap|abyssal|jewel|cluster/i.test(slot);
+}
+
+/**
+ * Is this gear slot one the build can actually use?
+ *
+ * isEquippableGearSlot only drops synthetic sub-slots; PoB's ItemsTab
+ * additionally HIDES real slots a build cannot use: Ring 3 (gated on the
+ * AdditionalRingSlot mod flag), Graft 1/2 (only on the 3_27 tree) and the
+ * inactive weapon-set variants. get_items carries that gate as `shown`
+ * (Control:IsShown parity) — pass it via `shown` when available, and pass
+ * `filled` when the slot currently holds an item.
+ *
+ * Rules, in order:
+ * - Filled slots are always relevant: an item that exists is data, whatever
+ *   the UI gate says (hiding it would silently drop equipped gear).
+ * - Engine truth (shown) decides empties. Exception: base weapon slots with
+ *   shown=false only mean the active item set uses the swap set
+ *   (ItemsTab.lua L129-131); keeping them visible preserves the pre-existing
+ *   analysis behavior instead of introducing new silent gaps.
+ * - XML-only callers (raw build file, no engine; shown unknown) gate what is
+ *   derivable from the file: Grafts require a 3_27 tree — mirroring
+ *   ItemsTab.lua L148-150's treeVersion:find("3_27"); update alongside it if
+ *   upstream bumps the gate. Ring 3's gate is a runtime mod flag invisible in
+ *   raw XML, so an unknown empty Ring 3 stays hidden: a shopping list must
+ *   never demand a "critical" purchase for a slot that is mostly not there.
+ * Unrecognised names default to visible, so future PoB slots degrade to the
+ * old behaviour rather than silently vanishing.
+ */
+export function isGearSlotVisible(
+  slotName: string,
+  opts: { shown?: boolean; treeVersion?: string; filled?: boolean } = {},
+): boolean {
+  if (opts.filled) return true;
+  if (opts.shown !== undefined) {
+    return opts.shown || /^weapon \d+$/i.test(slotName);
+  }
+  if (/graft/i.test(slotName)) return (opts.treeVersion ?? '').includes('3_27');
+  if (/^ring 3$/i.test(slotName)) return false;
+  return true;
 }
 
 /**
@@ -98,7 +150,7 @@ function analyzeItemSlot(
     priority: 'low',
   };
 
-  if (!item || !item.name || item.name === '(empty)') {
+  if (!item || !item.name) {
     analysis.issues.push('Slot is empty');
     analysis.priority = 'high';
     analysis.suggestions.push(`Equip a ${slot.toLowerCase()} to gain defensive stats and offensive bonuses`);
@@ -145,7 +197,6 @@ function analyzeItemSlot(
 
   // Boots
   if (slot === 'Boots') {
-    const lowMovementSpeed = true; // We can't detect this from current data easily
     analysis.suggestions.push('Ensure boots have 25-30% movement speed for mapping comfort');
 
     if (buildArchetype.includes('es') && (stats.energyShield || 0) < 1500) {
@@ -256,7 +307,7 @@ function checkResistances(stats: BuildStats): {
  * Analyze all equipped items and provide recommendations
  */
 export function analyzeEquippedItems(
-  items: Array<{ slot: string; name?: string; baseName?: string; rarity?: string }>,
+  items: Array<{ slot: string; name?: string; baseName?: string; rarity?: string; shown?: boolean }>,
   className?: string,
   ascendClassName?: string,
   stats?: BuildStats
@@ -266,27 +317,22 @@ export function analyzeEquippedItems(
 
   const slotAnalysis: ItemSlotAnalysis[] = [];
 
-  // Standard gear slots to check
-  const expectedSlots = [
-    'Weapon 1',
-    'Weapon 2',
-    'Helmet',
-    'Body Armour',
-    'Gloves',
-    'Boots',
-    'Amulet',
-    'Ring 1',
-    'Ring 2',
-    'Belt',
-    'Flask 1',
-    'Flask 2',
-    'Flask 3',
-    'Flask 4',
-    'Flask 5',
-  ];
+  // Analyze the slots the engine actually reports (filtered to real gear
+  // slots), NOT a hard-coded list: the old 15-name table missed Ring 3 and
+  // Grafts on current PoB and produced phantom 'Slot is empty' spam for
+  // builds whose slot layout differs from 3.27-era. Slots PoB itself hides
+  // for this build (shown=false) are not applicable, not empty.
+  const seenSlots = new Set<string>();
+  for (const item of items) {
+    if (!item.slot || !isEquippableGearSlot(item.slot) || seenSlots.has(item.slot)) continue;
+    const name = item.name?.trim();
+    const filled = Boolean(name || item.baseName?.trim());
+    if (!isGearSlotVisible(item.slot, { shown: item.shown, filled })) continue;
+    seenSlots.add(item.slot);
+  }
 
   // Analyze each slot
-  for (const expectedSlot of expectedSlots) {
+  for (const expectedSlot of seenSlots) {
     const item = items.find((i) => i.slot === expectedSlot);
     const itemData = item
       ? { name: item.name || '', baseName: item.baseName, rarity: item.rarity }

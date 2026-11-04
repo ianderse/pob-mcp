@@ -1,7 +1,6 @@
 import {
   TradeQuery,
   StatFilterGroup,
-  ItemRequirements,
   ResistanceRequirements,
   SearchOptions,
 } from '../types/tradeTypes.js';
@@ -168,9 +167,7 @@ export class TradeQueryBuilder {
     return this;
   }
 
-  /**
-   * Set item rarity filter
-   */
+  /** Set the requested rarity without broadening it to all non-unique items. */
   withRarity(rarity: 'normal' | 'magic' | 'rare' | 'unique' | 'any'): this {
     if (!this.query.query.filters) {
       this.query.query.filters = {};
@@ -419,102 +416,6 @@ export class TradeQueryBuilder {
   }
 
   /**
-   * Build query from ItemRequirements
-   */
-  static fromItemRequirements(requirements: ItemRequirements): TradeQueryBuilder {
-    const builder = new TradeQueryBuilder();
-
-    // Set type/base filter if specified
-    if (requirements.slot) {
-      // Map slot names to item categories
-      const slotToType: Record<string, string> = {
-        'Weapon 1': 'weapon',
-        'Weapon 2': 'weapon',
-        'Body Armour': 'armour.chest',
-        'Helmet': 'armour.helmet',
-        'Gloves': 'armour.gloves',
-        'Boots': 'armour.boots',
-        'Amulet': 'accessory.amulet',
-        'Ring 1': 'accessory.ring',
-        'Ring 2': 'accessory.ring',
-        'Belt': 'accessory.belt',
-      };
-      // Note: Type filtering needs category option in type_filters
-      // This is simplified - actual implementation would need category support
-    }
-
-    // Links
-    if (requirements.links) {
-      builder.withLinks(requirements.links);
-    }
-
-    // Sockets
-    if (requirements.sockets) {
-      builder.withSockets(
-        requirements.sockets.r,
-        requirements.sockets.g,
-        requirements.sockets.b,
-        requirements.sockets.w
-      );
-    }
-
-    // Weapon DPS
-    if (requirements.minDPS) {
-      builder.withDPS(requirements.minDPS);
-    }
-    if (requirements.minPDPS) {
-      builder.withPDPS(requirements.minPDPS);
-    }
-    if (requirements.minEDPS) {
-      builder.withEDPS(requirements.minEDPS);
-    }
-
-    // Defenses
-    if (requirements.minArmour || requirements.minEvasion || requirements.minES) {
-      builder.withDefenses(
-        requirements.minArmour ? { min: requirements.minArmour } : undefined,
-        requirements.minEvasion ? { min: requirements.minEvasion } : undefined,
-        requirements.minES ? { min: requirements.minES } : undefined
-      );
-    }
-
-    // Resistances
-    if (requirements.fireResist || requirements.coldResist || requirements.lightningResist) {
-      builder.withResistances({
-        fire: requirements.fireResist || 0,
-        cold: requirements.coldResist || 0,
-        lightning: requirements.lightningResist || 0,
-        chaos: requirements.chaosResist || 0,
-      });
-    }
-
-    // Life/ES (using pseudo stats)
-    const lifeESStats: Array<{ id: string; min?: number }> = [];
-    if (requirements.minLife) {
-      lifeESStats.push({
-        id: 'pseudo.pseudo_total_life',
-        min: requirements.minLife,
-      });
-    }
-    if (requirements.minES) {
-      lifeESStats.push({
-        id: 'pseudo.pseudo_total_energy_shield',
-        min: requirements.minES,
-      });
-    }
-    if (lifeESStats.length > 0) {
-      builder.withStats(lifeESStats);
-    }
-
-    // Custom stats
-    if (requirements.stats && requirements.stats.length > 0) {
-      builder.withStats(requirements.stats);
-    }
-
-    return builder;
-  }
-
-  /**
    * Apply common search options
    */
   applyOptions(options: SearchOptions): this {
@@ -546,18 +447,5 @@ export class TradeQueryBuilder {
    */
   build(): TradeQuery {
     return JSON.parse(JSON.stringify(this.query)); // Deep clone
-  }
-
-  /**
-   * Reset the builder to start fresh
-   */
-  reset(): this {
-    this.query = {
-      query: {
-        status: { option: 'online' },
-        filters: {},
-      },
-    };
-    return this;
   }
 }

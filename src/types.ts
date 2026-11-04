@@ -22,8 +22,6 @@ export interface PassiveTreeNode {
 export interface PassiveTreeData {
   nodes: Map<string, PassiveTreeNode>;
   version: string;
-  classes?: any[];
-  groups?: any[];
 }
 
 export interface TreeDataCache {
@@ -39,6 +37,8 @@ export interface PoBGem {
   skillId?: string;
   // "Metadata/Items/Gems/SupportGem..." for supports, "...SkillGem..." for actives
   gemId?: string;
+  /** 'false' on disabled gems ("true" on explicitly enabled ones); absent = enabled. */
+  enabled?: string;
 }
 
 export interface PoBSkillSet {
@@ -46,9 +46,59 @@ export interface PoBSkillSet {
   Skill?: PoBSkill | PoBSkill[];
 }
 
+/** One gear-set `<ItemSet>` element (both the single and array variants). */
+export interface PoBItemSet {
+  id?: string;
+  Slot?: PoBItemSetSlot | PoBItemSetSlot[];
+  SocketIdURL?: Array<{
+    nodeId?: string;
+    name?: string;
+    itemId?: string;
+    itemPbURL?: string;
+  }> | {
+    nodeId?: string;
+    name?: string;
+    itemId?: string;
+    itemPbURL?: string;
+  };
+}
+
+/** One `<Slot>` inside a gear set. */
+export interface PoBItemSetSlot {
+  name?: string;
+  Item?: string;
+  active?: string | boolean;
+  itemId?: string;
+}
+
+/** One top-level `<Item>` element: id attribute + raw PoB text body. */
+export interface PoBItemEntry {
+  id?: string;
+  '#text'?: string;
+}
+
+/** One tree <Spec> element (both the single and array variants share it). */
+export interface TreeSpec {
+  title?: string;
+  URL?: string;
+  nodes?: string;
+  treeVersion?: string;
+  Sockets?: {
+    Socket?: Array<{
+      nodeId?: string;
+      itemId?: string;
+    }> | {
+      nodeId?: string;
+      itemId?: string;
+    };
+  };
+}
+
 export interface PoBSkill {
   enabled?: string;
   slot?: string;
+  /** PoB's group label ("Tincture", "SRS", …); only present in newer saves. */
+  label?: string;
   // 1-based index of the active skill used for DPS within this socket group
   mainActiveSkill?: string;
   Gem?: PoBGem | PoBGem[];
@@ -66,49 +116,16 @@ export interface PoBBuild {
   };
   Tree?: {
     activeSpec?: string;
-    Spec?: {
-      title?: string;
-      URL?: string;
-      nodes?: string;
-      treeVersion?: string;
-    } | Array<{
-      title?: string;
-      URL?: string;
-      nodes?: string;
-      treeVersion?: string;
-    }>;
+    Spec?: TreeSpec | TreeSpec[];
   };
   Skills?: {
     activeSkillSet?: string;
     SkillSet?: PoBSkillSet | PoBSkillSet[];
   };
   Items?: {
-    Item?: Array<{
-      id?: string;
-      '#text'?: string; // The actual item text content
-    }> | {
-      id?: string;
-      '#text'?: string;
-    };
-    ItemSet?: {
-      Slot?: Array<{
-        name?: string;
-        Item?: string;
-        active?: string | boolean;
-        itemId?: string;
-      }>;
-      SocketIdURL?: Array<{
-        nodeId?: string;
-        name?: string;
-        itemId?: string;
-        itemPbURL?: string;
-      }> | {
-        nodeId?: string;
-        name?: string;
-        itemId?: string;
-        itemPbURL?: string;
-      };
-    };
+    activeItemSet?: string;
+    Item?: PoBItemEntry | PoBItemEntry[];
+    ItemSet?: PoBItemSet | PoBItemSet[];
   };
   Notes?: string;
   Config?: {
@@ -153,7 +170,8 @@ export interface ParsedConfiguration {
     chaosResist?: number;
     armour?: number;
     evasion?: number;
-    [key: string]: any;
+    /** Remaining `enemy*` config inputs (boolean/number/string per XML). */
+    [key: string]: boolean | number | string | undefined;
   };
   multipliers: {
     [key: string]: number;
@@ -231,13 +249,6 @@ export interface TreeComparison {
   };
 }
 
-// Phase 3: Allocation Change Interface
-export interface AllocationChange {
-  type: 'allocate' | 'remove';
-  nodeIdentifier: string;
-  node?: PassiveTreeNode;
-}
-
 // Jewel System Interfaces
 export interface Jewel {
   id: string;
@@ -292,7 +303,7 @@ export interface JewelAnalysis {
 }
 
 // Build Validation Interfaces
-export type ValidationSeverity = 'critical' | 'warning' | 'info';
+type ValidationSeverity = 'critical' | 'warning' | 'info';
 
 export interface ValidationIssue {
   severity: ValidationSeverity;
@@ -351,8 +362,8 @@ export interface FlaskAnalysis {
 }
 
 // Build Goals / Issues
-export type BuildIssueSeverity = 'error' | 'warning' | 'info';
-export type BuildIssueCategory = 'resistance' | 'survivability' | 'reservation' | 'defence' | 'items' | 'gems';
+type BuildIssueSeverity = 'error' | 'warning' | 'info';
+type BuildIssueCategory = 'resistance' | 'survivability' | 'reservation' | 'defence' | 'items' | 'gems';
 
 export interface BuildIssue {
   severity: BuildIssueSeverity;

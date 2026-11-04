@@ -5,7 +5,6 @@
  */
 
 import type { OptimizationConstraints } from "../types/optimization.js";
-import type { ToolGate } from "./toolGate.js";
 import type { ContextBuilder } from "../utils/contextBuilder.js";
 import type { TradeApiClient } from "../services/tradeClient.js";
 import type { StatMapper } from "../services/statMapper.js";
@@ -39,7 +38,6 @@ import { handleFindItemUpgrades as handleFindItemUpgradesNew } from "../handlers
 import { handleClassifyItemAffixes, handleListCraftableMods, handleFindAffixTiers } from "../handlers/affixHandlers.js";
 
 export interface ToolRouterDependencies {
-  toolGate: ToolGate;
   contextBuilder: ContextBuilder;
   tradeClient: TradeApiClient | null;
   statMapper: StatMapper | null;
@@ -49,7 +47,7 @@ export interface ToolRouterDependencies {
   ensureLuaClient: () => Promise<void>;
 }
 
-export type ToolResponse = Promise<{
+type ToolResponse = Promise<{
   content: Array<{
     type: string;
     text: string;
@@ -65,12 +63,11 @@ export async function routeToolCall(
   deps: ToolRouterDependencies
 ): ToolResponse {
   // Check tool gate first
-  deps.toolGate.checkGate(name);
 
   // Create handler contexts using contextBuilder
   const handlerContext = deps.contextBuilder.buildHandlerContext();
   const watchContext = deps.contextBuilder.buildWatchContext();
-  const treeContext = deps.contextBuilder.buildTreeContext();
+  const treeContext = handlerContext; // tree ops need the same fields as handler context
   const luaContext = deps.contextBuilder.buildLuaContext();
   const itemSkillContext = deps.contextBuilder.buildItemSkillContext();
   const optimizationContext = deps.contextBuilder.buildOptimizationContext();
@@ -134,8 +131,7 @@ export async function routeToolCall(
       return await handleFindPath(
         treeContext,
         args.build_name as string,
-        args.target_node_id as string,
-        args.show_alternatives as boolean | undefined
+        args.target_node_id as string
       );
 
     // Lua bridge tools
@@ -148,7 +144,7 @@ export async function routeToolCall(
       if (!client) throw new Error("Lua bridge not active. Use lua_start first.");
       const capabilities = await client.getCapabilities();
       const actions = Array.isArray(capabilities.actions) ? capabilities.actions.join(', ') : 'Not reported by this bridge';
-      return { content: [{ type: "text" as const, text: `=== PoB Bridge Capabilities ===\n\nMode: ${capabilities.mode ?? 'fork'}\nAdapter: ${capabilities.adapter ?? 'native'}\nActions: ${actions}` }] };
+      return { content: [{ type: "text" as const, text: `=== PoB Bridge Capabilities ===\n\nMode: ${capabilities.mode ?? 'unreported'}\nAdapter: ${capabilities.adapter ?? 'unknown'}\nActions: ${actions}` }] };
     }
 
     case "lua_stop":
@@ -414,7 +410,6 @@ export async function routeToolCall(
         args.build_name as string,
         args.goal as string,
         args.max_points as number | undefined,
-        args.max_iterations as number | undefined,
         args.constraints as OptimizationConstraints | undefined
       );
 
@@ -520,7 +515,6 @@ export async function routeToolCall(
         skill_index: args.skill_index as number | undefined,
         link_count: args.link_count as number,
         budget: args.budget as "league_start" | "mid_league" | "endgame" | undefined,
-        optimize_for: args.optimize_for as "dps" | "clear_speed" | "bossing" | "defense" | undefined,
       });
 
     // ========================================
@@ -538,13 +532,13 @@ export async function routeToolCall(
         statMapper: deps.statMapper || undefined,
         ninjaClient: deps.ninjaClient
       };
-      return await handleSearchTradeItems(tradeContext, args as any);
+      return await handleSearchTradeItems(tradeContext, args as Parameters<typeof handleSearchTradeItems>[1]);
     }
 
     case "find_weighted_trade_items":
       if (!deps.tradeClient) throw new Error('Trade API is not enabled. Set POE_TRADE_ENABLED=true to enable.');
       if (!args?.league || !args?.slot) throw new Error('find_weighted_trade_items requires league and slot');
-      return await handleFindWeightedTradeItems({ tradeClient: deps.tradeClient, statMapper: deps.statMapper || undefined, ninjaClient: deps.ninjaClient, getLuaClient: deps.getLuaClient, ensureLuaClient: deps.ensureLuaClient }, args as any);
+      return await handleFindWeightedTradeItems({ tradeClient: deps.tradeClient, statMapper: deps.statMapper || undefined, ninjaClient: deps.ninjaClient, getLuaClient: deps.getLuaClient, ensureLuaClient: deps.ensureLuaClient }, args as Parameters<typeof handleFindWeightedTradeItems>[1]);
 
     case "get_item_price": {
       if (!deps.tradeClient) {
@@ -596,7 +590,7 @@ export async function routeToolCall(
       if (!args) throw new Error("Missing arguments");
       return await handleFindItemUpgradesNew(
         { getLuaClient: deps.getLuaClient },
-        args as any
+        args as Parameters<typeof handleFindItemUpgradesNew>[1]
       );
     }
 
@@ -611,7 +605,7 @@ export async function routeToolCall(
         recommendationEngine: deps.recommendationEngine,
         ninjaClient: deps.ninjaClient
       };
-      return await handleFindResistanceGear(tradeContext, args as any);
+      return await handleFindResistanceGear(tradeContext, args as Parameters<typeof handleFindResistanceGear>[1]);
     }
 
     case "compare_trade_items": {
@@ -625,7 +619,7 @@ export async function routeToolCall(
         recommendationEngine: deps.recommendationEngine || undefined,
         ninjaClient: deps.ninjaClient
       };
-      return await handleCompareTradeItems(tradeContext, args as any);
+      return await handleCompareTradeItems(tradeContext, args as Parameters<typeof handleCompareTradeItems>[1]);
     }
 
     case "search_cluster_jewels": {
@@ -638,7 +632,7 @@ export async function routeToolCall(
         statMapper: deps.statMapper || undefined,
         ninjaClient: deps.ninjaClient
       };
-      return await handleSearchClusterJewels(tradeContext, args as any);
+      return await handleSearchClusterJewels(tradeContext, args as Parameters<typeof handleSearchClusterJewels>[1]);
     }
 
     case "analyze_cluster_jewels": {
@@ -665,7 +659,7 @@ export async function routeToolCall(
       return await handleGenerateShoppingList(shoppingContext, {
         build_name: args.build_name as string,
         league: args.league as string,
-        budget: args.budget as 'budget' | 'medium' | 'endgame' | undefined
+        budget: args.budget_tier as 'budget' | 'medium' | 'endgame' | undefined
       });
     }
 
@@ -677,7 +671,7 @@ export async function routeToolCall(
       const ninjaContext = {
         ninjaClient: deps.ninjaClient
       };
-      return await handleGetCurrencyRates(ninjaContext, args as any);
+      return await handleGetCurrencyRates(ninjaContext, args as Parameters<typeof handleGetCurrencyRates>[1]);
     }
 
     case "find_arbitrage": {
@@ -685,7 +679,7 @@ export async function routeToolCall(
       const ninjaContext = {
         ninjaClient: deps.ninjaClient
       };
-      return await handleFindArbitrage(ninjaContext, args as any);
+      return await handleFindArbitrage(ninjaContext, args as Parameters<typeof handleFindArbitrage>[1]);
     }
 
     case "calculate_trading_profit": {
@@ -693,7 +687,7 @@ export async function routeToolCall(
       const ninjaContext = {
         ninjaClient: deps.ninjaClient
       };
-      return await handleCalculateTradingProfit(ninjaContext, args as any);
+      return await handleCalculateTradingProfit(ninjaContext, args as Parameters<typeof handleCalculateTradingProfit>[1]);
     }
 
     // Build Goals Tools
@@ -776,7 +770,7 @@ export async function routeToolCall(
         getLuaClient: deps.getLuaClient,
         ninjaClient: deps.ninjaClient,
       };
-      return await handleSuggestCrafting(craftingContext, args as any);
+      return await handleSuggestCrafting(craftingContext, args as Parameters<typeof handleSuggestCrafting>[1]);
     }
 
     case "classify_item_affixes":

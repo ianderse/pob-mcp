@@ -1,32 +1,33 @@
 import { BuildXml } from "../utils/buildXml.js";
 import { atomicWriteFile } from "../utils/atomicWrite.js";
+import { noteIgnoredError } from "../utils/errorHandling.js";
 import { randomUUID } from "crypto";
 import fs from "fs/promises";
 import path from "path";
 import type { PoBBuild, SnapshotMetadata } from "../types.js";
 import { buildFileName, resolveBuildFile, sanitizeBuildName } from "../utils/pathSanitizer.js";
 
-export interface ExportOptions {
+interface ExportOptions {
   outputName: string;
   outputDirectory?: string;
   overwrite?: boolean;
   notes?: string;
 }
 
-export interface SaveTreeOptions {
+interface SaveTreeOptions {
   buildName: string;
   nodes: string[];
   masteryEffects?: Record<string, number>;
   backup?: boolean;
 }
 
-export interface SnapshotOptions {
+interface SnapshotOptions {
   buildName: string;
   description?: string;
   tag?: string;
 }
 
-export interface RestoreOptions {
+interface RestoreOptions {
   buildName: string;
   snapshotId: string;
   backupCurrent?: boolean;
@@ -47,8 +48,11 @@ export class BuildExportService {
    * Export a complete build to XML file
    */
   async exportBuild(buildData: PoBBuild, options: ExportOptions, sourceXml: string): Promise<{ filePath: string; message: string }> {
-    // Ensure export directory exists
-    const targetDir = options.outputDirectory || this.exportDirectory;
+    // Contain the whole write inside pobDirectory: output_directory is a
+    // sub-path of it, never an arbitrary client-chosen location.
+    const targetDir = options.outputDirectory
+      ? sanitizeBuildName(options.outputDirectory, this.pobDirectory)
+      : this.exportDirectory;
     await fs.mkdir(targetDir, { recursive: true });
 
     await this.validateBuildData(buildData);
@@ -74,7 +78,7 @@ export class BuildExportService {
   /**
    * Update only the passive tree in an existing build file
    */
-  async saveTree(buildService: any, options: SaveTreeOptions): Promise<{ message: string; backupPath?: string }> {
+  async saveTree(options: SaveTreeOptions): Promise<{ message: string; backupPath?: string }> {
     const buildPath = resolveBuildFile(options.buildName, this.pobDirectory);
 
     const original = await fs.readFile(buildPath, 'utf8');
@@ -83,7 +87,6 @@ export class BuildExportService {
     let backupPath: string | undefined;
     if (options.backup !== false) backupPath = await this.createBackup(options.buildName);
     await atomicWriteFile(buildPath, document.toString(), true);
-    buildService.invalidateBuild(options.buildName);
 
     const nodesAdded = options.nodes.filter((n: string) => !oldNodes.includes(n)).length;
     const nodesRemoved = oldNodes.filter((n: string) => !options.nodes.includes(n)).length;
@@ -98,7 +101,6 @@ export class BuildExportService {
    * Create a versioned snapshot of a build
    */
   async snapshotBuild(
-    buildService: any,
     options: SnapshotOptions
   ): Promise<{ snapshotId: string; snapshotPath: string }> {
     // Create snapshot directory for this build
@@ -119,9 +121,17 @@ export class BuildExportService {
     const buildContent = await fs.readFile(buildPath, 'utf-8');
     await atomicWriteFile(snapshotPath, buildContent, false);
 
-    // Create metadata
-    const build = await buildService.readBuild(options.buildName);
-    const nodes = buildService.parseAllocatedNodes(build);
+    // Create metadata — taken from the XML we just snapshotted (PlayerStat is
+    // the cached calc snapshot PoB saves), so this service needs no
+    // BuildService collaborator and the numbers describe the copy exactly.
+    const buildDoc = new BuildXml(buildContent);
+    const nodes = buildDoc.getAllocatedNodes();
+    const playerStats = buildDoc.getPlayerStats();
+    const statOf = (name: string): number | undefined => {
+      const entry = playerStats.find((s) => s.stat === name);
+      const value = entry ? Number(entry.value) : NaN;
+      return Number.isFinite(value) ? value : undefined;
+    };
 
     const metadata: SnapshotMetadata = {
       timestamp: timestamp.toISOString(),
@@ -129,8 +139,8 @@ export class BuildExportService {
       description: options.description || '',
       tag,
       statsSnapshot: {
-        life: this.extractStat(build, 'Life'),
-        dps: this.extractStat(build, 'TotalDPS'),
+        life: statOf('Life'),
+        dps: statOf('TotalDPS'),
         allocatedNodes: nodes.length,
       },
     };
@@ -164,12 +174,20 @@ export class BuildExportService {
     for (const buildSnapshotDir of directories) {
       let entries;
       try { entries = await fs.readdir(buildSnapshotDir, { withFileTypes: true }); }
-      catch (error: any) { if (error.code === 'ENOENT') continue; throw error; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue; throw error; }
       const metadataFiles = entries.filter(e => e.isFile() && e.name.endsWith('_metadata.json'));
       for (const file of metadataFiles) {
         const metadataPath = path.join(buildSnapshotDir, file.name);
-        const metadataContent = await fs.readFile(metadataPath, 'utf-8');
-        const metadata: SnapshotMetadata = JSON.parse(metadataContent);
+        let metadata: SnapshotMetadata;
+        try {
+          const metadataContent = await fs.readFile(metadataPath, 'utf-8');
+          metadata = JSON.parse(metadataContent) as SnapshotMetadata;
+        } catch (error) {
+          // A half-written or foreign metadata file must not make the whole
+          // snapshot list unusable — the healthy snapshots remain restorable.
+          noteIgnoredError(`unreadable snapshot metadata ${file.name} (snapshot omitted from the list)`, error);
+          continue;
+        }
 
         // Apply tag filter if provided
         if (options.tagFilter && metadata.tag !== options.tagFilter) {
@@ -280,8 +298,8 @@ export class BuildExportService {
   private async safeWrite(filePath: string, content: string, overwrite: boolean): Promise<void> {
     try {
       await atomicWriteFile(filePath, content, overwrite);
-    } catch (error: any) {
-      if (error.code === 'EEXIST') throw new Error(`File already exists: ${filePath}. Set overwrite=true to replace it.`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new Error(`File already exists: ${filePath}. Set overwrite=true to replace it.`);
       throw error;
     }
   }
@@ -312,22 +330,6 @@ export class BuildExportService {
       .replace(/[^a-zA-Z0-9-_]/g, '-')
       .replace(/-+/g, '-')
       .toLowerCase();
-  }
-
-  /**
-   * Extract a stat value from build data
-   */
-  private extractStat(build: PoBBuild, statName: string): number {
-    if (!build.Build?.PlayerStat) {
-      return 0;
-    }
-
-    const stats = Array.isArray(build.Build.PlayerStat)
-      ? build.Build.PlayerStat
-      : [build.Build.PlayerStat];
-
-    const stat = stats.find(s => s.stat === statName);
-    return stat ? parseFloat(stat.value) : 0;
   }
 
   /**

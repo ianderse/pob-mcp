@@ -10,6 +10,16 @@ describe('WatchService', () => {
   let mockBuildService: jest.Mocked<BuildService>;
   const testDirectory = '/test/pob/directory';
 
+  // Structural view of WatchService internals (private state the tests
+  // deliberately exercise: change log, debounce handler, watcher lifecycle).
+  type WatchInternals = {
+    recentChanges: Array<{ file: string; timestamp: number; type: string }>;
+    processFileChange(fileName: string, changeType: string): void;
+    handleFileChange(filePath: string, changeType: string): void;
+    watcher: unknown;
+  };
+  const internals = () => watchService as unknown as WatchInternals;
+
   beforeEach(() => {
     mockBuildService = new BuildService(testDirectory) as jest.Mocked<BuildService>;
     mockBuildService.invalidateBuild = jest.fn();
@@ -60,7 +70,7 @@ describe('WatchService', () => {
 
     it('should return changes in reverse chronological order', () => {
       // Manually add changes by accessing private property
-      (watchService as any).recentChanges.push(
+      internals().recentChanges.push(
         { file: 'build1.xml', timestamp: 1000, type: 'added' },
         { file: 'build2.xml', timestamp: 2000, type: 'modified' },
         { file: 'build3.xml', timestamp: 3000, type: 'deleted' }
@@ -77,7 +87,7 @@ describe('WatchService', () => {
     it('should respect limit parameter', () => {
       // Add 15 changes
       for (let i = 1; i <= 15; i++) {
-        (watchService as any).recentChanges.push({
+        internals().recentChanges.push({
           file: `build${i}.xml`,
           timestamp: i * 1000,
           type: 'added'
@@ -94,7 +104,7 @@ describe('WatchService', () => {
     it('should default to 10 changes when no limit specified', () => {
       // Add 15 changes
       for (let i = 1; i <= 15; i++) {
-        (watchService as any).recentChanges.push({
+        internals().recentChanges.push({
           file: `build${i}.xml`,
           timestamp: i * 1000,
           type: 'added'
@@ -115,7 +125,7 @@ describe('WatchService', () => {
     });
 
     it('should return correct count after adding changes', () => {
-      (watchService as any).recentChanges.push(
+      internals().recentChanges.push(
         { file: 'build1.xml', timestamp: 1000, type: 'added' },
         { file: 'build2.xml', timestamp: 2000, type: 'modified' }
       );
@@ -127,13 +137,13 @@ describe('WatchService', () => {
   describe('processFileChange (via private method access)', () => {
     it('should invalidate build cache when file changes', () => {
       // Access private method
-      (watchService as any).processFileChange('test.xml', 'modified');
+      internals().processFileChange('test.xml', 'modified');
 
       expect(mockBuildService.invalidateBuild).toHaveBeenCalledWith('test.xml');
     });
 
     it('should track file changes', () => {
-      (watchService as any).processFileChange('test.xml', 'modified');
+      internals().processFileChange('test.xml', 'modified');
 
       const changes = watchService.getRecentChanges();
       expect(changes).toHaveLength(1);
@@ -144,7 +154,7 @@ describe('WatchService', () => {
     it('should limit recent changes to 50', () => {
       // Add 60 changes
       for (let i = 1; i <= 60; i++) {
-        (watchService as any).processFileChange(`build${i}.xml`, 'modified');
+        internals().processFileChange(`build${i}.xml`, 'modified');
       }
 
       const count = watchService.getRecentChangesCount();
@@ -159,7 +169,7 @@ describe('WatchService', () => {
 
   describe('handleFileChange (via private method access)', () => {
     it('should ignore non-XML files', () => {
-      (watchService as any).handleFileChange(`${testDirectory}/file.txt`, 'modified');
+      internals().handleFileChange(`${testDirectory}/file.txt`, 'modified');
 
       // No changes should be tracked
       expect(watchService.getRecentChangesCount()).toBe(0);
@@ -167,7 +177,7 @@ describe('WatchService', () => {
     });
 
     it('should process XML files', (done) => {
-      (watchService as any).handleFileChange(`${testDirectory}/build.xml`, 'modified');
+      internals().handleFileChange(`${testDirectory}/build.xml`, 'modified');
 
       // Due to debouncing, wait for setTimeout
       setTimeout(() => {
@@ -178,9 +188,9 @@ describe('WatchService', () => {
     });
 
     it('should debounce rapid changes to same file', (done) => {
-      (watchService as any).handleFileChange(`${testDirectory}/build.xml`, 'modified');
-      (watchService as any).handleFileChange(`${testDirectory}/build.xml`, 'modified');
-      (watchService as any).handleFileChange(`${testDirectory}/build.xml`, 'modified');
+      internals().handleFileChange(`${testDirectory}/build.xml`, 'modified');
+      internals().handleFileChange(`${testDirectory}/build.xml`, 'modified');
+      internals().handleFileChange(`${testDirectory}/build.xml`, 'modified');
 
       setTimeout(() => {
         // Should only process once despite 3 calls
@@ -194,10 +204,10 @@ describe('WatchService', () => {
   describe('startWatching and stopWatching', () => {
     it('should not start multiple watchers', () => {
       watchService.startWatching();
-      const firstWatcher = (watchService as any).watcher;
+      const firstWatcher = internals().watcher;
 
       watchService.startWatching();
-      const secondWatcher = (watchService as any).watcher;
+      const secondWatcher = internals().watcher;
 
       expect(firstWatcher).toBe(secondWatcher);
     });
@@ -209,10 +219,10 @@ describe('WatchService', () => {
 
     it('should clean up watcher on stop', async () => {
       watchService.startWatching();
-      expect((watchService as any).watcher).not.toBeNull();
+      expect(internals().watcher).not.toBeNull();
 
       await watchService.stopWatching();
-      expect((watchService as any).watcher).toBeNull();
+      expect(internals().watcher).toBeNull();
       expect(watchService.isWatchEnabled()).toBe(false);
     });
   });

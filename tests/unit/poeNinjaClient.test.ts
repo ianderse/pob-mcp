@@ -45,10 +45,11 @@ describe('normalizeCurrencyOverview', () => {
 });
 
 describe('PoeNinjaClient', () => {
-  let fetchSpy: any;
+  let fetchSpy: jest.SpiedFunction<typeof fetch>;
 
   beforeEach(() => {
-    fetchSpy = jest.spyOn(global, 'fetch' as any).mockResolvedValue({ ok: true, json: async () => currentFormat } as any);
+    fetchSpy = jest.spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify(currentFormat), { status: 200 }));
   });
 
   afterEach(() => fetchSpy.mockRestore());

@@ -1,28 +1,9 @@
 // Opt-in live MCP smoke test for the Path of Exile Trade API.
 // Usage: npm run build && npm run test:smoke:trade
-import { spawn } from 'node:child_process';
-import { resolve } from 'node:path';
+import { startMcpServer } from './mcpClient.mjs';
 
-const child = spawn('node', [resolve('build/index.js')], {
-  env: { ...process.env, POE_TRADE_ENABLED: 'true' },
-  stdio: ['pipe', 'pipe', 'pipe'],
-});
+const { child, request, notify } = startMcpServer({ POB_LUA_ENABLED: 'false', POE_TRADE_ENABLED: 'true' });
 
-let buffer = ''; let nextId = 1; const pending = new Map();
-child.stdout.setEncoding('utf8');
-child.stdout.on('data', (chunk) => {
-  buffer += chunk;
-  for (;;) {
-    const newline = buffer.indexOf('\n'); if (newline < 0) return;
-    const message = JSON.parse(buffer.slice(0, newline)); buffer = buffer.slice(newline + 1);
-    pending.get(message.id)?.(message); pending.delete(message.id);
-  }
-});
-const request = (method, params) => new Promise((resolveRequest, reject) => {
-  const id = nextId++; pending.set(id, resolveRequest);
-  child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
-  setTimeout(() => { if (pending.delete(id)) reject(new Error(`timed out: ${method}`)); }, 60_000);
-});
 const call = async (name, args = {}) => {
   const response = await request('tools/call', { name, arguments: args });
   if (response.error || response.result?.isError) throw new Error(`${name} failed: ${JSON.stringify(response.error ?? response.result)}`);
@@ -31,7 +12,7 @@ const call = async (name, args = {}) => {
 
 try {
   await request('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'trade-smoke', version: '1.0' } });
-  child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }) + '\n');
+  notify('notifications/initialized', {});
   const listed = await request('tools/list', {});
   const names = new Set(listed.result.tools.map((tool) => tool.name));
   for (const name of ['get_leagues', 'search_stats', 'search_trade_items', 'get_item_price', 'find_resistance_gear', 'get_currency_rates', 'calculate_trading_profit']) {

@@ -51,7 +51,7 @@ function fitsTier(rolled: string, tierLine: string): boolean {
   return rolledValues.length === tierValues.length && rolledValues.every((value, index) => withinTier(value, tierValues[index]));
 }
 
-export interface ResolvedAffix {
+interface ResolvedAffix {
   /** The item lines this one affix accounts for. */
   lines: string[];
   type: AffixSlot;
@@ -68,7 +68,7 @@ export interface ResolvedAffix {
   alternatives: string[];
 }
 
-export interface AffixResolution {
+interface AffixResolution {
   affixes: ResolvedAffix[];
   prefixCount: number;
   suffixCount: number;

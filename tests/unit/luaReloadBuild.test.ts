@@ -12,7 +12,7 @@ describe('handleLuaReloadBuild', () => {
     pobDirectory: '/builds',
     getLuaClient: () => ({ loadBuildXml, getBuildInfo: async () => ({ name: 'whatever' }) }),
     ensureLuaClient: async () => {},
-  } as any;
+  } as unknown as Parameters<typeof import('../../src/handlers/luaHandlers.js').handleLuaReloadBuild>[0];
 
   beforeEach(() => {
     readFile.mockClear();

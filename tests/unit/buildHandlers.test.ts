@@ -29,11 +29,11 @@ describe('BuildHandlers', () => {
       listBuilds: jest.fn(),
       readBuild: jest.fn(),
       generateBuildSummary: jest.fn(),
-    } as any;
+    } as unknown as jest.Mocked<BuildService>;
 
     mockTreeService = {
       analyzePassiveTree: jest.fn(),
-    } as any;
+    } as unknown as jest.Mocked<TreeService>;
 
     context = {
       buildService: mockBuildService,
@@ -41,7 +41,7 @@ describe('BuildHandlers', () => {
       validationService: {
         validateBuild: jest.fn(),
         formatValidation: jest.fn(),
-      } as any,
+      } as unknown as HandlerContext['validationService'],
       pobDirectory: '/test/pob',
       getLuaClient: () => null,
       ensureLuaClient: async () => {},
@@ -278,8 +278,7 @@ describe('BuildHandlers', () => {
       mockBuildService.readBuild.mockResolvedValueOnce(build1).mockResolvedValueOnce(build2);
       context.getLuaClient = () => ({
         getBuildInfo: async () => ({ name: BOOTSTRAP_BUILD_NAME }),
-        loadBuild: async () => { throw new Error('lua unavailable in test'); },
-      }) as any;
+      }) as unknown as ReturnType<typeof context.getLuaClient>;
 
       const result = await handleCompareBuilds(context, 'build1.xml', 'build2.xml');
 
@@ -290,8 +289,7 @@ describe('BuildHandlers', () => {
       mockBuildService.readBuild.mockResolvedValueOnce(build1).mockResolvedValueOnce(build2);
       context.getLuaClient = () => ({
         getBuildInfo: async () => ({ name: 'My Unsaved League Starter' }),
-        loadBuild: async () => { throw new Error('should never be reached'); },
-      }) as any;
+      }) as unknown as ReturnType<typeof context.getLuaClient>;
 
       await expect(handleCompareBuilds(context, 'build1.xml', 'build2.xml'))
         .rejects.toThrow('My Unsaved League Starter');
@@ -311,7 +309,7 @@ describe('BuildHandlers', () => {
           requestedFields = fields;
           return statsFor(call++ === 0 ? 1_500_000 : 900_000);
         },
-      }) as any;
+      }) as unknown as ReturnType<typeof context.getLuaClient>;
 
       const result = await handleCompareBuilds(context, 'build1.xml', 'build2.xml');
 

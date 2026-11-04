@@ -64,15 +64,15 @@ describe('PoBLuaApiClient', () => {
       // Create client with very short timeout
       client = new PoBLuaApiClient({ timeoutMs: 100 });
 
-      // Mock process that never sends ready
+      // Mock process that never delivers any stdout to the client: the real
+      // readLine timeout must produce the rejection (no production backdoor).
       mockSpawn.mockImplementationOnce(() => {
         const proc = new MockPoBProcess();
-        // Override to never send ready
-        proc.stdout.removeAllListeners('data');
+        proc.stdout.on = () => proc.stdout;
         return proc;
       });
 
-      await expect(client.start()).rejects.toThrow(/Timed out|Failed to find valid ready banner/);
+      await expect(client.start()).rejects.toThrow(/Timed out/i);
     });
 
     it('should explain a missing PoB Lua C module rather than reporting a timeout', async () => {
@@ -82,7 +82,8 @@ describe('PoBLuaApiClient', () => {
       mockSpawn.mockImplementationOnce(() => {
         const proc = new MockPoBProcess();
         const emit = proc.stdout.emit.bind(proc.stdout);
-        (proc.stdout as any).emit = (event: string, data?: unknown) => {
+        (proc.stdout as { emit(event: string, ...args: unknown[]): boolean }).emit = (event: string, ...args: unknown[]) => {
+          const data = args[0];
           if (event === 'data' && typeof data === 'string' && data.includes('"ready":true')) {
             return emit(
               'data',
@@ -475,7 +476,7 @@ describe('PoBLuaApiClient', () => {
       // Override processRequest to send non-JSON first, then valid JSON
       const originalProcessRequest = mockProcess['processRequest'].bind(mockProcess);
       let firstCall = true;
-      mockProcess['processRequest'] = (request: any) => {
+      mockProcess['processRequest'] = (request: { action: string; params?: Record<string, unknown> }) => {
         if (firstCall) {
           firstCall = false;
           // Send some non-JSON lines first

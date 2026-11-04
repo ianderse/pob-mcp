@@ -1,9 +1,10 @@
 import { wrapHandler } from '../utils/errorHandling.js';
 import { TradeApiClient } from '../services/tradeClient.js';
 import { TradeQueryBuilder } from '../services/tradeQueryBuilder.js';
+import type { TradeItem, TradeQuery } from '../types/tradeTypes.js';
 import { StatMapper } from '../services/statMapper.js';
 import { ItemRecommendationEngine } from '../services/itemRecommendationEngine.js';
-import { ItemListing, SearchOptions, ItemRecommendation, ResistanceRequirements, BudgetConstraints } from '../types/tradeTypes.js';
+import { ItemListing, ItemRecommendation, ResistanceRequirements, BudgetConstraints } from '../types/tradeTypes.js';
 import { CostBenefitAnalyzer } from '../services/costBenefitAnalyzer.js';
 import { PoeNinjaClient } from '../services/poeNinjaClient.js';
 
@@ -22,7 +23,7 @@ export async function handleFindWeightedTradeItems(context: TradeContext & { get
     if (!client) throw new Error('Lua bridge not active. Load a build first.');
     const { query, warning } = await client.generateWeightedTradeQuery(args.slot, args.options);
     if (!query || typeof query !== 'object') throw new Error('PoB returned no trade query');
-    const search = await context.tradeClient.searchItems(args.league, query as any);
+    const search = await context.tradeClient.searchItems(args.league, query as TradeQuery);
     if (!search.result?.length) return { content: [{ type: 'text' as const, text: `=== Weighted BIS Search (${args.league}, slot: ${args.slot}) ===\nNo items found.${warning ? `\nWarning: ${warning}` : ''}` }] };
     const items = await context.tradeClient.fetchItems(search.result.slice(0, Math.min(args.limit ?? 5, 10)), search.id);
     const lines = [`=== Weighted BIS Search (${args.league}, slot: ${args.slot}) ===`, `Total matches: ${search.total} | Showing: ${items.length}`, `🔗 ${getTradeSearchUrl(args.league, search.id)}`, warning ? `Warning: ${warning}` : ''];
@@ -233,14 +234,13 @@ export async function handleGetItemPrice(
     const itemIdsToFetch = searchResult.result.slice(0, Math.min(10, searchResult.result.length));
     const items = await context.tradeClient.fetchItems(itemIdsToFetch, searchResult.id);
 
-    // Calculate price statistics
-    const prices = items
-      .map(item => item.listing.price)
-      .filter(price => price !== undefined)
-      .map(price => ({
-        amount: price!.amount,
-        currency: price!.currency,
-      }));
+    // Calculate price statistics — flatMap narrows away unpriced listings,
+    // so the price object needs no re-assertion downstream.
+    const prices = items.flatMap(item =>
+      item.listing.price
+        ? [{ amount: item.listing.price.amount, currency: item.listing.price.currency }]
+        : [],
+    );
 
     if (prices.length === 0) {
       return {
@@ -256,10 +256,12 @@ export async function handleGetItemPrice(
     // Group by currency
     const byCurrency = new Map<string, number[]>();
     for (const price of prices) {
-      if (!byCurrency.has(price.currency)) {
-        byCurrency.set(price.currency, []);
+      const bucket = byCurrency.get(price.currency);
+      if (bucket) {
+        bucket.push(price.amount);
+      } else {
+        byCurrency.set(price.currency, [price.amount]);
       }
-      byCurrency.get(price.currency)!.push(price.amount);
     }
 
     // Format output
@@ -593,7 +595,18 @@ export async function handleSearchStats(
 
 export async function handleFindResistanceGear(
   context: TradeContext,
-  args: any
+  args: {
+    league: string;
+    fire_resist_needed?: number;
+    cold_resist_needed?: number;
+    lightning_resist_needed?: number;
+    chaos_resist_needed?: number;
+    max_price_per_item?: number;
+    total_budget?: number;
+    currency?: string;
+    slots?: string[];
+    limit?: number;
+  }
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   return wrapHandler('find resistance gear', async () => {
     const {
@@ -641,70 +654,15 @@ export async function handleFindResistanceGear(
       };
     }
 
-    const output = formatResistanceRecommendations(recommendations.slice(0, limit), resistanceGaps, league, true);
+    const output = formatResistanceRecommendations(recommendations.slice(0, limit), resistanceGaps, league);
     return { content: [{ type: 'text', text: output }] };
   });
-}
-
-function formatItemRecommendations(
-  recommendations: ItemRecommendation[],
-  slot: string,
-  league: string,
-  includeLinks: boolean = false
-): string {
-  let output = `=== ${slot} Upgrades (${league}) ===\n`;
-  output += `${recommendations.length} found\n\n`;
-
-  for (const rec of recommendations) {
-    const item = rec.listing.item;
-    const price = rec.listing.listing.price;
-
-    output += `${rec.rank}. ${item.name || item.typeLine}`;
-    if (rec.priority === 'high') output += ' ⭐';
-    output += `\n`;
-
-    if (item.name && item.typeLine && item.name !== item.typeLine) {
-      output += `   Base: ${item.typeLine}\n`;
-    }
-
-    output += `   Score: ${rec.score.toFixed(1)}/100 (${rec.priority} priority)\n`;
-
-    if (price) {
-      output += `   Price: ${price.amount} ${price.currency}\n`;
-    }
-
-    if (rec.costBenefit) {
-      const cb = rec.costBenefit;
-      if (cb.lifeGain && cb.lifeGain > 0) {
-        output += `   Life Gain: +${cb.lifeGain}\n`;
-      }
-      if (cb.esGain && cb.esGain > 0) {
-        output += `   ES Gain: +${cb.esGain}\n`;
-      }
-      if (cb.efficiency) {
-        output += `   Efficiency: ${cb.efficiency.toFixed(2)} points per ${cb.currency}\n`;
-      }
-    }
-
-    if (rec.reasons.length > 0) {
-      output += `   Why:\n`;
-      for (const reason of rec.reasons.slice(0, 3)) {
-        output += `     - ${reason}\n`;
-      }
-    }
-
-    output += `   ${rec.listing.listing.account?.online ? '🟢' : '🔴'} ${rec.listing.listing.account?.name ?? 'unknown'}\n`;
-    output += `   🔗 ${getTradeItemUrl(league, rec.searchId, rec.listing.id)}\n\n`;
-  }
-
-  return output;
 }
 
 function formatResistanceRecommendations(
   recommendations: ItemRecommendation[],
   resistanceGaps: ResistanceRequirements,
-  league: string,
-  includeLinks: boolean = false
+  league: string
 ): string {
   const targets = [];
   if (resistanceGaps.fire > 0) targets.push(`${resistanceGaps.fire}% Fire`);
@@ -949,7 +907,7 @@ function formatItemComparison(
   return output;
 }
 
-function extractStatValue(item: any, statName: string): number {
+function extractStatValue(item: TradeItem, statName: string): number {
   const allMods = [
     ...(item.explicitMods || []),
     ...(item.implicitMods || []),
@@ -968,7 +926,7 @@ function extractStatValue(item: any, statName: string): number {
   return 0;
 }
 
-function extractResistValue(item: any, element: string): number {
+function extractResistValue(item: TradeItem, element: string): number {
   const allMods = [
     ...(item.explicitMods || []),
     ...(item.implicitMods || []),

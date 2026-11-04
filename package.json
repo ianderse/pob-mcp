@@ -18,11 +18,14 @@
     "test:unit": "jest tests/unit",
     "test:ci": "jest --ci --coverage --maxWorkers=2",
     "test:smoke": "node tests/smoke/bridge.mjs && node tests/smoke/mcp.mjs",
+    "test:smoke:offline": "node tests/smoke/lua-client-race.mjs && node tests/smoke/persistence.mjs && node tests/smoke/state-truthfulness.mjs",
     "test:smoke:full": "node tests/smoke/mcp-full.mjs",
     "test:smoke:weighted": "POE_WEIGHTED_SMOKE=true node tests/smoke/mcp.mjs",
     "test:smoke:trade": "node tests/smoke/trade-mcp.mjs",
     "test:smoke:crafting": "node tests/smoke/crafting-mcp.mjs",
-    "test:smoke:persistence": "node tests/smoke/persistence.mjs"
+    "test:smoke:persistence": "node tests/smoke/persistence.mjs",
+    "test:smoke:race": "node tests/smoke/lua-client-race.mjs",
+    "test:smoke:truthfulness": "node tests/smoke/state-truthfulness.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

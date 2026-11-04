@@ -3,7 +3,7 @@ import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
-export interface WatchHandlerContext {
+interface WatchHandlerContext {
   watchService: WatchService;
   buildService: BuildService;
   treeService: TreeService;

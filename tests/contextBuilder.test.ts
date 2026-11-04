@@ -2,14 +2,17 @@ import { describe, it, expect } from '@jest/globals';
 import { ContextBuilder } from '../src/utils/contextBuilder';
 import type { ContextDependencies } from '../src/utils/contextBuilder';
 
-// Mock implementations
-const mockBuildService = {} as any;
-const mockTreeService = {} as any;
-const mockWatchService = {} as any;
-const mockValidationService = {} as any;
-const mockExportService = {} as any;
-const mockSkillGemService = {} as any;
-const mockLuaClient = {} as any;
+// Mock implementations — ContextBuilder only re-exposes what it is given, so
+// empty objects suffice; they satisfy the declared dependency types.
+const mock = <T,>() => ({}) as T;
+
+const mockBuildService = mock<ContextDependencies['buildService']>();
+const mockTreeService = mock<ContextDependencies['treeService']>();
+const mockWatchService = mock<ContextDependencies['watchService']>();
+const mockValidationService = mock<ContextDependencies['validationService']>();
+const mockExportService = mock<ContextDependencies['exportService']>();
+const mockSkillGemService = mock<ContextDependencies['skillGemService']>();
+const mockLuaClient = mock<ReturnType<ContextDependencies['getLuaClient']>>();
 
 const mockDeps: ContextDependencies = {
   buildService: mockBuildService,
@@ -48,15 +51,6 @@ describe('ContextBuilder', () => {
     });
   });
 
-  describe('buildTreeContext', () => {
-    it('should return context with buildService, treeService, and validationService', () => {
-      const context = builder.buildTreeContext();
-
-      expect(context.buildService).toBe(mockBuildService);
-      expect(context.treeService).toBe(mockTreeService);
-      expect(context.validationService).toBe(mockValidationService);
-    });
-  });
 
   describe('buildLuaContext', () => {
     it('should return context with Lua configuration and methods', () => {
