@@ -109,3 +109,12 @@ family closed (42/45/46): no frozen PoB name tables remain. Live smokes (bridge.
 drift guard over all 11 advertised config keys, state-truthfulness, lua-client-race,
 persistence, add_item slot guard) green against PoB 26.1.2 checkout; 479 jest tests;
 checks exit 0. Remaining pool: speculative live audits only.
+
+Wave 49 (post-finalize): Sonnet 5.5 review of the finalized branch caught two blockers —
+calc_with silently returned baseline stats for EVERY simulation (pcall ok-flag read as the
+result table; wave-20's "610 keys" evidence passed on baseline data, so its fix claim was
+false until now) and the engine-derived slot consumers (45/46) warning "empty" for slots
+PoB HIDES per-build (Ring 3 behind AdditionalRingSlot, pre-3_27 Grafts; serializer writes
+all slots regardless). Both fixed with live fail-before/pass-after; get_items now carries
+PoB's own Control:IsShown gate. 486 tests, debt 0 holds. Meta-lesson: existence-of-number
+assertions cannot prove a simulation applied its override — always assert the delta moves.
