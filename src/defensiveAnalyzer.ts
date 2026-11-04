@@ -1,3 +1,5 @@
+import type { StatsExport } from "./pobLuaBridge.js";
+
 /**
  * Defensive Analyzer for Path of Building builds
  *
@@ -82,7 +84,7 @@ interface Recommendation {
 /**
  * Analyze defensive stats from a build
  */
-export function analyzeDefenses(stats: Record<string, any>): DefensiveAnalysis {
+export function analyzeDefenses(stats: StatsExport): DefensiveAnalysis {
   const resistances = analyzeResistances(stats);
   const lifePool = analyzeLifePool(stats);
   const avoidance = analyzeAvoidance(stats);
@@ -148,12 +150,16 @@ export function analyzeDefenses(stats: Record<string, any>): DefensiveAnalysis {
   };
 }
 
-function analyzeResistances(stats: Record<string, any>): ResistanceAnalysis {
-  const getStat = (key: string): number => {
-    if (stats[key] !== undefined) return parseFloat(stats[key]) || 0;
-    if (stats[`Player${key}`] !== undefined) return parseFloat(stats[`Player${key}`]) || 0;
-    return 0;
-  };
+
+/** Numeric stat read with PoB's `Player`-prefixed fallback; NaN/absent → 0. */
+function statNum(stats: StatsExport, key: string): number {
+  const raw = stats[key] ?? stats[`Player${key}`];
+  const n = typeof raw === 'number' ? raw : parseFloat(String(raw ?? ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function analyzeResistances(stats: StatsExport): ResistanceAnalysis {
+  const getStat = (key: string): number => statNum(stats, key);
 
   const fire = getStat('FireResist');
   const cold = getStat('ColdResist');
@@ -181,12 +187,8 @@ function analyzeResistances(stats: Record<string, any>): ResistanceAnalysis {
   };
 }
 
-function analyzeLifePool(stats: Record<string, any>): LifePoolAnalysis {
-  const getStat = (key: string): number => {
-    if (stats[key] !== undefined) return parseFloat(stats[key]) || 0;
-    if (stats[`Player${key}`] !== undefined) return parseFloat(stats[`Player${key}`]) || 0;
-    return 0;
-  };
+function analyzeLifePool(stats: StatsExport): LifePoolAnalysis {
+  const getStat = (key: string): number => statNum(stats, key);
 
   const life = getStat('Life');
   const es = getStat('EnergyShield');
@@ -232,12 +234,8 @@ function analyzeLifePool(stats: Record<string, any>): LifePoolAnalysis {
  *   - Dodge (attack/spell dodge)
  *   - Block
  */
-function analyzeAvoidance(stats: Record<string, any>): AvoidanceAnalysis {
-  const getStat = (key: string): number => {
-    if (stats[key] !== undefined) return parseFloat(stats[key]) || 0;
-    if (stats[`Player${key}`] !== undefined) return parseFloat(stats[`Player${key}`]) || 0;
-    return 0;
-  };
+function analyzeAvoidance(stats: StatsExport): AvoidanceAnalysis {
+  const getStat = (key: string): number => statNum(stats, key);
 
   const spellSuppression = getStat('EffectiveSpellSuppressionChance') || getStat('SpellSuppressionChance');
   const dodge = getStat('DodgeChance') || getStat('AttackDodgeChance');
@@ -286,12 +284,8 @@ function analyzeAvoidance(stats: Record<string, any>): AvoidanceAnalysis {
   };
 }
 
-function analyzeMitigation(stats: Record<string, any>): MitigationAnalysis {
-  const getStat = (key: string): number => {
-    if (stats[key] !== undefined) return parseFloat(stats[key]) || 0;
-    if (stats[`Player${key}`] !== undefined) return parseFloat(stats[`Player${key}`]) || 0;
-    return 0;
-  };
+function analyzeMitigation(stats: StatsExport): MitigationAnalysis {
+  const getStat = (key: string): number => statNum(stats, key);
 
   const armour = getStat('Armour');
   const evasion = getStat('Evasion');
@@ -352,12 +346,8 @@ function analyzeMitigation(stats: Record<string, any>): MitigationAnalysis {
   };
 }
 
-function analyzeSustain(stats: Record<string, any>): SustainAnalysis {
-  const getStat = (key: string): number => {
-    if (stats[key] !== undefined) return parseFloat(stats[key]) || 0;
-    if (stats[`Player${key}`] !== undefined) return parseFloat(stats[`Player${key}`]) || 0;
-    return 0;
-  };
+function analyzeSustain(stats: StatsExport): SustainAnalysis {
+  const getStat = (key: string): number => statNum(stats, key);
 
   const lifeRegen = getStat('LifeRegen');
   const life = getStat('Life') || 1;

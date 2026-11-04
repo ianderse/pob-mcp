@@ -532,13 +532,13 @@ export async function routeToolCall(
         statMapper: deps.statMapper || undefined,
         ninjaClient: deps.ninjaClient
       };
-      return await handleSearchTradeItems(tradeContext, args as any);
+      return await handleSearchTradeItems(tradeContext, args as Parameters<typeof handleSearchTradeItems>[1]);
     }
 
     case "find_weighted_trade_items":
       if (!deps.tradeClient) throw new Error('Trade API is not enabled. Set POE_TRADE_ENABLED=true to enable.');
       if (!args?.league || !args?.slot) throw new Error('find_weighted_trade_items requires league and slot');
-      return await handleFindWeightedTradeItems({ tradeClient: deps.tradeClient, statMapper: deps.statMapper || undefined, ninjaClient: deps.ninjaClient, getLuaClient: deps.getLuaClient, ensureLuaClient: deps.ensureLuaClient }, args as any);
+      return await handleFindWeightedTradeItems({ tradeClient: deps.tradeClient, statMapper: deps.statMapper || undefined, ninjaClient: deps.ninjaClient, getLuaClient: deps.getLuaClient, ensureLuaClient: deps.ensureLuaClient }, args as Parameters<typeof handleFindWeightedTradeItems>[1]);
 
     case "get_item_price": {
       if (!deps.tradeClient) {
@@ -590,7 +590,7 @@ export async function routeToolCall(
       if (!args) throw new Error("Missing arguments");
       return await handleFindItemUpgradesNew(
         { getLuaClient: deps.getLuaClient },
-        args as any
+        args as Parameters<typeof handleFindItemUpgradesNew>[1]
       );
     }
 
@@ -605,7 +605,7 @@ export async function routeToolCall(
         recommendationEngine: deps.recommendationEngine,
         ninjaClient: deps.ninjaClient
       };
-      return await handleFindResistanceGear(tradeContext, args as any);
+      return await handleFindResistanceGear(tradeContext, args as Parameters<typeof handleFindResistanceGear>[1]);
     }
 
     case "compare_trade_items": {
@@ -619,7 +619,7 @@ export async function routeToolCall(
         recommendationEngine: deps.recommendationEngine || undefined,
         ninjaClient: deps.ninjaClient
       };
-      return await handleCompareTradeItems(tradeContext, args as any);
+      return await handleCompareTradeItems(tradeContext, args as Parameters<typeof handleCompareTradeItems>[1]);
     }
 
     case "search_cluster_jewels": {
@@ -632,7 +632,7 @@ export async function routeToolCall(
         statMapper: deps.statMapper || undefined,
         ninjaClient: deps.ninjaClient
       };
-      return await handleSearchClusterJewels(tradeContext, args as any);
+      return await handleSearchClusterJewels(tradeContext, args as Parameters<typeof handleSearchClusterJewels>[1]);
     }
 
     case "analyze_cluster_jewels": {
@@ -671,7 +671,7 @@ export async function routeToolCall(
       const ninjaContext = {
         ninjaClient: deps.ninjaClient
       };
-      return await handleGetCurrencyRates(ninjaContext, args as any);
+      return await handleGetCurrencyRates(ninjaContext, args as Parameters<typeof handleGetCurrencyRates>[1]);
     }
 
     case "find_arbitrage": {
@@ -679,7 +679,7 @@ export async function routeToolCall(
       const ninjaContext = {
         ninjaClient: deps.ninjaClient
       };
-      return await handleFindArbitrage(ninjaContext, args as any);
+      return await handleFindArbitrage(ninjaContext, args as Parameters<typeof handleFindArbitrage>[1]);
     }
 
     case "calculate_trading_profit": {
@@ -687,7 +687,7 @@ export async function routeToolCall(
       const ninjaContext = {
         ninjaClient: deps.ninjaClient
       };
-      return await handleCalculateTradingProfit(ninjaContext, args as any);
+      return await handleCalculateTradingProfit(ninjaContext, args as Parameters<typeof handleCalculateTradingProfit>[1]);
     }
 
     // Build Goals Tools
@@ -770,7 +770,7 @@ export async function routeToolCall(
         getLuaClient: deps.getLuaClient,
         ninjaClient: deps.ninjaClient,
       };
-      return await handleSuggestCrafting(craftingContext, args as any);
+      return await handleSuggestCrafting(craftingContext, args as Parameters<typeof handleSuggestCrafting>[1]);
     }
 
     case "classify_item_affixes":
