@@ -36,3 +36,43 @@ describe('ShoppingListService multi gear-set extraction', () => {
     expect(belt!.currentItem!.name).not.toMatch(/^Item Class:/);
   });
 });
+
+describe('ShoppingListService slot coverage from the build itself', () => {
+  // Active set uses a current-PoB layout: Ring 3 present (empty), Graft slot,
+  // swap/abyssal sub-slots, and a flask - none of which the frozen 10-name
+  // list could see.
+  const modern = {
+    Build: { level: '100', className: 'Chieftain' },
+    Items: {
+      activeItemSet: '1',
+      Item: [{ id: '7', '#text': beltText }],
+      ItemSet: [{
+        id: '1',
+        name: 'Set 1',
+        Slot: [
+          { name: 'Belt', itemId: '7' },
+          { name: 'Ring 3', itemId: '0' },
+          { name: 'Graft 1', itemId: '0' },
+          { name: 'Weapon 1 Swap', itemId: '0' },
+          { name: 'Weapon 1Swap Abyssal Socket 5', itemId: '0' },
+          { name: 'Small Jewel Socket 1', itemId: '0' },
+          { name: 'Flask 1', itemId: '0' },
+        ],
+      }],
+    },
+  } as never;
+
+  it('covers version-specific slots and skips sub-slot noise entirely', async () => {
+    const list = await new ShoppingListService().generateShoppingList(modern, 'b', 'league');
+    const slots = list.items.map((i) => i.slot);
+    expect(slots).toContain('Belt');
+    expect(slots).toContain('Ring 3');
+    expect(slots).toContain('Graft 1');
+    expect(slots).not.toContain('Weapon 1 Swap');
+    expect(slots).not.toContain('Weapon 1Swap Abyssal Socket 5');
+    expect(slots).not.toContain('Small Jewel Socket 1');
+    expect(slots).not.toContain('Flask 1');
+    const ring3 = list.items.find((i) => i.slot === 'Ring 3')!;
+    expect(ring3.priority).toBe('critical'); // itemId 0 = empty slot
+  });
+});

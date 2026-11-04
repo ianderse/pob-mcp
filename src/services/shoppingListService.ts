@@ -6,6 +6,7 @@
 
 import type { PoBBuild } from '../types.js';
 import { activeItemSetOf, activeItemSlotsOf, itemTextMapOf } from '../utils/pobXml.js';
+import { isEquippableGearSlot } from '../itemAnalyzer.js';
 
 type UpgradePriority = 'critical' | 'high' | 'medium' | 'low';
 export type BudgetTier = 'budget' | 'medium' | 'endgame';
@@ -122,20 +123,21 @@ export class ShoppingListService {
     const buildStats = this.analyzeBuildStats(build);
     const buildNeeds = this.calculateBuildNeeds(buildStats);
 
-    // Analyze each slot
+    // Analyze each slot - derived from the build's own slot list, not a
+    // frozen name table: hard-coded 3.27-era lists silently dropped Ring 3 /
+    // Graft slots and reported phantom empties for layouts a build lacks.
+    const slots: string[] = [];
+    const seenSlots = new Set<string>();
+    for (const slot of activeItemSlotsOf(build)) {
+      if (!slot.name) continue;
+      const name = this.normalizeSlotName(slot.name);
+      // flask slots keep their own handling elsewhere; sub-slot noise (Swap/
+      // Abyssal/Jewel/Cluster) is filtered by the shared predicate
+      if (/flask/i.test(name) || !isEquippableGearSlot(name) || seenSlots.has(name)) continue;
+      seenSlots.add(name);
+      slots.push(name);
+    }
     const shoppingItems: ShoppingListItem[] = [];
-    const slots = [
-      'Weapon 1',
-      'Weapon 2',
-      'Helmet',
-      'Body Armour',
-      'Gloves',
-      'Boots',
-      'Amulet',
-      'Ring 1',
-      'Ring 2',
-      'Belt',
-    ];
 
     for (const slot of slots) {
       const currentItem = equippedItems[slot];
