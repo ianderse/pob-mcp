@@ -110,7 +110,7 @@ export async function handleAnalyzeItems(
           const filled = Boolean(slot.itemId && slot.itemId !== '0');
           const itemText = filled ? itemTexts.get(String(slot.itemId)) ?? '' : '';
           const lines = itemText.split('\n');
-          const rarity = lines[0]?.includes('Rarity:') ? lines[0].split(':')[1]?.trim() : undefined;
+          const rarity = lines.find((l) => /^Rarity:/.test(l.trim()))?.split(':').slice(1).join(':').trim();
           const name = lines.find((l) => l.trim() !== '' && !/^(Item Class|Rarity):/.test(l.trim()))?.trim() ?? '';
 
           return {

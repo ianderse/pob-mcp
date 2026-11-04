@@ -260,9 +260,16 @@ Rarity: Rare
 Circle of Ambition
 Ruby Ring
 </Item>
+<Item id="11">
+Item Class: Body Armours
+Rarity: UNIQUE
+Kaom's Heart
+Velvet Regalia
+</Item>
 <ItemSet id="1" title="Set 1">
 <Slot name="Weapon 1" itemId="5"/>
 <Slot name="Helmet" itemId="0"/>
+<Slot name="Body Armour" itemId="11"/>
 <Slot name="Ring 3" itemId="9"/>
 <Slot name="Graft 1" itemId="0"/>
 </ItemSet>
@@ -282,7 +289,8 @@ Ruby Ring
     const text = res.content[0].text;
     expect(text).toContain('Current: Circle of Ambition'); // item bodies joined by itemId
     expect(text).toContain('**Helmet**');           // empty + real slot -> named high priority
-    expect(text).toContain('across 3 equipment slots'); // Weapon1 + Helmet + filled Ring 3
+    expect(text).toContain('across 4 equipment slots'); // Weapon1 + Helmet + Body + filled Ring 3
+    expect(text).toContain('unique body armour synergizes'); // Rarity: parsed from its own line, not lines[0]
     expect(text).not.toContain('Graft 1');          // empty graft on a 3_13 tree: hidden, not flagged
   });
 });
