@@ -219,7 +219,7 @@ interface ExtendedMod {
   }>;
 }
 
-interface TradeItem {
+export interface TradeItem {
   verified: boolean;
   w: number;
   h: number;

@@ -1,4 +1,4 @@
-import type { PoBBuild } from "../types.js";
+import type { PoBBuild, PoBGem } from "../types.js";
 
 interface GemData {
   name: string;
@@ -64,6 +64,12 @@ interface GemSuggestion {
   conflicts?: string[];
 }
 
+/** PoB stores gem level/quality as XML attributes — numeric strings. */
+function numAttr(value: string | number | undefined, fallback: number): number {
+  const n = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export class SkillGemService {
   private gemDatabase: Map<string, GemData>;
   private archetypes: ArchetypeTemplate[];
@@ -104,8 +110,8 @@ export class SkillGemService {
     return {
       activeSkill: {
         name: activeGem.nameSpec || activeGem.gemId || "Unknown",
-        level: activeGem.level || 1,
-        quality: activeGem.quality || 0,
+        level: numAttr(activeGem.level, 1),
+        quality: numAttr(activeGem.quality, 0),
         tags: this.getGemTags(activeGem.nameSpec || activeGem.gemId || ""),
       },
       supports,
@@ -224,8 +230,8 @@ export class SkillGemService {
 
     for (const gem of allGems) {
       const name = gem.nameSpec || gem.gemId || "Unknown";
-      const level = gem.level || 1;
-      const quality = gem.quality || 0;
+      const level = numAttr(gem.level, 1);
+      const quality = numAttr(gem.quality, 0);
 
       // Check quality
       if (quality < 20) {
@@ -269,8 +275,8 @@ export class SkillGemService {
   /**
    * Extract skills from build
    */
-  private extractSkills(build: PoBBuild): Array<{ gems: any[]; slot: string }> {
-    const skills: Array<{ gems: any[]; slot: string }> = [];
+  private extractSkills(build: PoBBuild): Array<{ gems: PoBGem[]; slot: string }> {
+    const skills: Array<{ gems: PoBGem[]; slot: string }> = [];
 
     if (build.Skills?.SkillSet) {
       const skillSets = Array.isArray(build.Skills.SkillSet)
@@ -300,7 +306,7 @@ export class SkillGemService {
   /**
    * Detect build archetype
    */
-  private detectArchetype(activeGem: any): ArchetypeTemplate {
+  private detectArchetype(activeGem: PoBGem): ArchetypeTemplate {
     const gemName = activeGem.nameSpec || activeGem.gemId || "";
     const tags = this.getGemTags(gemName);
 
@@ -319,7 +325,7 @@ export class SkillGemService {
   /**
    * Calculate archetype match percentage
    */
-  private calculateArchetypeMatch(supports: any[], archetype: ArchetypeTemplate): number {
+  private calculateArchetypeMatch(supports: PoBGem[], archetype: ArchetypeTemplate): number {
     const supportNames = supports.map((s) => s.nameSpec || s.gemId || "");
     const recommended = archetype.recommended_supports.map((r) => r.gem);
     const avoided = archetype.avoid_supports;
@@ -342,7 +348,7 @@ export class SkillGemService {
    * Rate a support gem
    */
   private rateSupport(
-    gem: any,
+    gem: PoBGem,
     archetype: ArchetypeTemplate
   ): {
     name: string;
@@ -353,8 +359,8 @@ export class SkillGemService {
     recommendations?: string[];
   } {
     const name = gem.nameSpec || gem.gemId || "Unknown";
-    const level = gem.level || 1;
-    const quality = gem.quality || 0;
+    const level = numAttr(gem.level, 1);
+    const quality = numAttr(gem.quality, 0);
 
     const issues: string[] = [];
     const recommendations: string[] = [];
@@ -404,7 +410,7 @@ export class SkillGemService {
   /**
    * Detect issues with skill setup
    */
-  private detectIssues(supports: any[], archetype: ArchetypeTemplate): string[] {
+  private detectIssues(supports: PoBGem[], archetype: ArchetypeTemplate): string[] {
     const issues: string[] = [];
     const supportNames = supports.map((s) => s.nameSpec || s.gemId || "");
 

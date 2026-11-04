@@ -1,6 +1,7 @@
 import { wrapHandler } from '../utils/errorHandling.js';
 import { TradeApiClient } from '../services/tradeClient.js';
 import { TradeQueryBuilder } from '../services/tradeQueryBuilder.js';
+import type { TradeItem, TradeQuery } from '../types/tradeTypes.js';
 import { StatMapper } from '../services/statMapper.js';
 import { ItemRecommendationEngine } from '../services/itemRecommendationEngine.js';
 import { ItemListing, ItemRecommendation, ResistanceRequirements, BudgetConstraints } from '../types/tradeTypes.js';
@@ -22,7 +23,7 @@ export async function handleFindWeightedTradeItems(context: TradeContext & { get
     if (!client) throw new Error('Lua bridge not active. Load a build first.');
     const { query, warning } = await client.generateWeightedTradeQuery(args.slot, args.options);
     if (!query || typeof query !== 'object') throw new Error('PoB returned no trade query');
-    const search = await context.tradeClient.searchItems(args.league, query as any);
+    const search = await context.tradeClient.searchItems(args.league, query as TradeQuery);
     if (!search.result?.length) return { content: [{ type: 'text' as const, text: `=== Weighted BIS Search (${args.league}, slot: ${args.slot}) ===\nNo items found.${warning ? `\nWarning: ${warning}` : ''}` }] };
     const items = await context.tradeClient.fetchItems(search.result.slice(0, Math.min(args.limit ?? 5, 10)), search.id);
     const lines = [`=== Weighted BIS Search (${args.league}, slot: ${args.slot}) ===`, `Total matches: ${search.total} | Showing: ${items.length}`, `🔗 ${getTradeSearchUrl(args.league, search.id)}`, warning ? `Warning: ${warning}` : ''];
@@ -594,7 +595,18 @@ export async function handleSearchStats(
 
 export async function handleFindResistanceGear(
   context: TradeContext,
-  args: any
+  args: {
+    league: string;
+    fire_resist_needed?: number;
+    cold_resist_needed?: number;
+    lightning_resist_needed?: number;
+    chaos_resist_needed?: number;
+    max_price_per_item?: number;
+    total_budget?: number;
+    currency?: string;
+    slots?: string[];
+    limit?: number;
+  }
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   return wrapHandler('find resistance gear', async () => {
     const {
@@ -895,7 +907,7 @@ function formatItemComparison(
   return output;
 }
 
-function extractStatValue(item: any, statName: string): number {
+function extractStatValue(item: TradeItem, statName: string): number {
   const allMods = [
     ...(item.explicitMods || []),
     ...(item.implicitMods || []),
@@ -914,7 +926,7 @@ function extractStatValue(item: any, statName: string): number {
   return 0;
 }
 
-function extractResistValue(item: any, element: string): number {
+function extractResistValue(item: TradeItem, element: string): number {
   const allMods = [
     ...(item.explicitMods || []),
     ...(item.implicitMods || []),

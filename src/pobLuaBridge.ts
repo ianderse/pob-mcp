@@ -364,8 +364,9 @@ export class PoBLuaApiClient {
         env,
         stdio: ["pipe", "pipe", "pipe"],
       });
-    } catch (error: any) {
-      throw new Error(`Failed to spawn LuaJIT process: ${error.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to spawn LuaJIT process: ${message}`);
     }
     this.proc = child;
 
@@ -600,8 +601,8 @@ export class PoBLuaApiClient {
       // size/path from the Lua save result are for the temp write; the
       // authoritative facts for callers are the final destination + bytes.
       return { path: destination, size: xml.length };
-    } catch (error: any) {
-      if (error.code === 'EEXIST') {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
         throw new Error(`Refusing to overwrite existing build "${destination}". Pass overwrite: true to replace it, or choose a new name.`);
       }
       throw error;
@@ -842,7 +843,13 @@ async setTree(params: {
   }> {
     const res = await this.send({ action: 'evaluate_anoint_candidates', params });
     if (!res.ok) throw new Error(res.error || 'evaluate_anoint_candidates failed');
-    return res as any;
+    // The bridge handler replies with the result fields at the envelope top
+    // level (no nested `result`), hence reading from `res` itself.
+    const { ok: _ok, ...result } = res;
+    return result as unknown as {
+      candidates: Array<{ nodeId: number | string; name: string; dpsDelta: number; ehpDelta: number; score: number; recipe?: string[] }>;
+      base: { CombinedDPS: number; TotalEHP: number }; evaluated: number; skipped: number; slot: string; baseType: string; focus: string;
+    };
   }
 
   async generateWeightedTradeQuery(slot: string, options?: Record<string, unknown>): Promise<{ query: unknown; warning?: string }> {

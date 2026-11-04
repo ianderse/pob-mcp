@@ -41,10 +41,18 @@ interface NewCurrencyItem {
   detailsId: string;
 }
 
+interface NewCurrencyRate {
+  id: string;
+  pay?: number;
+  receive?: number;
+  primaryValue: number;
+  secondaryValue: number;
+}
+
 interface NewCurrencyOverview {
   core: {
     items: NewCurrencyItem[];
-    rates: any;
+    rates: Record<string, NewCurrencyRate>;
     primary: string;
     secondary: string;
   };
@@ -122,7 +130,7 @@ interface ArbitrageOpportunity {
 export class PoeNinjaClient {
   private baseUrl = 'https://poe.ninja/poe1/api/economy/exchange/current';
   private legacyBaseUrl = 'https://poe.ninja/api/data';
-  private cache = new Map<string, { data: any; timestamp: number }>();
+  private cache = new Map<string, { data: CurrencyOverview; timestamp: number }>();
   private cacheTTL = 300000; // 5 minutes
 
   /**
@@ -344,7 +352,7 @@ export class PoeNinjaClient {
   /**
    * Get from cache if not expired
    */
-  private getFromCache(key: string): any | null {
+  private getFromCache(key: string): CurrencyOverview | null {
     const cached = this.cache.get(key);
     if (cached && Date.now() - cached.timestamp < this.cacheTTL) {
       return cached.data;
@@ -355,7 +363,7 @@ export class PoeNinjaClient {
   /**
    * Put data in cache
    */
-  private putInCache(key: string, data: any): void {
+  private putInCache(key: string, data: CurrencyOverview): void {
     this.cache.set(key, {
       data,
       timestamp: Date.now(),

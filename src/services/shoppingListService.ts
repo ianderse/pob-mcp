@@ -45,7 +45,7 @@ interface BuildStatSummary {
   dps: number;
 }
 
-interface ShoppingListItem {
+export interface ShoppingListItem {
   slot: string;
   priority: UpgradePriority;
   reason: string[];
@@ -67,7 +67,7 @@ interface ShoppingListItem {
   };
 }
 
-interface ItemRecommendation {
+export interface ItemRecommendation {
   searchCriteria: string;
   estimatedPrice: {
     min: number;
@@ -78,7 +78,7 @@ interface ItemRecommendation {
   notes?: string;
 }
 
-interface ShoppingList {
+export interface ShoppingList {
   buildName: string;
   league: string;
   summary: {
