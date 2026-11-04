@@ -115,11 +115,20 @@ try {
     throw new Error(`unknown list value must be rejected, got ${JSON.stringify(bossBogus)}`);
   }
   // the exact keys advertised in the set_config tool description must exist
-  // in this PoB version (they were invented once: 'conditionOnFullLife')
+  // in this PoB version (three were invented once: 'conditionOnFullLife',
+  // 'conditionOnFullEnergyShield', 'conditionFortify')
   const advertised = await client.setConfig({
+    usePowerCharges: true,
+    useFrenzyCharges: true,
+    useEnduranceCharges: true,
     buffFortification: true,
+    conditionLeeching: true,
     conditionFullLife: true,
     conditionFullEnergyShield: true,
+    buffOnslaught: true,
+    bandit: 'None',
+    pantheonMajorGod: 'None',
+    pantheonMinorGod: 'None',
   });
   if (Object.keys(advertised?.rejected ?? {}).length > 0) {
     throw new Error(`schema-advertised config keys rejected: ${JSON.stringify(advertised.rejected)}`);
