@@ -522,7 +522,20 @@ function M.calc_with(params)
   if not out then
     return nil, 'calc_with failed: ' .. tostring(calcErr)
   end
-  return M.sanitize_for_json(out), M.sanitize_for_json(baseOut)
+  -- The MiscCalculator returns a metatable-backed live object: `pairs()` on it
+  -- yields only hand-set keys (nothing), so a direct sanitize would return an
+  -- empty object. A table copy strips the metatable so pairs() exposes every
+  -- computed stat.
+  local function shallowcopy(t)
+    local copy = {}
+    for k, v in pairs(t) do copy[k] = v end
+    return copy
+  end
+  local output = (type(out) == 'table') and out or baseOut
+  if type(output) ~= 'table' then
+    return nil, 'calc_with produced no stats table'
+  end
+  return M.sanitize_for_json(shallowcopy(output))
 end
 
 
