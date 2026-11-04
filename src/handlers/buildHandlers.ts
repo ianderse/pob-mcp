@@ -3,6 +3,7 @@ import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { HandlerContext } from "../utils/contextBuilder.js";
 import fs from "fs/promises";
 import { wrapHandler } from "../utils/errorHandling.js";
+import { atomicWriteFile } from "../utils/atomicWrite.js";
 import { resolveBuildFile } from "../utils/pathSanitizer.js";
 import { BOOTSTRAP_BUILD_NAME } from "../server/bootstrapBuild.js";
 import type { ItemSetEntry, PoBLuaApiClient, SpecEntry, StatsExport } from "../pobLuaBridge.js";
@@ -467,7 +468,9 @@ export async function handleSetBuildNotes(context: HandlerContext, buildName: st
       xml = xml.replace('</PathOfBuilding>', `  <Notes>${escaped}</Notes>\n</PathOfBuilding>`);
     }
 
-    await fs.writeFile(buildPath, xml, 'utf-8');
+    // Atomic commit: a half-written save must never replace the user's build
+    // file (every other build-file write in this repo already does this).
+    await atomicWriteFile(buildPath, xml, true);
     // Invalidate the build cache so a subsequent get_build_notes reads the updated file
     context.buildService.invalidateBuild(buildName);
     return {

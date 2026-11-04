@@ -3,6 +3,7 @@ import { noteIgnoredError } from '../utils/errorHandling.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { wrapHandler } from "../utils/errorHandling.js";
+import { atomicWriteFile } from '../utils/atomicWrite.js';
 import { sanitizeBuildName } from "../utils/pathSanitizer.js";
 
 interface ConfigHandlerContext {
@@ -32,7 +33,9 @@ export async function handleSaveConfigPreset(context: ConfigPresetContext, name:
 
   const config = await luaClient.getConfig();
   const filePath = await getPresetPath(context.pobDirectory, name);
-  await fs.writeFile(filePath, JSON.stringify(config, null, 2), 'utf-8');
+  // Atomic commit: re-saving a preset must never leave a truncated file that
+  // loads as a corrupt preset on the next start.
+  await atomicWriteFile(filePath, JSON.stringify(config, null, 2), true);
 
   return {
     content: [{
