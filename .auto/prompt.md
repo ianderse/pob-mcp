@@ -128,3 +128,11 @@ swap-set Weapon N keeps analysis; Lua gate errors fail conservative only for ver
 slots. 493 tests, debt 0. Meta-lesson: a new mechanism needs its delta reviewed against
 EVERY callsite — unit tests feeding the mechanism's happy shape (shown:false literals)
 coexisted with the main caller dropping the field entirely.
+
+Wave 51 (review round 2, N1): the engine-less analyze_items fallback read item text from
+slot.Item, which PoB XML never populates — every equipped slot on that path reported
+"Slot is empty" (pre-existing; the filled rule then hid equipped gated slots). Joined via
+itemTextMapOf+itemId; '(empty)' input sentinel retired; real-parsed-XML fallback test.
+494 tests, debt 0. Meta-lesson: XML attribute-vs-body placement (treeVersion on <Spec>,
+item text in Items/Item, not <Slot>) is only testable through the real parser — hand-shaped
+objects encode your assumptions, not the file format.
