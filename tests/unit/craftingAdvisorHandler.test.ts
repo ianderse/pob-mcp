@@ -1,5 +1,9 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { buildCraftingResponse, handleSuggestCrafting } from '../../src/handlers/craftingAdvisorHandler';
+import type { PoeNinjaClient } from '../../src/services/poeNinjaClient';
+
+type AdvisoredContext = Parameters<typeof handleSuggestCrafting>[0];
+const asClient = (c: unknown): NonNullable<ReturnType<AdvisoredContext["getLuaClient"]>> => c as NonNullable<ReturnType<AdvisoredContext["getLuaClient"]>>;
 
 describe('buildCraftingResponse', () => {
   it('includes base name in output', () => {
@@ -59,15 +63,15 @@ describe('handleSuggestCrafting — graceful degradation', () => {
     getCurrencyExchangeMap: mockGetCurrencyExchangeMap,
   };
 
-  const baseContext = {
+  const baseContext: AdvisoredContext = {
     getLuaClient: () => null,
-    ninjaClient: mockNinjaClient as any,
+    ninjaClient: mockNinjaClient as unknown as PoeNinjaClient,
   };
 
-  let fetchSpy: any;
+  let fetchSpy: jest.SpiedFunction<typeof fetch>;
 
   beforeEach(() => {
-    fetchSpy = jest.spyOn(global, 'fetch' as any);
+    fetchSpy = jest.spyOn(globalThis, 'fetch');
     jest.clearAllMocks();
   });
 
@@ -84,7 +88,7 @@ describe('handleSuggestCrafting — graceful degradation', () => {
 
   it('falls back to default currency rates when poe.ninja fails', async () => {
     mockGetCurrencyExchangeMap.mockRejectedValue(new Error('network error'));
-    fetchSpy.mockResolvedValue({ ok: true, text: async () => '<html>mods</html>' } as any);
+    fetchSpy.mockResolvedValue(new Response('<html>mods</html>', { status: 200 }));
 
     const result = await handleSuggestCrafting(baseContext, {
       slot: 'helmet',
@@ -108,14 +112,14 @@ describe('handleSuggestCrafting — graceful degradation', () => {
 
   it('auto-detects an equipped baseName from either supported PoB bridge', async () => {
     mockGetCurrencyExchangeMap.mockResolvedValue(new Map([['Divine Orb', 200]]));
-    fetchSpy.mockResolvedValue({ ok: true, text: async () => '<html>mods</html>' } as any);
+    fetchSpy.mockResolvedValue(new Response('<html>mods</html>', { status: 200 }));
     const getItems = jest.fn(async () => [{ slot: 'Helmet', id: 1, name: 'Rare Helmet', baseName: 'Hubris Circlet' }]);
-    const context = {
-      getLuaClient: () => ({ getStats: async () => ({ Life: 4000 }), getItems }),
-      ninjaClient: mockNinjaClient as any,
+    const context: AdvisoredContext = {
+      getLuaClient: () => asClient({ getStats: async () => ({ Life: 4000 }), getItems }),
+      ninjaClient: mockNinjaClient as unknown as PoeNinjaClient,
     };
 
-    const result = await handleSuggestCrafting(context as any, { slot: 'helmet' });
+    const result = await handleSuggestCrafting(context, { slot: 'helmet' });
 
     expect(getItems).toHaveBeenCalled();
     expect(result.content[0].text).toContain('Crafting Advisor: Hubris Circlet (helmet)');

@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { handleValidateBuild } from '../../src/handlers/validationHandlers.js';
+type ValidationContext = Parameters<typeof handleValidateBuild>[0];
 
 describe('validate_build named-build isolation', () => {
   let directory: string;
@@ -29,7 +30,7 @@ describe('validate_build named-build isolation', () => {
       getStats: jest.fn(async () => stats),
       getItems: jest.fn(async () => [{ slot: 'Flask 1', raw: 'Immune to Freeze' }]),
     };
-    const validateBuild = jest.fn((_build: any, _flasks: any, _stats: any) => ({}));
+    const validateBuild = jest.fn((..._args: Parameters<ValidationContext['validationService']['validateBuild']>) => ({}));
     const context = {
       pobDirectory: directory,
       buildService: {
@@ -40,7 +41,7 @@ describe('validate_build named-build isolation', () => {
       getLuaClient: () => luaClient,
     };
 
-    await handleValidateBuild(context as any, { build_name: 'target.xml' });
+    await handleValidateBuild(context as unknown as ValidationContext, { build_name: 'target.xml' });
 
     expect(validateBuild).toHaveBeenCalledWith(
       build,

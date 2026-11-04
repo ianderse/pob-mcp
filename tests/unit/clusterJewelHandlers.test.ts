@@ -72,12 +72,12 @@ describe('handleAnalyzeBuildClusterJewels (live bridge)', () => {
       getItems: async () => equipped,
       getSkills: async () => ({ groups: [{ index: 1, label: 'S', main: true, gems: [{ name: 'Vortex', level: 20, quality: 20 }] }] }),
     }),
-  } as any;
+  } as unknown as Parameters<typeof import('../../src/handlers/clusterJewelHandlers.js').handleAnalyzeBuildClusterJewels>[0];
 
   it('detects socketed cluster jewels from baseName', async () => {
     const { handleAnalyzeBuildClusterJewels } = await import('../../src/handlers/clusterJewelHandlers.js');
     const result = await handleAnalyzeBuildClusterJewels(context);
-    const text = result.content.map((c: any) => c.text).join('');
+    const text = result.content.map((c) => c.text).join('');
 
     expect(text).toContain('Perfect Large Cluster Jewel');
     expect(text).toContain('Feasting Fiends');

@@ -82,7 +82,8 @@ describe('PoBLuaApiClient', () => {
       mockSpawn.mockImplementationOnce(() => {
         const proc = new MockPoBProcess();
         const emit = proc.stdout.emit.bind(proc.stdout);
-        (proc.stdout as any).emit = (event: string, data?: unknown) => {
+        (proc.stdout as { emit(event: string, ...args: unknown[]): boolean }).emit = (event: string, ...args: unknown[]) => {
+          const data = args[0];
           if (event === 'data' && typeof data === 'string' && data.includes('"ready":true')) {
             return emit(
               'data',
@@ -475,7 +476,7 @@ describe('PoBLuaApiClient', () => {
       // Override processRequest to send non-JSON first, then valid JSON
       const originalProcessRequest = mockProcess['processRequest'].bind(mockProcess);
       let firstCall = true;
-      mockProcess['processRequest'] = (request: any) => {
+      mockProcess['processRequest'] = (request: { action: string; params?: Record<string, unknown> }) => {
         if (firstCall) {
           firstCall = false;
           // Send some non-JSON lines first

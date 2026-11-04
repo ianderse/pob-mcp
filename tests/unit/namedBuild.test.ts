@@ -50,12 +50,12 @@ describe('handleValidateBuild with a name that does not exist', () => {
 
     const result = handleValidateBuild(
       {
-        buildService: { readBuild: async () => { throw new Error('ENOENT'); } } as any,
-        validationService: { validateBuild: () => ({}), formatValidation: () => '' } as any,
+        buildService: { readBuild: async () => { throw new Error('ENOENT'); } },
+        validationService: { validateBuild: () => ({}), formatValidation: () => '' },
         pobDirectory: dir,
-        getLuaClient: () => luaClient as any,
+        getLuaClient: () => luaClient,
         ensureLuaClient: async () => {},
-      },
+      } as unknown as Parameters<typeof handleValidateBuild>[0],
       { build_name: 'NoSuchBuild' }
     );
 

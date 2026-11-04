@@ -109,7 +109,9 @@ describe('build persistence', () => {
 
   it('forgets the old source when a native import fails', async () => {
     const client = new PoBLuaApiClient();
-    const send = jest.spyOn(client as any, 'send').mockResolvedValue({ ok: true });
+    const send = jest.spyOn(client as unknown as {
+      send(req: unknown): Promise<{ ok: boolean; error?: string; [k: string]: unknown }>;
+    }, 'send').mockResolvedValue({ ok: true });
     await client.loadBuildXml(original, 'fixture', path.join(directory, 'fixture.xml'));
     expect(client.getLoadedFilePath()).toBeDefined();
     send.mockResolvedValueOnce({ ok: false, error: 'PoB did not initialize the build' });
@@ -124,11 +126,11 @@ describe('build persistence', () => {
     const context = { buildService: builds, exportService: exports, luaClient: {
       getLoadedFilePath: () => path.join(directory, 'fixture.xml'), loadBuildXml,
     } };
-    const result = await handleRestoreSnapshot(context as any, { build_name: 'fixture', snapshot_id: snapshot.snapshotId });
+    const result = await handleRestoreSnapshot(context as unknown as Parameters<typeof handleRestoreSnapshot>[0], { build_name: 'fixture', snapshot_id: snapshot.snapshotId });
     expect(result.isError).toBe(fail);
     expect(loadBuildXml).toHaveBeenCalledWith(original, 'fixture', path.join(directory, 'fixture.xml'));
     expect(await builds.readBuildXml('fixture')).toBe(original);
-    if (fail) expect(result.content[0].text).toContain('file was restored, but the live reload FAILED');
+    if (fail) expect(result.content[0]?.text).toContain('file was restored, but the live reload FAILED');
   });
 
   it('does not replace another in-memory build while restoring a file', async () => {
@@ -136,16 +138,16 @@ describe('build persistence', () => {
     const loadBuildXml = jest.fn();
     const result = await handleRestoreSnapshot({ buildService: builds, exportService: exports, luaClient: {
       getLoadedFilePath: () => path.join(directory, 'other.xml'), loadBuildXml,
-    } } as any, { build_name: 'fixture', snapshot_id: snapshot.snapshotId });
+    } } as unknown as Parameters<typeof handleRestoreSnapshot>[0], { build_name: 'fixture', snapshot_id: snapshot.snapshotId });
     expect(loadBuildXml).not.toHaveBeenCalled();
-    expect(result.content[0].text).toContain('left unchanged');
+    expect(result.content[0]?.text).toContain('left unchanged');
   });
 
   it('protects unrelated save targets, permits explicit replacement, and tracks source identity', async () => {
     const client = new PoBLuaApiClient();
-    (client as any).send = jest.fn(async (request: any) => {
+    (client as unknown as { send: (request: { action: string; params?: { path?: string } }) => Promise<unknown> }).send = jest.fn(async (request: { action: string; params?: { path?: string } }) => {
       if (request.action === 'save_build') {
-        await fs.writeFile(request.params.path, original.replace('4000', '6000'));
+        await fs.writeFile(request.params!.path!, original.replace('4000', '6000'));
         return { ok: true, result: { size: 123 } };
       }
       return { ok: true };

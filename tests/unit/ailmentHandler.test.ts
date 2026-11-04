@@ -2,11 +2,13 @@ import { describe, it, expect } from '@jest/globals';
 import { handleLuaGetAilments } from '../../src/handlers/luaHandlers.js';
 import type { AilmentReport } from '../../src/pobLuaBridge.js';
 
-const contextReturning = (ailments: AilmentReport[]) =>
+type AilmentsContext = Parameters<typeof handleLuaGetAilments>[0];
+
+const contextReturning = (ailments: AilmentReport[]): AilmentsContext =>
   ({
     ensureLuaClient: async () => {},
     getLuaClient: () => ({ getAilments: async () => ({ ailments }) }),
-  }) as any;
+  }) as unknown as AilmentsContext;
 
 import { textOf } from '../helpers/response.js';
 
