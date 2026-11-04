@@ -93,6 +93,13 @@ interface EquippedItem {
   raw?: string;
   /** flask/tincture activation; only meaningful for flask slots */
   active?: boolean;
+  /**
+   * PoB's ItemsTab visibility gate for this slot (Control:IsShown parity).
+   * false = the slot does not apply to this build (Ring 3 without the
+   * AdditionalRingSlot flag, Grafts on pre-3_27 trees, inactive weapon set)
+   * — empty-but-hidden must not be reported as an empty gear slot.
+   */
+  shown?: boolean;
 }
 
 /** get_skills */

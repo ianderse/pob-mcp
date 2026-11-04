@@ -116,6 +116,8 @@ export interface PoBBuild {
   };
   Tree?: {
     activeSpec?: string;
+    /** <Tree treeVersion="..."> — the tree data version the build was saved on */
+    treeVersion?: string;
     Spec?: TreeSpec | TreeSpec[];
   };
   Skills?: {

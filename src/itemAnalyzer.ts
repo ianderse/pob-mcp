@@ -53,6 +53,32 @@ export function isEquippableGearSlot(slot: string): boolean {
 }
 
 /**
+ * Is this gear slot one the build can actually use?
+ *
+ * isEquippableGearSlot only drops synthetic sub-slots; PoB's ItemsTab
+ * additionally HIDES real slots a build cannot use: Ring 3 (gated on the
+ * AdditionalRingSlot mod flag), Graft 1/2 (only on the 3_27 tree) and the
+ * inactive weapon-set variants. get_items carries that gate as `shown`
+ * (Control:IsShown parity) — pass it via `shown` when available.
+ *
+ * XML-only callers (raw build file, no engine) pass `treeVersion` instead:
+ * Grafts gate deterministically on the tree version, while Ring 3's gate is a
+ * runtime mod flag invisible in raw XML — an unknown Ring 3 stays hidden so a
+ * shopping list never demands a "critical" purchase for a slot that is mostly
+ * not there. Unrecognised names default to visible, so any future PoB slot
+ * degrades to the old behaviour rather than silently vanishing.
+ */
+export function isGearSlotVisible(
+  slotName: string,
+  opts: { shown?: boolean; treeVersion?: string } = {},
+): boolean {
+  if (opts.shown !== undefined) return opts.shown;
+  if (/graft/i.test(slotName)) return (opts.treeVersion ?? '').includes('3_27');
+  if (/^ring 3$/i.test(slotName)) return false;
+  return true;
+}
+
+/**
  * Analyze build archetype from class and stats
  */
 export function inferBuildArchetype(
@@ -268,7 +294,7 @@ function checkResistances(stats: BuildStats): {
  * Analyze all equipped items and provide recommendations
  */
 export function analyzeEquippedItems(
-  items: Array<{ slot: string; name?: string; baseName?: string; rarity?: string }>,
+  items: Array<{ slot: string; name?: string; baseName?: string; rarity?: string; shown?: boolean }>,
   className?: string,
   ascendClassName?: string,
   stats?: BuildStats
@@ -281,10 +307,12 @@ export function analyzeEquippedItems(
   // Analyze the slots the engine actually reports (filtered to real gear
   // slots), NOT a hard-coded list: the old 15-name table missed Ring 3 and
   // Grafts on current PoB and produced phantom 'Slot is empty' spam for
-  // builds whose slot layout differs from 3.27-era.
+  // builds whose slot layout differs from 3.27-era. Slots PoB itself hides
+  // for this build (shown=false) are not applicable, not empty.
   const seenSlots = new Set<string>();
   for (const item of items) {
     if (!item.slot || !isEquippableGearSlot(item.slot) || seenSlots.has(item.slot)) continue;
+    if (!isGearSlotVisible(item.slot, { shown: item.shown })) continue;
     seenSlots.add(item.slot);
   }
 

@@ -481,7 +481,7 @@ end
 -- params: { addNodes?: number[], removeNodes?: number[], masteryEffects?: {[nodeId]: effectId}, useFullDPS?: boolean }
 function M.calc_with(params)
   if not build or not build.calcsTab then return nil, 'build not initialized' end
-  local calcFunc, baseOut = build.calcsTab:GetMiscCalculator()
+  local calcFunc = build.calcsTab:GetMiscCalculator()
   local override = {}
   if params and type(params.addNodes) == 'table' then
     override.addNodes = {}
@@ -512,15 +512,18 @@ function M.calc_with(params)
       build.spec.masterySelections[tonumber(nodeId)] = effectId
     end
   end
-  local out, calcErr = pcall(calcFunc, override, params and params.useFullDPS)
+  -- pcall returns (ok, result...): the first value is the success flag, not
+  -- the stats table. Reading it as the result made every simulation silently
+  -- return the caller's CURRENT stats regardless of the override.
+  local calcOk, out = pcall(calcFunc, override, params and params.useFullDPS)
   -- Restore original mastery selections on EVERY path: if calcFunc raised and
   -- we skipped the restore, the next get_tree/save_build would report and
   -- persist masteries the caller never committed.
   if origMastery then
     build.spec.masterySelections = origMastery
   end
-  if not out then
-    return nil, 'calc_with failed: ' .. tostring(calcErr)
+  if not calcOk then
+    return nil, 'calc_with failed: ' .. tostring(out)
   end
   -- The MiscCalculator returns a metatable-backed live object: `pairs()` on it
   -- yields only hand-set keys (nothing), so a direct sanitize would return an
@@ -531,11 +534,12 @@ function M.calc_with(params)
     for k, v in pairs(t) do copy[k] = v end
     return copy
   end
-  local output = (type(out) == 'table') and out or baseOut
-  if type(output) ~= 'table' then
+  -- No fallback to baseline stats here: a simulation that produced no stats
+  -- table must fail loudly, not pose as the unmodified build.
+  if type(out) ~= 'table' then
     return nil, 'calc_with produced no stats table'
   end
-  return M.sanitize_for_json(shallowcopy(output))
+  return M.sanitize_for_json(shallowcopy(out))
 end
 
 
@@ -769,6 +773,21 @@ function M.get_items()
     if not slotCtrl then return end
     local selId = slotCtrl.selItemId or 0
     local entry = { slot = slotName, id = selId }
+    -- PoB's own slot visibility gate (Control:IsShown evaluates .shown, a
+    -- boolean or function): ItemsTab hides Ring 3 (AdditionalRingSlot flag),
+    -- Graft 1/2 (pre-3_27 trees) and the inactive weapon-set variants.
+    -- Consumers need shown=false to tell "empty" from "does not apply to
+    -- this build". A gate that errors stays shown: analysis must not
+    -- silently lose data.
+    local gate = slotCtrl.shown
+    local vis = true
+    if type(gate) == 'function' then
+      local okGate, v = pcall(gate)
+      vis = (not okGate) or (v ~= false and v ~= nil)
+    elseif gate ~= nil then
+      vis = gate ~= false
+    end
+    entry.shown = vis
     if selId > 0 then
       local it = itemsTab.items[selId]
       if it then

@@ -40,9 +40,11 @@ describe('ShoppingListService multi gear-set extraction', () => {
 describe('ShoppingListService slot coverage from the build itself', () => {
   // Active set uses a current-PoB layout: Ring 3 present (empty), Graft slot,
   // swap/abyssal sub-slots, and a flask - none of which the frozen 10-name
-  // list could see.
-  const modern = {
+  // list could see. PoB serializes EVERY slot regardless of visibility, so
+  // the version gates in isGearSlotVisible decide applicability here.
+  const modern = (treeVersion: string) => ({
     Build: { level: '100', className: 'Chieftain' },
+    Tree: { treeVersion },
     Items: {
       activeItemSet: '1',
       Item: [{ id: '7', '#text': beltText }],
@@ -60,19 +62,27 @@ describe('ShoppingListService slot coverage from the build itself', () => {
         ],
       }],
     },
-  } as never;
+  }) as never;
 
   it('covers version-specific slots and skips sub-slot noise entirely', async () => {
-    const list = await new ShoppingListService().generateShoppingList(modern, 'b', 'league');
+    const list = await new ShoppingListService().generateShoppingList(modern('3_27'), 'b', 'league');
     const slots = list.items.map((i) => i.slot);
     expect(slots).toContain('Belt');
-    expect(slots).toContain('Ring 3');
-    expect(slots).toContain('Graft 1');
+    expect(slots).toContain('Graft 1'); // tree 3_27 -> grafts exist
+    expect(slots).not.toContain('Ring 3'); // gate is a runtime mod flag; without the engine, an unknown Ring 3 must not demand a critical buy
     expect(slots).not.toContain('Weapon 1 Swap');
     expect(slots).not.toContain('Weapon 1Swap Abyssal Socket 5');
     expect(slots).not.toContain('Small Jewel Socket 1');
     expect(slots).not.toContain('Flask 1');
-    const ring3 = list.items.find((i) => i.slot === 'Ring 3')!;
-    expect(ring3.priority).toBe('critical'); // itemId 0 = empty slot
+    const graft = list.items.find((i) => i.slot === 'Graft 1')!;
+    expect(graft.priority).toBe('critical'); // itemId 0 = empty slot
+  });
+
+  it('excludes graft slots on pre-3_27 trees (PoB hides them)', async () => {
+    const list = await new ShoppingListService().generateShoppingList(modern('3_13'), 'b', 'league');
+    const slots = list.items.map((i) => i.slot);
+    expect(slots).toContain('Belt');
+    expect(slots).not.toContain('Graft 1');
+    expect(slots).not.toContain('Ring 3');
   });
 });

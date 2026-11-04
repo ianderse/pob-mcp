@@ -1,6 +1,6 @@
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
-import { isEquippableGearSlot } from '../itemAnalyzer.js';
+import { isEquippableGearSlot, isGearSlotVisible } from '../itemAnalyzer.js';
 import type { BuildIssue } from "../types.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
@@ -131,9 +131,11 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
         // the truth (this picks up Ring 3/Grafts on current PoB versions);
         // empty flasks have their own check below and jewel sockets are
         // covered by the emptyJewelSlots check, so both are excluded here.
+        // shown=false means PoB hides the slot for this build (not an empty).
         for (const it of items) {
           if ((it.id ?? 0) !== 0) continue;
           if (!it.slot || !isEquippableGearSlot(it.slot)) continue;
+          if (!isGearSlotVisible(it.slot, { shown: it.shown })) continue;
           if (/flask/i.test(it.slot)) continue;
           issues.push({
             severity: 'warning',

@@ -26,8 +26,8 @@ describe('analyzeEquippedItems derives slots from the reported items', () => {
   const items = [
     { slot: 'Weapon 1', name: 'Doombringer', rarity: 'Unique' },
     { slot: 'Helmet', name: 'Nullrune Hood', rarity: 'Unique' },
-    { slot: 'Ring 3', name: '' },            // empty on a current-PoB build
-    { slot: 'Graft 1', name: '' },           // empty, also current-PoB-only
+    { slot: 'Ring 3', name: '', shown: true },     // empty on a 3-ring build
+    { slot: 'Graft 1', name: '', shown: true },    // empty, tree supports it
     { slot: 'Weapon 1 Swap', name: 'Legacy Wand' },
     { slot: 'Weapon 1Swap Abyssal Socket 5', name: 'Abyss Jewel' },
     { slot: 'Small Jewel Socket 1', name: 'Divergent Lineage' },
@@ -57,6 +57,22 @@ describe('analyzeEquippedItems derives slots from the reported items', () => {
     expect(slots).not.toContain('Boots');
     expect(analyzed.slotAnalysis).toHaveLength(4); // Weapon1, Helmet, Ring3, Graft1
   });
+
+  it('skips slots PoB hides for this build (shown=false)', () => {
+    // get_items marks Ring 3 / Grafts shown=false unless the build actually
+    // has the flag / tree; those are not applicable slots, not empties.
+    const hidden = analyzeEquippedItems(
+      [
+        { slot: 'Weapon 1', name: 'Doombringer', shown: true },
+        { slot: 'Ring 3', name: '', shown: false },
+        { slot: 'Graft 1', name: '', shown: false },
+        { slot: 'Graft 2', name: '', shown: false },
+      ],
+      'Scion', undefined, { life: 5000 },
+    );
+    const analyzed = hidden.slotAnalysis.map((s) => s.slot);
+    expect(analyzed).toEqual(['Weapon 1']);
+  });
 });
 
 describe('handleGetBuildIssues empty-slot detection is version-agnostic', () => {
@@ -75,14 +91,15 @@ describe('handleGetBuildIssues empty-slot detection is version-agnostic', () => 
     }),
   }) as unknown as Parameters<typeof handleGetBuildIssues>[0];
 
-  const item = (slot: string, id: number, name?: string) => ({ slot, id, name });
+  const item = (slot: string, id: number, name?: string, shown?: boolean) =>
+    ({ slot, id, name, ...(shown === undefined ? {} : { shown }) });
 
   it('flags an empty Ring 3 that the frozen list could never see', async () => {
     const res = await handleGetBuildIssues(context([
       item('Weapon 1', 1, 'W'), item('Weapon 2', 2, 'W2'), item('Helmet', 3, 'H'),
       item('Body Armour', 4, 'B'), item('Gloves', 5, 'G'), item('Boots', 6, 'Bo'),
       item('Amulet', 7, 'A'), item('Ring 1', 8, 'R1'), item('Ring 2', 9, 'R2'),
-      item('Belt', 10, 'Be'), item('Ring 3', 0),
+      item('Belt', 10, 'Be'), item('Ring 3', 0, undefined, true),
       item('Flask 1', 11, 'F1'), item('Flask 2', 12, 'F2'), item('Flask 3', 13, 'F3'),
       item('Flask 4', 14, 'F4'), item('Flask 5', 15, 'F5'),
       item('Weapon 1 Swap', 1, 'W'),
@@ -92,6 +109,25 @@ describe('handleGetBuildIssues empty-slot detection is version-agnostic', () => 
     const messages = res.issues.filter((i) => i.category === 'items').map((i) => i.message);
     expect(messages.some((m) => m.includes('Ring 3 slot is empty'))).toBe(true);
     expect(messages.some((m) => /Swap|Abyssal/.test(m))).toBe(false);
+  });
+
+  it('does not demand gear for slots PoB hides for this build', async () => {
+    // get_items reports EVERY slot control including hidden ones; PoB hides
+    // Ring 3 without the AdditionalRingSlot flag and Grafts off the 3_27
+    // tree. The base get_build_issues never warned about them and must not
+    // start now: hidden is not empty.
+    const res = await handleGetBuildIssues(context([
+      item('Weapon 1', 1, 'W'), item('Weapon 2', 2, 'W2'), item('Helmet', 3, 'H'),
+      item('Body Armour', 4, 'B'), item('Gloves', 5, 'G'), item('Boots', 6, 'Bo'),
+      item('Amulet', 7, 'A'), item('Ring 1', 8, 'R1'), item('Ring 2', 9, 'R2'),
+      item('Belt', 10, 'Be'),
+      item('Ring 3', 0, undefined, false), item('Graft 1', 0, undefined, false),
+      item('Graft 2', 0, undefined, false),
+      item('Flask 1', 11, 'F1'), item('Flask 2', 12, 'F2'), item('Flask 3', 13, 'F3'),
+      item('Flask 4', 14, 'F4'), item('Flask 5', 15, 'F5'),
+    ]));
+    const messages = res.issues.filter((i) => i.category === 'items').map((i) => i.message);
+    expect(messages.some((m) => m.includes('slot is empty'))).toBe(false);
   });
 
   it('does not invent empties for slots the engine did not report', async () => {

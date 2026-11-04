@@ -4,7 +4,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { PoBLuaApiClient } from '../../build/pobLuaBridge.js';
-import { smokePoBSrc } from './pobSource.mjs';
+import { gearedBuildXml, smokePoBSrc } from './pobSource.mjs';
 
 const cwd = smokePoBSrc();
 
@@ -32,6 +32,46 @@ try {
   const out = await client.calcWith({});
   check('calc_with returns a serialisable result', typeof out?.TotalDPS === 'number' || typeof out?.Life === 'number');
   check('bridge survives calc_with', client.isAlive());
+
+  // The override must reach the calculator. When the success path read pcall's
+  // first return (the ok-boolean) as the stats table, calc_with silently
+  // returned the UNMODIFIED baseline for every "what if": a no-override call
+  // still answered, so only an override that must move a stat can catch it.
+  // Every sim tool (get_passive_upgrades, suggest_masteries, anoint ranking,
+  // node-delta scoring) compared candidates against a wrong base.
+  // Runs on the repo-owned geared fixture: example-build.xml has too few
+  // allocated nodes for a life delta to be guaranteed there.
+  await client.loadBuildXml(await readFile(gearedBuildXml, "utf8"), "truthfulness-smoke-geared");
+  const baseline = await client.calcWith({});
+  const allocatedForDrop = (await client.getTree()).nodes ?? [];
+  if (allocatedForDrop.length === 0) {
+    console.log('skip  calc_with override check (geared fixture has no allocated nodes)');
+  } else {
+    const dropped = await client.calcWith({ removeNodes: allocatedForDrop });
+    check(
+      'calc_with applies removeNodes override',
+      typeof dropped?.Life === 'number' && typeof baseline?.Life === 'number' && dropped.Life < baseline.Life,
+      `Life ${baseline.Life} -> ${dropped?.Life} after dropping ${allocatedForDrop.length} nodes`,
+    );
+  }
+  // get_items must carry PoB's own slot visibility gate (Control:IsShown):
+  // this fixture is a 2-ring build saved on the 3_13 tree, so PoB's UI hides
+  // Ring 3 (no AdditionalRingSlot flag) and the Graft slots (pre-3_27).
+  // Consumers rely on shown=false to stop reporting "empty" for slots the
+  // build cannot use.
+  const gearedItems = await client.getItems();
+  const bySlot = (n) => gearedItems.find((i) => i.slot === n);
+  check(
+    'get_items marks hidden slots shown=false',
+    bySlot('Ring 3')?.shown === false && bySlot('Graft 1')?.shown === false && bySlot('Graft 2')?.shown === false,
+    JSON.stringify(['Ring 3', 'Graft 1', 'Graft 2'].map((n) => [n, bySlot(n)?.shown])),
+  );
+  check(
+    'get_items marks applicable slots shown=true',
+    bySlot('Helmet')?.shown === true && bySlot('Ring 1')?.shown === true && bySlot('Weapon 1')?.shown === true,
+    JSON.stringify(['Helmet', 'Ring 1', 'Weapon 1'].map((n) => [n, bySlot(n)?.shown])),
+  );
+  await client.loadBuildXml(await readFile(resolve('example-build.xml'), 'utf8'), 'truthfulness-smoke');
 
   // set_config drives off PoB's own ConfigOptions rather than a hardcoded
   // allowlist, so options outside the old list must now apply...
