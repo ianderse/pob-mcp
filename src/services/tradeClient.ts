@@ -21,6 +21,10 @@ import {
 export class TradeApiClient {
   private readonly baseUrl = 'https://www.pathofexile.com/api/trade';
   private readonly limiter: Bottleneck;
+  // Bounded LRU: entries are TTL-expiring listings/results, but TTL expiry
+  // only happens on read — a client that searches many distinct queries
+  // would otherwise accumulate cache entries for its whole lifetime.
+  private static readonly MAX_CACHE_ENTRIES = 200;
   private readonly cache = new Map<string, CacheEntry<unknown>>();
   private readonly defaultCacheTTL: number;
   private rateLimitInfo: RateLimitInfo | null = null;
@@ -214,6 +218,11 @@ export class TradeApiClient {
       return null;
     }
 
+    // Map iteration order is insertion order: re-inserting on hit makes the
+    // eviction below drop stale-by-use entries instead of stale-by-insertion.
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+
     // The key encodes the request shape, so hits always hold this T; the cache
     // itself only stores `unknown` envelopes.
     return entry.data as T;
@@ -226,5 +235,10 @@ export class TradeApiClient {
       timestamp: now,
       expiresAt: now + ttl,
     });
+    while (this.cache.size > TradeApiClient.MAX_CACHE_ENTRIES) {
+      const oldest = this.cache.keys().next();
+      if (oldest.done) break;
+      this.cache.delete(oldest.value);
+    }
   }
 }
