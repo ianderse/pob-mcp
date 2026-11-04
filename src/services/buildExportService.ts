@@ -1,5 +1,6 @@
 import { BuildXml } from "../utils/buildXml.js";
 import { atomicWriteFile } from "../utils/atomicWrite.js";
+import { noteIgnoredError } from "../utils/errorHandling.js";
 import { randomUUID } from "crypto";
 import fs from "fs/promises";
 import path from "path";
@@ -177,8 +178,16 @@ export class BuildExportService {
       const metadataFiles = entries.filter(e => e.isFile() && e.name.endsWith('_metadata.json'));
       for (const file of metadataFiles) {
         const metadataPath = path.join(buildSnapshotDir, file.name);
-        const metadataContent = await fs.readFile(metadataPath, 'utf-8');
-        const metadata: SnapshotMetadata = JSON.parse(metadataContent);
+        let metadata: SnapshotMetadata;
+        try {
+          const metadataContent = await fs.readFile(metadataPath, 'utf-8');
+          metadata = JSON.parse(metadataContent) as SnapshotMetadata;
+        } catch (error) {
+          // A half-written or foreign metadata file must not make the whole
+          // snapshot list unusable — the healthy snapshots remain restorable.
+          noteIgnoredError(`unreadable snapshot metadata ${file.name} (snapshot omitted from the list)`, error);
+          continue;
+        }
 
         // Apply tag filter if provided
         if (options.tagFilter && metadata.tag !== options.tagFilter) {

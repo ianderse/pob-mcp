@@ -107,6 +107,23 @@ describe('build persistence', () => {
     expect(current.snapshotPath).toContain('fixture.xml');
   });
 
+  it('lists healthy snapshots when one metadata file is corrupt', async () => {
+    const dir = path.join(directory, '.pob-mcp', 'snapshots', 'fixture.xml');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'good_metadata.json'), JSON.stringify({ tag: 'good', timestamp: '2021-01-01' }));
+    await fs.writeFile(path.join(dir, 'good_good.xml'), original);
+    await exports.snapshotBuild({ buildName: 'fixture.xml', tag: 'other' }); // a real second snapshot
+    // A torn write mid-metadata — exactly what atomic writes prevent for NEW
+    // files, but hand-edits or pre-atomic leftovers can still hit the list.
+    await fs.writeFile(path.join(dir, 'torn_metadata.json'), '{"tag":"torn","timest');
+
+    const listed = await exports.listSnapshots('fixture.xml');
+    const ids = listed.snapshots.map((sn) => sn.id);
+    expect(ids).toContain('good');
+    expect(ids).not.toContain('torn');
+    expect(ids.length).toBeGreaterThanOrEqual(2); // the snapshotBuild one survived too
+  });
+
   it('forgets the old source when a native import fails', async () => {
     const client = new PoBLuaApiClient();
     const send = jest.spyOn(client as unknown as {

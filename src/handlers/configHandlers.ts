@@ -54,11 +54,18 @@ export async function handleLoadConfigPreset(context: ConfigPresetContext, name:
 
   const filePath = await getPresetPath(context.pobDirectory, name);
   let config: Record<string, string | number | boolean>;
+  let raw: string;
   try {
-    const raw = await fs.readFile(filePath, 'utf-8');
-    config = JSON.parse(raw) as Record<string, string | number | boolean>;
+    raw = await fs.readFile(filePath, 'utf-8');
   } catch {
     throw new Error(`Preset "${name}" not found. Use save_config_preset to create it first.`);
+  }
+  try {
+    config = JSON.parse(raw) as Record<string, string | number | boolean>;
+  } catch {
+    // Distinct from "missing": telling the user to save the preset again would
+    // overwrite — i.e. destroy — the file they actually have.
+    throw new Error(`Preset "${name}" exists but is not valid JSON (corrupt?). Re-save it with save_config_preset.`);
   }
 
   await luaClient.setConfig(config);
