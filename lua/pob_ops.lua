@@ -584,7 +584,22 @@ function M.set_config(params)
 
   local applied, rejected = {}, {}
   local changed = false
+  -- PoB's saved-XML import (ConfigTab) maps legacy boss names onto the
+  -- current enemyIsBoss list ('Uber Atziri'->'Boss', 'Shaper'/'Sirus' ->
+  -- 'Pinnacle'). Doing the same here keeps the tool contract stable for
+  -- callers who still speak the old names, instead of failing with
+  -- 'not a valid option for this list' while the UI accepts the build file.
+  local LEGACY_BOSS_ALIASES = {
+    ['shaper'] = 'Pinnacle',
+    ['sirus'] = 'Pinnacle',
+    ['uber atziri'] = 'Boss',
+    ['atziri'] = 'Boss',
+  }
   for key, value in pairs(params) do
+    if key == 'enemyIsBoss' and type(value) == 'string' then
+      local alias = LEGACY_BOSS_ALIASES[value:lower()]
+      if alias then value = alias end
+    end
     -- enemyLevel lives on the tab itself, not in the input table.
     if key == 'enemyLevel' then
       local n = tonumber(value)

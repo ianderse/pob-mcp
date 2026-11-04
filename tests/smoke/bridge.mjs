@@ -103,6 +103,18 @@ try {
     throw new Error(`configured shock should be credited: ${JSON.stringify(configured)}`);
   }
 
+  // enemyIsBoss: legacy names must land on the current list values exactly as
+  // PoB's own XML import maps them; an unknown list value must be REJECTED
+  // per key, never silently stored (it would match no branch in the engine).
+  const bossAlias = await client.setConfig({ enemyIsBoss: 'Shaper' });
+  if (bossAlias?.rejected?.enemyIsBoss || bossAlias?.applied?.enemyIsBoss !== 'Pinnacle') {
+    throw new Error(`legacy boss name 'Shaper' should apply as 'Pinnacle': ${JSON.stringify(bossAlias)}`);
+  }
+  const bossBogus = await client.setConfig({ enemyIsBoss: 'NotABoss' });
+  if (!bossBogus?.rejected?.enemyIsBoss) {
+    throw new Error(`unknown list value must be rejected, got ${JSON.stringify(bossBogus)}`);
+  }
+
   await client.loadBuildXml(await readFile(gearedBuildXml, 'utf8'), 'weighted-query-smoke');
   const weighted = await client.generateWeightedTradeQuery('Amulet');
   const query = weighted.query;
