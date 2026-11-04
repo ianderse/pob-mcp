@@ -700,7 +700,7 @@ export function getLuaToolSchemas(): ToolSchema[] {
           },
           slot: {
             type: "string",
-            description: "Item slot for sockets, PoB's exact slot name (e.g., 'Weapon 1', 'Body Armour', 'Helmet', 'Gloves', 'Boots', 'Shield'); jewel-socket slots as reported by get_equipped_items",
+            description: "Item the skill is socketed in - PoB's skill group slots: 'Weapon 1', 'Weapon 2', 'Weapon 1 Swap', 'Weapon 2 Swap', 'Helmet', 'Body Armour', 'Gloves', 'Boots', 'Amulet', 'Ring 1', 'Ring 2', 'Belt' (plus 'Ring 3' on newer PoB versions). Omit for an unattached group.",
           },
           enabled: {
             type: "boolean",
