@@ -144,7 +144,7 @@ export async function routeToolCall(
       if (!client) throw new Error("Lua bridge not active. Use lua_start first.");
       const capabilities = await client.getCapabilities();
       const actions = Array.isArray(capabilities.actions) ? capabilities.actions.join(', ') : 'Not reported by this bridge';
-      return { content: [{ type: "text" as const, text: `=== PoB Bridge Capabilities ===\n\nMode: ${capabilities.mode ?? 'fork'}\nAdapter: ${capabilities.adapter ?? 'native'}\nActions: ${actions}` }] };
+      return { content: [{ type: "text" as const, text: `=== PoB Bridge Capabilities ===\n\nMode: ${capabilities.mode ?? 'unreported'}\nAdapter: ${capabilities.adapter ?? 'unknown'}\nActions: ${actions}` }] };
     }
 
     case "lua_stop":

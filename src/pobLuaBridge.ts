@@ -575,8 +575,11 @@ export class PoBLuaApiClient {
 
   async getCapabilities(): Promise<BridgeCapabilities> {
     const res = await this.send({ action: "get_capabilities" });
-    if (!res.ok) return { mode: 'fork', adapter: 'native', capabilitiesReported: false };
-    return (res.capabilities as BridgeCapabilities | undefined) ?? {};
+    if (!res.ok) return { mode: 'unreported', adapter: 'unknown', capabilitiesReported: false };
+    // An ok response that carries no capabilities block means the bridge predates
+    // this action — claiming 'fork/native' there would be fabricated.
+    return (res.capabilities as BridgeCapabilities | undefined)
+      ?? { mode: 'unreported', adapter: 'unknown', capabilitiesReported: false };
   }
 
   async newBuild(params?: { className?: string; ascendancy?: string }): Promise<BuildLoadResult> {
