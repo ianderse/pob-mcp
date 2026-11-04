@@ -4,11 +4,10 @@ import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
 import type { OptimizationConstraints } from "../types/optimization.js";
 import type { PassiveTreeData } from "../types.js";
-import fs from "fs/promises";
 import { analyzeDefenses, formatDefensiveAnalysis } from "../defensiveAnalyzer.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { resolveBuildFile } from "../utils/pathSanitizer.js";
-import { readNamedBuild } from "../utils/namedBuild.js";
+import { loadBuildIfDifferent, readNamedBuild } from "../utils/namedBuild.js";
 
 /** PoB's blank level 1 character: 60 Life, no Energy Shield, no Ward. */
 const BLANK_CHARACTER_POOL = 60;
@@ -39,23 +38,7 @@ export async function handleAnalyzeDefenses(
 
     // Only reload from disk if a different build (or no build) is currently loaded.
     // If the same build is already loaded, preserve the current spec/item set selection.
-    const requested = buildName.replace(/\.xml$/i, '');
-    const basename = (n: string) => n.split(/[/\\]/).pop() ?? n;
-    let needsLoad = true;
-    try {
-      const info = await luaClient.getBuildInfo();
-      const loaded = (info?.name ?? '').replace(/\.xml$/i, '');
-      // Accept exact match OR basename match (handles path prefix differences)
-      if (loaded && (loaded === requested || basename(loaded) === basename(requested))) {
-        needsLoad = false; // same build — keep current Lua state
-      }
-    } catch (e) { noteIgnoredError("no build loaded yet", e); }
-
-    if (needsLoad) {
-      const buildPath = resolveBuildFile(buildName, context.pobDirectory);
-      const buildXml = await fs.readFile(buildPath, 'utf-8');
-      await luaClient.loadBuildXml(buildXml, buildName, buildPath);
-    }
+    await loadBuildIfDifferent(luaClient, buildName, context.pobDirectory);
 
     // Get stats from PoB
     const stats = await luaClient.getStats();

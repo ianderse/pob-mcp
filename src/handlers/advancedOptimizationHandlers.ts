@@ -14,7 +14,7 @@ import {
   type SkillGroup,
 } from "../skillLinkOptimizer.js";
 import { resolveBuildFile } from "../utils/pathSanitizer.js";
-import { readNamedBuild } from "../utils/namedBuild.js";
+import { loadBuildIfDifferent, readNamedBuild } from "../utils/namedBuild.js";
 import { activeSkillSet, asArray } from "../utils/xmlCollections.js";
 
 interface AdvancedOptimizationContext {
@@ -47,19 +47,7 @@ export async function handleAnalyzeItems(
       // Load build into Lua only if a different build (or no build) is currently loaded.
       // Preserves any select_spec / select_item_set changes made in the current session.
       if (buildName) {
-        let needsLoad = true;
-        try {
-          const info = await luaClient.getBuildInfo();
-          const loaded = (info?.name ?? '').replace(/\.xml$/i, '');
-          const requested = buildName.replace(/\.xml$/i, '');
-          if (loaded && (loaded === requested || loaded.split(/[/\\]/).pop() === requested.split(/[/\\]/).pop())) {
-            needsLoad = false;
-          }
-        } catch (e) { noteIgnoredError("no build loaded yet", e); }
-        if (needsLoad) {
-          const xml = await readNamedBuild(buildName, context.pobDirectory);
-          await luaClient.loadBuildXml(xml, buildName, resolveBuildFile(buildName, context.pobDirectory));
-        }
+        await loadBuildIfDifferent(luaClient, buildName, context.pobDirectory);
       }
 
       try {
