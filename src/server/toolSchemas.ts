@@ -5,12 +5,18 @@
  * These schemas describe the available tools, their parameters, and documentation.
  */
 
-interface ToolSchema {
+/**
+ * One MCP tool advertisement. `inputSchema.properties` values are JSON Schema
+ * objects (arbitrary nesting — some properties carry `properties`,
+ * `additionalProperties`, or no `type` at all); the values reach the MCP SDK
+ * unchanged, so this is the wire contract, not a local invention.
+ */
+export interface ToolSchema {
   name: string;
   description: string;
   inputSchema: {
     type: "object";
-    properties: Record<string, { type: string; description?: string; enum?: string[]; items?: { type: string }; default?: unknown }>;
+    properties?: Record<string, Record<string, unknown>> & { type?: string };
     required?: string[];
   };
 }
@@ -290,7 +296,7 @@ export function getToolSchemas(): ToolSchema[] {
 /**
  * Get Lua-specific tool schemas (only included if Lua is enabled)
  */
-export function getLuaToolSchemas(): any[] {
+export function getLuaToolSchemas(): ToolSchema[] {
   return [
     {
       name: "lua_get_capabilities",
@@ -960,7 +966,7 @@ export function getLuaToolSchemas(): any[] {
 /**
  * Get optimization tool schemas
  */
-export function getOptimizationToolSchemas(): any[] {
+export function getOptimizationToolSchemas(): ToolSchema[] {
   return [
     {
       name: "analyze_defenses",
@@ -1080,7 +1086,7 @@ export function getOptimizationToolSchemas(): any[] {
 /**
  * Get configuration tool schemas (Phase 9)
  */
-export function getConfigToolSchemas(): any[] {
+export function getConfigToolSchemas(): ToolSchema[] {
   return [
     {
       name: "get_config",
@@ -1186,7 +1192,7 @@ export function getConfigToolSchemas(): any[] {
 /**
  * Get build validation tool schemas (Phase 7)
  */
-export function getValidationToolSchemas(): any[] {
+export function getValidationToolSchemas(): ToolSchema[] {
   return [
     {
       name: "validate_build",
@@ -1207,7 +1213,7 @@ export function getValidationToolSchemas(): any[] {
 /**
  * Get skill gem analysis tool schemas (Phase 11)
  */
-export function getSkillGemToolSchemas(): any[] {
+export function getSkillGemToolSchemas(): ToolSchema[] {
   return [
     {
       name: "analyze_skill_links",
@@ -1357,7 +1363,7 @@ export function getSkillGemToolSchemas(): any[] {
 /**
  * Get export and persistence tool schemas (Phase 8)
  */
-export function getExportToolSchemas(): any[] {
+export function getExportToolSchemas(): ToolSchema[] {
   return [
     {
       name: "export_build",
@@ -1496,7 +1502,7 @@ export function getExportToolSchemas(): any[] {
 /**
  * Get Trade API tool schemas (require POE_TRADE_ENABLED=true)
  */
-export function getTradeToolSchemas(): any[] {
+export function getTradeToolSchemas(): ToolSchema[] {
   return [
     {
       name: "find_weighted_trade_items",
@@ -1744,7 +1750,7 @@ export function getTradeToolSchemas(): any[] {
 /**
  * Get build goals/diagnostics tool schemas (require Lua bridge, no Trade API dependency)
  */
-export function getBuildGoalsToolSchemas(): any[] {
+export function getBuildGoalsToolSchemas(): ToolSchema[] {
   return [
     {
       name: "get_build_issues",
@@ -1869,7 +1875,7 @@ export function getBuildGoalsToolSchemas(): any[] {
 /**
  * Get poe.ninja API tool schemas
  */
-export function getPoeNinjaToolSchemas(): any[] {
+export function getPoeNinjaToolSchemas(): ToolSchema[] {
   return [
     {
       name: "get_currency_rates",

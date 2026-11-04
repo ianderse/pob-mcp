@@ -1,6 +1,7 @@
 import type { BuildService } from "../services/buildService.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { TreeService } from "../services/treeService.js";
+import type { SearchedNode } from "../pobLuaBridge.js";
 import type { TreeComparison } from "../types.js";
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
@@ -380,7 +381,7 @@ export async function handleGetPassiveUpgrades(
   // class's ascendancy. Those can never be allocated by this build, so drop
   // them before scoring rather than spending a simulation on each.
   const ownAscendancy = (await luaClient.getBuildInfo())?.ascendClassName ?? '';
-  const isSimulatable = (node: any): boolean => {
+  const isSimulatable = (node: SearchedNode): boolean => {
     const ascendancy = node.ascendancy ?? node.ascendancyName ?? '';
     const isForeignAscendancy = ascendancy !== '' && ascendancy !== ownAscendancy;
     const isMastery = node.isMastery === true || node.type === 'Mastery';
@@ -391,7 +392,7 @@ export async function handleGetPassiveUpgrades(
   };
 
   // One failed keyword should narrow the search, not sink the whole suggestion.
-  const searchNotables = async (keyword: string): Promise<any[]> => {
+  const searchNotables = async (keyword: string): Promise<SearchedNode[]> => {
     try {
       const results = await luaClient.searchNodes({
         keyword,
@@ -405,12 +406,12 @@ export async function handleGetPassiveUpgrades(
     }
   };
 
-  const uniqueById = (nodes: any[]): any[] =>
+  const uniqueById = (nodes: SearchedNode[]): SearchedNode[] =>
     [...new Map(nodes.map((node) => [String(node.id), node])).values()];
 
   // The stdio bridge rejects concurrent requests, so these must run in
   // sequence; the accumulator keeps that ordering without mutating state.
-  const searched = await keywords.slice(0, 4).reduce<Promise<any[]>>(
+  const searched = await keywords.slice(0, 4).reduce<Promise<SearchedNode[]>>(
     async (acc, keyword) => [...(await acc), ...(await searchNotables(keyword))],
     Promise.resolve([]),
   );
@@ -430,7 +431,7 @@ export async function handleGetPassiveUpgrades(
 
   // Step 4: simulate each candidate with calcWith
   interface ScoredNode {
-    node: any;
+    node: SearchedNode;
     dpsDelta: number;
     ehpDelta: number;
     score: number;
@@ -523,7 +524,7 @@ export async function handleSuggestMasteries(context: PassiveUpgradesContext) {
   if (!luaClient) throw new Error('Lua bridge not active. Use lua_load_build first.');
 
   const data = await luaClient.getMasteryOptions();
-  const masteries: any[] = data?.masteries ?? [];
+  const masteries = data?.masteries ?? [];
 
   if (masteries.length === 0) {
     return {
@@ -536,11 +537,12 @@ export async function handleSuggestMasteries(context: PassiveUpgradesContext) {
   const baseDPS = (baseStats.CombinedDPS as number) || (baseStats.TotalDPS as number) || (baseStats.MinionTotalDPS as number) || 1;
   const baseEHP = (baseStats.TotalEHP as number) || (baseStats.Life as number) || 1;
 
-  // Current mastery effect map: { nodeId: effectId }
-  const currentMasteryEffects: Record<number, number> = {};
+  // Current mastery effect map: { nodeId: effectId } — the wire shape calcWith
+  // takes; ids coerced to numbers because PoB's tree ids are numeric.
+  const currentMasteryEffects: Record<string | number, number> = {};
   for (const m of masteries) {
     if (m.allocatedEffect != null) {
-      currentMasteryEffects[m.nodeId] = m.allocatedEffect;
+      currentMasteryEffects[Number(m.nodeId)] = m.allocatedEffect;
     }
   }
 
@@ -549,7 +551,7 @@ export async function handleSuggestMasteries(context: PassiveUpgradesContext) {
   for (const mastery of masteries) {
     outputLines.push(`**${mastery.nodeName}** (node ${mastery.nodeId})`);
     if (mastery.allocatedEffect != null) {
-      const current = mastery.availableEffects.find((e: any) => e.effectId === mastery.allocatedEffect);
+      const current = mastery.availableEffects.find((e) => e.effectId === mastery.allocatedEffect);
       outputLines.push(`  Current: ${current?.stat ?? mastery.allocatedEffect}`);
     } else {
       outputLines.push('  Current: (none selected)');
@@ -559,7 +561,7 @@ export async function handleSuggestMasteries(context: PassiveUpgradesContext) {
     const scored: ScoredEffect[] = [];
     for (const effect of mastery.availableEffects) {
       try {
-        const newMasteryEffects = { ...currentMasteryEffects, [mastery.nodeId]: effect.effectId };
+        const newMasteryEffects = { ...currentMasteryEffects, [Number(mastery.nodeId)]: effect.effectId };
         const out = await luaClient.calcWith({ masteryEffects: newMasteryEffects });
         if (!out) continue;
         // calcWith returns raw Lua output; minion stats nested under out.Minion

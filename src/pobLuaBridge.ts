@@ -139,7 +139,10 @@ export interface SearchedNode {
   y: number;
   orbit?: string;
   orbitIndex?: number;
+  /** PoB's tree data carries both spellings depending on data vintage. */
+  ascendancy?: string;
   ascendancyName?: string;
+  isMastery?: boolean;
   isBlighted?: boolean;
 }
 
@@ -802,7 +805,7 @@ async setTree(params: {
     return res.results as SearchNodesResult;
   }
 
-  async updateTreeDelta(params: { addNodes?: number[]; removeNodes?: number[]; masteryEffects?: Record<string, number>; classId?: number; ascendClassId?: number; secondaryAscendClassId?: number; treeVersion?: string; }): Promise<{ tree: TreeState; droppedNodes?: number[] }> {
+  async updateTreeDelta(params: { addNodes?: Array<number | string>; removeNodes?: Array<number | string>; masteryEffects?: Record<string, number>; classId?: number; ascendClassId?: number; secondaryAscendClassId?: number; treeVersion?: string; }): Promise<{ tree: TreeState; droppedNodes?: number[] }> {
     const res = await this.send({ action: "update_tree_delta", params });
     if (!res.ok) throw new Error(res.error || "update_tree_delta failed");
     return {
@@ -811,7 +814,7 @@ async setTree(params: {
     };
   }
 
-  async calcWith(params: { addNodes?: number[]; removeNodes?: number[]; masteryEffects?: Record<string | number, number>; useFullDPS?: boolean }): Promise<CalcOutput> {
+  async calcWith(params: { addNodes?: Array<number | string>; removeNodes?: Array<number | string>; masteryEffects?: Record<string | number, number>; useFullDPS?: boolean }): Promise<CalcOutput> {
     const res = await this.send({ action: "calc_with", params });
     if (!res.ok) throw new Error(res.error || "calc_with failed");
     return res.output as CalcOutput;

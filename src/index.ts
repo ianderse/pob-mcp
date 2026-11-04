@@ -37,6 +37,7 @@ import { ContextBuilder } from "./utils/contextBuilder.js";
 
 // Import server modules
 import { LuaClientManager } from "./server/luaClientManager.js";
+import type { ToolSchema } from "./server/toolSchemas.js";
 import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getConfigToolSchemas, getValidationToolSchemas, getExportToolSchemas, getSkillGemToolSchemas, getTradeToolSchemas, getPoeNinjaToolSchemas, getBuildGoalsToolSchemas } from "./server/toolSchemas.js";
 import { routeToolCall, type ToolRouterDependencies } from "./server/toolRouter.js";
 import { wrapWithTruncation } from "./server/responseUtils.js";
@@ -217,7 +218,7 @@ class PoBMCPServer {
     // List available tools
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       // Get base tools
-      const tools: any[] = getToolSchemas();
+      const tools: ToolSchema[] = getToolSchemas();
 
       // Add Lua tools if enabled — the repo-owned stdio adapter drives a stock
       // PoB checkout and supports the full action set
