@@ -42,6 +42,7 @@ export class LuaClientManager {
   private client: PoBLuaApiClient | null = null;
   private enabled: boolean;
   private starting: Promise<void> | null = null;
+  private stopping: Promise<void> | null = null;
 
   constructor(enabled: boolean) {
     this.enabled = enabled;
@@ -60,6 +61,15 @@ export class LuaClientManager {
   async ensureClient(): Promise<void> {
     if (!this.enabled) {
       throw new Error('PoB Lua Bridge is not enabled. Set POB_LUA_ENABLED=true to use lua_* tools.');
+    }
+
+    // A stop is draining — join it before deciding anything. stopClient()
+    // awaits the quit handshake BEFORE clearing this.client, so without this
+    // a concurrent tool call saw the (already killing) client as healthy,
+    // returned it, and the stop then killed it mid-use — or worse, raced a
+    // fresh spawn against the kill.
+    if (this.stopping) {
+      await this.stopping.catch(() => {});
     }
 
     // A start is already in flight — join it instead of spawning a second process
@@ -162,14 +172,34 @@ export class LuaClientManager {
    * Stop the Lua client
    */
   async stopClient(): Promise<void> {
-    if (this.client) {
-      console.error('[Lua Bridge] Stopping client...');
-      try {
-        await this.client.stop();
-      } catch (error) {
-        console.error('[Lua Bridge] Error stopping client:', error);
+    if (this.stopping) {
+      return this.stopping;
+    }
+    // Reserve the stopping slot SYNCHRONOUSLY (the starting slot lesson): the
+    // quit handshake yields, and anything that races in must see the stop,
+    // not a live client. A start already in flight gets joined first — the
+    // bridge being spawned is then stopped, never orphaned.
+    const pending = (async () => {
+      if (this.starting) {
+        await this.starting.catch(() => {});
       }
-      this.client = null;
+      if (this.client) {
+        console.error('[Lua Bridge] Stopping client...');
+        try {
+          await this.client.stop();
+        } catch (error) {
+          console.error('[Lua Bridge] Error stopping client:', error);
+        }
+        this.client = null;
+      }
+    })();
+    this.stopping = pending;
+    try {
+      await pending;
+    } finally {
+      if (this.stopping === pending) {
+        this.stopping = null;
+      }
     }
   }
 
