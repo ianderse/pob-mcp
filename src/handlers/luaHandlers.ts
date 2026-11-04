@@ -883,12 +883,14 @@ export async function handleCreateSpec(context: LuaHandlerContext, title?: strin
     if (copyFrom != null) params.copyFrom = copyFrom;
     if (activate != null) params.activate = activate;
     const result = await luaClient.createSpec(params);
-    if (!result?.specs?.length) {
+    if (!result || !Array.isArray(result.specs)) {
       return { content: [{ type: "text" as const, text: "Failed to create spec." }] };
     }
     const newSpec = result.specs[result.specs.length - 1];
-    let text = `✅ Created new spec [${newSpec.index}] "${newSpec.title}" (${newSpec.className}/${newSpec.ascendClassName}, ${newSpec.nodeCount} nodes).`;
-    if (newSpec.active) text += '\nThis spec is now active.';
+    let text = newSpec
+      ? `✅ Created new spec [${newSpec.index}] "${newSpec.title}" (${newSpec.className}/${newSpec.ascendClassName}, ${newSpec.nodeCount} nodes).`
+      : `✅ Created new spec.`;
+    if (newSpec?.active) text += '\nThis spec is now active.';
     text += `\n\nTotal specs: ${result.specs.length}. Use list_specs to see all, select_spec to switch.`;
     return { content: [{ type: "text" as const, text }] };
   });
@@ -900,16 +902,17 @@ export async function handleListSpecs(context: LuaHandlerContext) {
   const luaClient = context.getLuaClient();
   if (!luaClient) throw new Error('Lua client not initialized');
   const result = await luaClient.listSpecs();
-  if (!result?.specs?.length) {
+  const specs = result?.specs ?? [];
+  if (specs.length === 0) {
     return { content: [{ type: "text" as const, text: `No specs found. Load a build first.` }] };
   }
-  const textLines: string[] = [`=== Passive Tree Specs (${result.specs.length} total) ===`, ''];
-  for (const s of result.specs) {
+  const textLines: string[] = [`=== Passive Tree Specs (${specs.length} total) ===`, ''];
+  for (const s of specs) {
     textLines.push(`${s.active ? '▶' : ' '} [${s.index}] ${s.title}`);
     textLines.push(`      Class: ${s.className || 'Unknown'} / ${s.ascendClassName || 'None'}`);
     textLines.push(`      Nodes: ${s.nodeCount}  |  Tree: ${s.treeVersion || 'Unknown'}`);
   }
-  textLines.push(`\nActive: Spec ${result.activeSpec}. Use select_spec to switch.`);
+  textLines.push(`\nActive: Spec ${result?.activeSpec}. Use select_spec to switch.`);
   const text = textLines.join('\n');
   return { content: [{ type: "text" as const, text }] };
   });
@@ -935,7 +938,7 @@ export async function handleDeleteSpec(context: LuaHandlerContext, index: number
     const luaClient = context.getLuaClient();
     if (!luaClient) throw new Error('Lua client not initialized');
     const result = await luaClient.deleteSpec(index);
-    if (!result?.specs?.length) {
+    if (!result || !Array.isArray(result.specs)) {
       return { content: [{ type: "text" as const, text: "Failed to delete spec." }] };
     }
     let text = `✅ Deleted spec ${index}. ${result.specs.length} spec(s) remaining.`;
@@ -950,7 +953,7 @@ export async function handleRenameSpec(context: LuaHandlerContext, index: number
     const luaClient = context.getLuaClient();
     if (!luaClient) throw new Error('Lua client not initialized');
     const result = await luaClient.renameSpec(index, title);
-    if (!result?.specs?.length) {
+    if (!result || !Array.isArray(result.specs)) {
       return { content: [{ type: "text" as const, text: "Failed to rename spec." }] };
     }
     const renamed = result.specs.find(s => s.index === index);
@@ -965,16 +968,17 @@ export async function handleListItemSets(context: LuaHandlerContext) {
   const luaClient = context.getLuaClient();
   if (!luaClient) throw new Error('Lua client not initialized');
   const result = await luaClient.listItemSets();
-  if (!result?.itemSets?.length) {
+  const sets = result?.itemSets ?? [];
+  if (sets.length === 0) {
     return { content: [{ type: "text" as const, text: "No item sets found. Load a build first." }] };
   }
-  const textLines: string[] = [`=== Item Sets (${result.itemSets.length} total) ===`, ''];
-  for (const s of result.itemSets) {
+  const textLines: string[] = [`=== Item Sets (${sets.length} total) ===`, ''];
+  for (const s of sets) {
     let line = `${s.active ? '▶' : ' '} [${s.id}] ${s.title}`;
     if (s.useSecondWeaponSet) line += ` (swap weapon set)`;
     textLines.push(line);
   }
-  textLines.push(`\nActive: Item Set ${result.activeItemSetId}. Use select_item_set to switch.`);
+  textLines.push(`\nActive: Item Set ${result?.activeItemSetId}. Use select_item_set to switch.`);
   const text = textLines.join('\n');
   return { content: [{ type: "text" as const, text }] };
   });
