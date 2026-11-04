@@ -237,7 +237,14 @@ const out = `// GENERATED FILE — do not edit by hand.
 // A diff here is usually a metadata key coming or going with a league mechanic;
 // see src/services/itemParser.ts.
 
-/** Path of Building version these tables were derived from. */
+/**
+ * Path of Building version these tables were derived from.
+ *
+ * Provenance for \`parseItem().formatVersion\` only — never a check subject.
+ * \`--check\` compares the data tables and deliberately ignores this line, so a
+ * developer on a different (compatible) PoB revision does not fail CI on the
+ * stamp alone. Run the generator to refresh it.
+ */
 export const POB_VERSION = ${JSON.stringify(version)};
 
 /** Metadata keys PoB recognises on a \`Key: value\` item line. */
@@ -283,15 +290,35 @@ export const TIMELESS_SEED_PHRASES: readonly string[] = ${lit(data.timelessSeedP
 `;
 
 if (checkOnly) {
+  // Compare behaviour-relevant bytes only. The header comment names the PoB
+  // revision it was generated against and POB_VERSION repeats it; both drift
+  // whenever anyone regenerates on a newer checkout, but the parser does not
+  // care which compatible revision produced identical tables. Flagging that
+  // made --check fail on any machine that was not at the recorded commit and
+  // pointed at "the item format has changed" — a misleading message for a
+  // byte-identical parser. Data out of date still fails, loudly.
+  const stripStamps = (text) =>
+    text
+      .split('\n')
+      .filter((line) => !line.startsWith('// src/Classes/Item.lua (PoB ')
+        && !line.startsWith('export const POB_VERSION = '))
+      .join('\n');
   const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, "utf-8") : "";
-  if (current !== out) {
+  if (stripStamps(current) !== stripStamps(out)) {
     console.error(
       "generate-item-format: src/data/itemFormat.generated.ts is out of date.\n" +
         "The PoB item format has changed. Run: node scripts/generate-item-format.mjs"
     );
     process.exit(1);
   }
-  console.log("generate-item-format: up to date.");
+  if (!current.includes(`// src/Classes/Item.lua (PoB ${version})`)) {
+    console.log(
+      `generate-item-format: data up to date; provenance stamp is stale (recorded vs PoB ${version}). ` +
+        `Run the generator to refresh it.`
+    );
+  } else {
+    console.log("generate-item-format: up to date.");
+  }
 } else {
   fs.writeFileSync(OUT, out);
   console.log(
