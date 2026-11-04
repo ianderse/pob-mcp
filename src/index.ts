@@ -40,7 +40,7 @@ import { LuaClientManager } from "./server/luaClientManager.js";
 import type { ToolSchema } from "./server/toolSchemas.js";
 import { getToolSchemas, getLuaToolSchemas, getOptimizationToolSchemas, getConfigToolSchemas, getValidationToolSchemas, getExportToolSchemas, getSkillGemToolSchemas, getTradeToolSchemas, getPoeNinjaToolSchemas, getBuildGoalsToolSchemas } from "./server/toolSchemas.js";
 import { routeToolCall, type ToolRouterDependencies } from "./server/toolRouter.js";
-import { wrapWithTruncation } from "./server/responseUtils.js";
+import { wrapWithTruncation, shouldTruncate } from "./server/responseUtils.js";
 
 class PoBMCPServer {
   private server: Server;
@@ -63,6 +63,26 @@ class PoBMCPServer {
 
   // Server modules
   private luaClientManager: LuaClientManager;
+
+  /**
+   * Every tool schema across all groups, regardless of runtime availability
+   * gating. Used for policy lookups (truncatable), never for advertising:
+   * what clients SEE is assembled per-state in the ListTools handler.
+   */
+  private allToolSchemas(): ToolSchema[] {
+    return [
+      ...getToolSchemas(),
+      ...getLuaToolSchemas(),
+      ...getOptimizationToolSchemas(),
+      ...getConfigToolSchemas(),
+      ...getValidationToolSchemas(),
+      ...getExportToolSchemas(),
+      ...getSkillGemToolSchemas(),
+      ...getTradeToolSchemas(),
+      ...getPoeNinjaToolSchemas(),
+      ...getBuildGoalsToolSchemas(),
+    ];
+  }
 
   constructor() {
     this.server = new Server(
@@ -252,7 +272,9 @@ class PoBMCPServer {
       // Add poe.ninja API tools (always available)
       tools.push(...getPoeNinjaToolSchemas());
 
-      return { tools };
+      // The truncatable flag is server-side policy, not part of the MCP wire
+      // contract - strip it from what clients see.
+      return { tools: tools.map(({ truncatable: _truncatable, ...wire }) => wire) };
     });
 
     // Handle tool calls
@@ -274,18 +296,11 @@ class PoBMCPServer {
         // Route the tool call
         const result = await routeToolCall(name, args, routerDeps);
 
-        // Apply truncation for specific tools that return large outputs
-        const truncatedTools = ['analyze_build', 'analyze_defenses', 'suggest_optimal_nodes',
-                                'optimize_tree', 'analyze_items', 'optimize_skill_links',
-                                'create_budget_build', 'search_trade_items', 'find_item_upgrades',
-                                'find_resistance_gear', 'compare_trade_items', 'search_cluster_jewels',
-                                'generate_shopping_list',
-                                // Additional tools that can produce large responses:
-                                'validate_build', 'get_passive_upgrades', 'analyze_skill_links',
-                                'suggest_support_gems', 'find_optimal_links', 'compare_gem_setups',
-                                'lua_get_stats', 'suggest_masteries'];
-
-        if (truncatedTools.includes(name)) {
+        // Apply truncation for tools that opt in via their schema flag
+        // (ToolSchema.truncatable). The old hand-maintained name list here
+        // rotted - five unbounded-output tools had silently fallen outside
+        // it, while new tools could never learn to opt in.
+        if (shouldTruncate(name, this.allToolSchemas())) {
           return wrapWithTruncation(result);
         }
 

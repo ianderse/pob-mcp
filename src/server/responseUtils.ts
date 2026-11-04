@@ -53,3 +53,15 @@ export function wrapWithTruncation(
   }
   return result;
 }
+
+/**
+ * Whether a tool's responses should be truncated, per its own schema flag.
+ * The flag lives with the tool definition (see ToolSchema.truncatable) so a
+ * new large-output tool cannot silently fall outside a hand-maintained list.
+ */
+export function shouldTruncate(
+  toolName: string,
+  tools: Array<{ name: string; truncatable?: boolean }>
+): boolean {
+  return tools.some((t) => t.name === toolName && t.truncatable === true);
+}
