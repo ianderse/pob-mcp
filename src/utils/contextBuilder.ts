@@ -72,6 +72,7 @@ export interface ExportContext {
   buildService: BuildService;
   exportService: BuildExportService;
   luaClient?: PoBLuaApiClient;
+  treeService: TreeService;
 }
 
 /**
@@ -199,6 +200,7 @@ export class ContextBuilder {
       buildService: this.deps.buildService,
       exportService: this.deps.exportService,
       luaClient: this.deps.getLuaClient() || undefined,
+      treeService: this.deps.treeService,
     };
   }
 

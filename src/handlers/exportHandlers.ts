@@ -270,9 +270,26 @@ export async function handleExportBuildSummary(context: ExportContext) {
     output += `**${mainGroup.label || 'Main'}:** ${gemNames.join(' + ')}\n\n`;
   }
 
-  // No keystone section: the bridge's get_tree returns node IDs only, never
-  // keystone names. Rendering one would require deriving names from the
-  // passive tree data (see TreeService), which this template does not do.
+  // Keystones: get_tree reports node IDs only, so names are derived from the
+  // same passive-tree data the tree tools use. Fetch/parse failures degrade
+  // like every other optional section here (omitted, logged) rather than
+  // failing the export.
+  try {
+    if (tree) {
+      // get_tree failing entirely means UNKNOWN, not 'no keystones' - only
+      // render when the tree state was actually retrieved.
+      const nodeIds = (tree.nodes ?? []).map((id) => String(id));
+      let keystoneNames: string[] = [];
+      if (nodeIds.length > 0) {
+        const treeData = await context.treeService.getTreeData(tree.treeVersion);
+        const { nodes } = await context.treeService.mapNodesToDetails(nodeIds, treeData);
+        keystoneNames = nodes.filter((n) => n.isKeystone).map((n) => n.name || `Node ${n.skill}`);
+      }
+      output += `## Keystones\n\n${keystoneNames.length > 0 ? keystoneNames.map((k) => `- ${k}`).join('\n') : '_None allocated_'}\n\n`;
+    }
+  } catch (e) {
+    noteIgnoredError("keystone derivation for export summary (section omitted)", e);
+  }
 
   output += `---\n_Generated with pob-mcp-server_\n`;
 
