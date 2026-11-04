@@ -783,7 +783,16 @@ function M.get_items()
     local vis = true
     if type(gate) == 'function' then
       local okGate, v = pcall(gate)
-      vis = (not okGate) or (v ~= false and v ~= nil)
+      if okGate then
+        vis = v ~= false and v ~= nil
+      else
+        -- A failing gate stays shown so analysis never loses data silently,
+        -- EXCEPT the version-flagged slots: their gates dereference calcs
+        -- state (Ring 3 reads mainEnv.modDB) that may not exist yet, and a
+        -- wrongly-shown Ring 3 is the exact false 'slot is empty' this
+        -- gate exists to prevent. For those three, unknown means hidden.
+        vis = not (slotName == 'Ring 3' or slotName == 'Graft 1' or slotName == 'Graft 2')
+      end
     elseif gate ~= nil then
       vis = gate ~= false
     end

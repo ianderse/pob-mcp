@@ -5,7 +5,7 @@
  */
 
 import type { PoBBuild } from '../types.js';
-import { activeItemSetOf, activeItemSlotsOf, itemTextMapOf } from '../utils/pobXml.js';
+import { activeItemSetOf, activeItemSlotsOf, activeSpecTreeVersion, itemTextMapOf } from '../utils/pobXml.js';
 import { isEquippableGearSlot, isGearSlotVisible } from '../itemAnalyzer.js';
 
 type UpgradePriority = 'critical' | 'high' | 'medium' | 'low';
@@ -127,9 +127,10 @@ export class ShoppingListService {
     // frozen name table: hard-coded 3.27-era lists silently dropped Ring 3 /
     // Graft slots and reported phantom empties for layouts a build lacks.
     // PoB's serializer writes EVERY slot into each ItemSet regardless of
-    // visibility, so hidden-for-this-build slots are gated out too (see
-    // isGearSlotVisible: no engine here, gate is XML-derivable only).
-    const treeVersion = build.Tree?.treeVersion;
+    // visibility, so hidden-for-this-build empties are gated out too; a slot
+    // holding an item is always data (see isGearSlotVisible: no engine here,
+    // gate is XML-derivable only; treeVersion lives on the active <Spec>).
+    const treeVersion = activeSpecTreeVersion(build);
     const slots: string[] = [];
     const seenSlots = new Set<string>();
     for (const slot of activeItemSlotsOf(build)) {
@@ -138,7 +139,8 @@ export class ShoppingListService {
       // flask slots keep their own handling elsewhere; sub-slot noise (Swap/
       // Abyssal/Jewel/Cluster) is filtered by the shared predicate
       if (/flask/i.test(name) || !isEquippableGearSlot(name) || seenSlots.has(name)) continue;
-      if (!isGearSlotVisible(name, { treeVersion })) continue;
+      const filled = Boolean(slot.itemId && slot.itemId !== '0');
+      if (!isGearSlotVisible(name, { treeVersion, filled })) continue;
       seenSlots.add(name);
       slots.push(name);
     }

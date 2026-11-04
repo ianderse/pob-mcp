@@ -50,3 +50,18 @@ export function itemTextMapOf(build: PoBBuild): Map<string, string> {
   }
   return map;
 }
+
+/**
+ * treeVersion of the ACTIVE tree spec. In PoB XML treeVersion is an attribute
+ * of <Spec>, NOT of <Tree> (PassiveSpec.lua writes it per spec). Selection
+ * mirrors BuildService.getActiveSpec: activeSpec is 1-based.
+ */
+export function activeSpecTreeVersion(build: PoBBuild): string | undefined {
+  const tree = build.Tree;
+  if (!tree?.Spec) return undefined;
+  const specs = asArray(tree.Spec);
+  if (specs.length === 0) return undefined;
+  const idx = parseInt(String(tree.activeSpec ?? "1"), 10) - 1;
+  const spec = Number.isFinite(idx) ? specs[idx] ?? specs[specs.length - 1] : specs[0];
+  return spec?.treeVersion;
+}

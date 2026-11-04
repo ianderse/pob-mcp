@@ -59,20 +59,33 @@ export function isEquippableGearSlot(slot: string): boolean {
  * additionally HIDES real slots a build cannot use: Ring 3 (gated on the
  * AdditionalRingSlot mod flag), Graft 1/2 (only on the 3_27 tree) and the
  * inactive weapon-set variants. get_items carries that gate as `shown`
- * (Control:IsShown parity) — pass it via `shown` when available.
+ * (Control:IsShown parity) — pass it via `shown` when available, and pass
+ * `filled` when the slot currently holds an item.
  *
- * XML-only callers (raw build file, no engine) pass `treeVersion` instead:
- * Grafts gate deterministically on the tree version, while Ring 3's gate is a
- * runtime mod flag invisible in raw XML — an unknown Ring 3 stays hidden so a
- * shopping list never demands a "critical" purchase for a slot that is mostly
- * not there. Unrecognised names default to visible, so any future PoB slot
- * degrades to the old behaviour rather than silently vanishing.
+ * Rules, in order:
+ * - Filled slots are always relevant: an item that exists is data, whatever
+ *   the UI gate says (hiding it would silently drop equipped gear).
+ * - Engine truth (shown) decides empties. Exception: base weapon slots with
+ *   shown=false only mean the active item set uses the swap set
+ *   (ItemsTab.lua L129-131); keeping them visible preserves the pre-existing
+ *   analysis behavior instead of introducing new silent gaps.
+ * - XML-only callers (raw build file, no engine; shown unknown) gate what is
+ *   derivable from the file: Grafts require a 3_27 tree — mirroring
+ *   ItemsTab.lua L148-150's treeVersion:find("3_27"); update alongside it if
+ *   upstream bumps the gate. Ring 3's gate is a runtime mod flag invisible in
+ *   raw XML, so an unknown empty Ring 3 stays hidden: a shopping list must
+ *   never demand a "critical" purchase for a slot that is mostly not there.
+ * Unrecognised names default to visible, so future PoB slots degrade to the
+ * old behaviour rather than silently vanishing.
  */
 export function isGearSlotVisible(
   slotName: string,
-  opts: { shown?: boolean; treeVersion?: string } = {},
+  opts: { shown?: boolean; treeVersion?: string; filled?: boolean } = {},
 ): boolean {
-  if (opts.shown !== undefined) return opts.shown;
+  if (opts.filled) return true;
+  if (opts.shown !== undefined) {
+    return opts.shown || /^weapon \d+$/i.test(slotName);
+  }
   if (/graft/i.test(slotName)) return (opts.treeVersion ?? '').includes('3_27');
   if (/^ring 3$/i.test(slotName)) return false;
   return true;
@@ -312,7 +325,9 @@ export function analyzeEquippedItems(
   const seenSlots = new Set<string>();
   for (const item of items) {
     if (!item.slot || !isEquippableGearSlot(item.slot) || seenSlots.has(item.slot)) continue;
-    if (!isGearSlotVisible(item.slot, { shown: item.shown })) continue;
+    const name = item.name?.trim();
+    const filled = Boolean((name && name !== '(empty)') || item.baseName?.trim());
+    if (!isGearSlotVisible(item.slot, { shown: item.shown, filled })) continue;
     seenSlots.add(item.slot);
   }
 

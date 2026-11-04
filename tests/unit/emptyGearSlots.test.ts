@@ -1,6 +1,7 @@
 import { describe, it, expect } from '@jest/globals';
 import { analyzeEquippedItems, isEquippableGearSlot } from '../../src/itemAnalyzer.js';
 import { handleGetBuildIssues } from '../../src/handlers/buildGoalsHandlers.js';
+import { handleAnalyzeItems } from '../../src/handlers/advancedOptimizationHandlers.js';
 
 // PoB's slot set is version-dependent (current ItemsTab baseSlots include
 // Ring 3 and Graft 1/2). Both equipment-slot consumers used to iterate a
@@ -73,6 +74,39 @@ describe('analyzeEquippedItems derives slots from the reported items', () => {
     const analyzed = hidden.slotAnalysis.map((s) => s.slot);
     expect(analyzed).toEqual(['Weapon 1']);
   });
+
+  it('never hides a slot that HOLDS an item, whatever the gate says', () => {
+    // An equipped item is data even if the UI gate hides its slot (or the
+    // gate info is stale/absent): hiding it silently drops equipped gear.
+    const held = analyzeEquippedItems(
+      [
+        { slot: 'Ring 3', name: 'Circle of Ambition', baseName: 'Ruby Ring', shown: false },
+        { slot: 'Graft 1', name: 'Some Graft', shown: false },
+      ],
+      'Scion', undefined, { life: 5000 },
+    );
+    const analyzed = held.slotAnalysis.map((s) => s.slot);
+    expect(analyzed).toContain('Ring 3');
+    expect(analyzed).toContain('Graft 1');
+  });
+
+  it('keeps empty base weapon slots shown when the swap set is active', () => {
+    // Weapon N with shown=false only means the active item set uses the swap
+    // set (ItemsTab L129-131). The Swap slot itself is filtered as a
+    // sub-slot, so hiding Weapon N would leave the build with no weapon
+    // analysis at all; the pre-gate behavior (analyze it) is kept.
+    const swapActive = analyzeEquippedItems(
+      [
+        { slot: 'Weapon 1', name: '', shown: false },
+        { slot: 'Weapon 2', name: '', shown: false },
+        { slot: 'Helmet', name: 'H', shown: true },
+      ],
+      'Scion', undefined, { life: 5000 },
+    );
+    const analyzed = swapActive.slotAnalysis.map((s) => s.slot);
+    expect(analyzed).toContain('Weapon 1');
+    expect(analyzed).toContain('Weapon 2');
+  });
 });
 
 describe('handleGetBuildIssues empty-slot detection is version-agnostic', () => {
@@ -141,5 +175,52 @@ describe('handleGetBuildIssues empty-slot detection is version-agnostic', () => 
     ]));
     const messages = res.issues.filter((i) => i.category === 'items').map((i) => i.message);
     expect(messages.some((m) => m.includes('slot is empty'))).toBe(false);
+  });
+});
+
+describe('handleAnalyzeItems passes the shown gate through to analysis', () => {
+  // The wave-49 delta review caught this handler re-mapping engine items
+  // WITHOUT shown, which silently dropped equipped Ring 3/Graft analysis
+  // (undefined shown fell into the XML-only hidden rule).
+  const context = (items: Array<Record<string, unknown>>) => ({
+    buildService: {},
+    pobDirectory: '',
+    ensureLuaClient: async () => {},
+    getLuaClient: () => ({
+      getItems: async () => items,
+      getStats: async () => ({
+        Life: 5000, EnergyShield: 0, Evasion: 1000, Armour: 1000, TotalDPS: 1_000_000,
+        FireResist: 75, ColdResist: 75, LightningResist: 75, ChaosResist: 75,
+      }),
+      getTree: async () => ({ classId: 0 }),
+    }),
+  }) as unknown as Parameters<typeof handleAnalyzeItems>[0];
+
+  const gear = (ring3: Record<string, unknown>) => [
+    { slot: 'Weapon 1', name: 'W', shown: true },
+    { slot: 'Helmet', name: 'H', shown: true },
+    ring3,
+  ];
+
+  it('analyzes an empty Ring 3 the build actually has (shown=true)', async () => {
+    const res = await handleAnalyzeItems(context(gear({ slot: 'Ring 3', name: '', shown: true })), undefined);
+    expect(res.content[0].text).toContain('**Ring 3**'); // empty gear = high priority, named
+  });
+
+  it('does not analyze a Ring 3 the engine says this build cannot use', async () => {
+    const res = await handleAnalyzeItems(context(gear({ slot: 'Ring 3', name: '', shown: false })), undefined);
+    expect(res.content[0].text).not.toContain('Ring 3');
+    expect(res.content[0].text).toContain('across 2 equipment slots'); // Weapon 1 + Helmet only
+  });
+
+  it('still analyzes an EQUIPPED Ring 3 even when shown is dropped upstream', async () => {
+    // filled beats an unknown gate everywhere, so a future mapping mistake
+    // can at worst hide empty speculative slots, never real gear. The slot
+    // is counted but not named (a good item raises no high-priority issue).
+    const res = await handleAnalyzeItems(
+      context(gear({ slot: 'Ring 3', name: 'Circle of Ambition', baseName: 'Ruby Ring' })),
+      undefined,
+    );
+    expect(res.content[0].text).toContain('across 3 equipment slots');
   });
 });

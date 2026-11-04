@@ -57,6 +57,7 @@ export async function handleAnalyzeItems(
           name: item.name,
           baseName: item.baseName,
           rarity: item.rarity,
+          shown: item.shown,
         }));
 
         // Get stats from Lua
@@ -100,10 +101,11 @@ export async function handleAnalyzeItems(
       const xmlSlots = activeItemSlotsOf(build);
       if (xmlSlots.length > 0) {
         items = xmlSlots.map((slot) => {
+          const filled = Boolean(slot.itemId && slot.itemId !== '0');
           const itemText = slot.Item || '';
           const lines = itemText.split('\n');
           const rarity = lines[0]?.includes('Rarity:') ? lines[0].split(':')[1]?.trim() : undefined;
-          const name = lines[1] || '(empty)';
+          const name = filled ? (lines[1] || '(empty)') : '';
 
           return {
             slot: slot.name || 'Unknown',

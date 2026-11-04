@@ -41,12 +41,13 @@ try {
   // node-delta scoring) compared candidates against a wrong base.
   // Runs on the repo-owned geared fixture: example-build.xml has too few
   // allocated nodes for a life delta to be guaranteed there.
-  await client.loadBuildXml(await readFile(gearedBuildXml, "utf8"), "truthfulness-smoke-geared");
+  await client.loadBuildXml(await readFile(gearedBuildXml, 'utf8'), 'truthfulness-smoke-geared');
   const baseline = await client.calcWith({});
   const allocatedForDrop = (await client.getTree()).nodes ?? [];
-  if (allocatedForDrop.length === 0) {
-    console.log('skip  calc_with override check (geared fixture has no allocated nodes)');
-  } else {
+  // The fixture is repo-owned, so an empty allocation list is fixture damage,
+  // not an environment condition worth skipping on.
+  check('geared fixture has allocated nodes', allocatedForDrop.length > 0, `got ${allocatedForDrop.length}`);
+  if (allocatedForDrop.length > 0) {
     const dropped = await client.calcWith({ removeNodes: allocatedForDrop });
     check(
       'calc_with applies removeNodes override',
