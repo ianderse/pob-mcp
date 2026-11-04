@@ -48,15 +48,6 @@ describe('ContextBuilder', () => {
     });
   });
 
-  describe('buildTreeContext', () => {
-    it('should return context with buildService, treeService, and validationService', () => {
-      const context = builder.buildTreeContext();
-
-      expect(context.buildService).toBe(mockBuildService);
-      expect(context.treeService).toBe(mockTreeService);
-      expect(context.validationService).toBe(mockValidationService);
-    });
-  });
 
   describe('buildLuaContext', () => {
     it('should return context with Lua configuration and methods', () => {

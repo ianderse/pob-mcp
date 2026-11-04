@@ -155,20 +155,6 @@ export class ContextBuilder {
   }
 
   /**
-   * Build context for tree operations (same as handler context currently)
-   */
-  buildTreeContext(): HandlerContext {
-    return {
-      buildService: this.deps.buildService,
-      treeService: this.deps.treeService,
-      validationService: this.deps.validationService,
-      pobDirectory: this.deps.pobDirectory,
-      getLuaClient: this.deps.getLuaClient,
-      ensureLuaClient: this.deps.ensureLuaClient,
-    };
-  }
-
-  /**
    * Build context for Lua operations
    */
   buildLuaContext(): LuaContext {

@@ -20,7 +20,6 @@ function makeDeps() {
   const contextBuilder = {
     buildHandlerContext: () => ({ buildService: { readBuild: async () => fakeBuild } }),
     buildWatchContext: () => ({}),
-    buildTreeContext: () => ({}),
     buildLuaContext: () => ({}),
     buildItemSkillContext: () => ({}),
     buildOptimizationContext: () => ({}),

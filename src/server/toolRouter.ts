@@ -67,7 +67,7 @@ export async function routeToolCall(
   // Create handler contexts using contextBuilder
   const handlerContext = deps.contextBuilder.buildHandlerContext();
   const watchContext = deps.contextBuilder.buildWatchContext();
-  const treeContext = deps.contextBuilder.buildTreeContext();
+  const treeContext = handlerContext; // tree ops need the same fields as handler context
   const luaContext = deps.contextBuilder.buildLuaContext();
   const itemSkillContext = deps.contextBuilder.buildItemSkillContext();
   const optimizationContext = deps.contextBuilder.buildOptimizationContext();
