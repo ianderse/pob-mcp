@@ -1,6 +1,7 @@
 import { toFiniteNumber, type PoBLuaApiClient } from "../pobLuaBridge.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { BuildService } from "../services/buildService.js";
+import { activeItemSlotsOf } from "../utils/pobXml.js";
 import {
   analyzeEquippedItems,
   formatItemAnalysis,
@@ -105,13 +106,12 @@ export async function handleAnalyzeItems(
       className = className || build.Build?.className;
       ascendClassName = build.Build?.ascendClassName;
 
-      // Extract items from XML
-      if (build.Items?.ItemSet?.Slot) {
-        const slots = Array.isArray(build.Items.ItemSet.Slot)
-          ? build.Items.ItemSet.Slot
-          : [build.Items.ItemSet.Slot];
-
-        items = slots.map((slot) => {
+      // Extract items from XML — via the shared active-set normalisation:
+      // ItemSet is an array whenever a build has >1 gear set, which the
+      // previous single-object read silently mishandled.
+      const xmlSlots = activeItemSlotsOf(build);
+      if (xmlSlots.length > 0) {
+        items = xmlSlots.map((slot) => {
           const itemText = slot.Item || '';
           const lines = itemText.split('\n');
           const rarity = lines[0]?.includes('Rarity:') ? lines[0].split(':')[1]?.trim() : undefined;

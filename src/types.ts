@@ -46,6 +46,54 @@ export interface PoBSkillSet {
   Skill?: PoBSkill | PoBSkill[];
 }
 
+/** One gear-set `<ItemSet>` element (both the single and array variants). */
+export interface PoBItemSet {
+  id?: string;
+  Slot?: PoBItemSetSlot | PoBItemSetSlot[];
+  SocketIdURL?: Array<{
+    nodeId?: string;
+    name?: string;
+    itemId?: string;
+    itemPbURL?: string;
+  }> | {
+    nodeId?: string;
+    name?: string;
+    itemId?: string;
+    itemPbURL?: string;
+  };
+}
+
+/** One `<Slot>` inside a gear set. */
+export interface PoBItemSetSlot {
+  name?: string;
+  Item?: string;
+  active?: string | boolean;
+  itemId?: string;
+}
+
+/** One top-level `<Item>` element: id attribute + raw PoB text body. */
+export interface PoBItemEntry {
+  id?: string;
+  '#text'?: string;
+}
+
+/** One tree <Spec> element (both the single and array variants share it). */
+export interface TreeSpec {
+  title?: string;
+  URL?: string;
+  nodes?: string;
+  treeVersion?: string;
+  Sockets?: {
+    Socket?: Array<{
+      nodeId?: string;
+      itemId?: string;
+    }> | {
+      nodeId?: string;
+      itemId?: string;
+    };
+  };
+}
+
 export interface PoBSkill {
   enabled?: string;
   slot?: string;
@@ -66,49 +114,16 @@ export interface PoBBuild {
   };
   Tree?: {
     activeSpec?: string;
-    Spec?: {
-      title?: string;
-      URL?: string;
-      nodes?: string;
-      treeVersion?: string;
-    } | Array<{
-      title?: string;
-      URL?: string;
-      nodes?: string;
-      treeVersion?: string;
-    }>;
+    Spec?: TreeSpec | TreeSpec[];
   };
   Skills?: {
     activeSkillSet?: string;
     SkillSet?: PoBSkillSet | PoBSkillSet[];
   };
   Items?: {
-    Item?: Array<{
-      id?: string;
-      '#text'?: string; // The actual item text content
-    }> | {
-      id?: string;
-      '#text'?: string;
-    };
-    ItemSet?: {
-      Slot?: Array<{
-        name?: string;
-        Item?: string;
-        active?: string | boolean;
-        itemId?: string;
-      }>;
-      SocketIdURL?: Array<{
-        nodeId?: string;
-        name?: string;
-        itemId?: string;
-        itemPbURL?: string;
-      }> | {
-        nodeId?: string;
-        name?: string;
-        itemId?: string;
-        itemPbURL?: string;
-      };
-    };
+    activeItemSet?: string;
+    Item?: PoBItemEntry | PoBItemEntry[];
+    ItemSet?: PoBItemSet | PoBItemSet[];
   };
   Notes?: string;
   Config?: {

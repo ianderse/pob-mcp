@@ -4,10 +4,46 @@
  * Generates prioritized shopping lists from PoB builds with price estimates
  */
 
-import { PoBBuild } from '../types.js';
+import type { PoBBuild } from '../types.js';
+import { activeItemSetOf, activeItemSlotsOf, itemTextMapOf } from '../utils/pobXml.js';
 
 type UpgradePriority = 'critical' | 'high' | 'medium' | 'low';
 export type BudgetTier = 'budget' | 'medium' | 'endgame';
+
+/** Result of this service's light-weight item-text extraction (not itemParser's richer ParsedItem). */
+interface WeaponProperties {
+  physicalDamageMin: number;
+  physicalDamageMax: number;
+  fireDamageMin: number;
+  fireDamageMax: number;
+  coldDamageMin: number;
+  coldDamageMax: number;
+  lightningDamageMin: number;
+  lightningDamageMax: number;
+  chaosDamageMin: number;
+  chaosDamageMax: number;
+  attacksPerSecond: number;
+}
+
+interface ParsedSlotItem {
+  rarity: string;
+  name: string;
+  baseType: string;
+  life: number;
+  es: number;
+  resistances: { fire: number; cold: number; lightning: number; chaos: number };
+  mods: string[];
+  issues: string[];
+  weapon: WeaponProperties;
+}
+
+/** Build-level stat summary derived from `<PlayerStat>` entries. */
+interface BuildStatSummary {
+  life: number;
+  es: number;
+  resistances: { fire: number; cold: number; lightning: number; chaos: number };
+  dps: number;
+}
 
 interface ShoppingListItem {
   slot: string;
@@ -135,35 +171,15 @@ export class ShoppingListService {
   /**
    * Extract equipped items from build
    */
-  private extractEquippedItems(build: PoBBuild): Record<string, any> {
-    const equipped: Record<string, any> = {};
+  private extractEquippedItems(build: PoBBuild): Record<string, ParsedSlotItem> {
+    const equipped: Record<string, ParsedSlotItem> = {};
 
-    const items = (build as any).Items;
-    if (!items || !items.ItemSet) return equipped;
-
-    // fast-xml-parser returns an ARRAY whenever a build has >1 gear set —
-    // that is almost always. Pick the active set, else the first.
-    const itemSetRaw = items.ItemSet;
-    const itemSets: any[] = Array.isArray(itemSetRaw) ? itemSetRaw : [itemSetRaw];
-    const activeSetId = String(items.activeItemSet ?? itemSets[0]?.id ?? '1');
-    const itemSet = itemSets.find((s: any) => String(s.id) === activeSetId) ?? itemSets[0];
+    const itemSet = activeItemSetOf(build);
     if (!itemSet?.Slot) return equipped;
 
-    // Build item map
-    const itemMap = new Map<string, string>();
-    if (items.Item) {
-      const itemList = Array.isArray(items.Item) ? items.Item : [items.Item];
-      for (const item of itemList) {
-        if (item.id && item['#text']) {
-          itemMap.set(item.id, item['#text']);
-        }
-      }
-    }
+    const itemMap = itemTextMapOf(build);
 
-    // Get slots
-    const slots = Array.isArray(itemSet.Slot) ? itemSet.Slot : [itemSet.Slot];
-
-    for (const slot of slots) {
+    for (const slot of activeItemSlotsOf(build)) {
       if (!slot.name || !slot.itemId) continue;
 
       const itemText = itemMap.get(slot.itemId);
@@ -201,9 +217,9 @@ export class ShoppingListService {
   /**
    * Parse item text from PoB format
    */
-  private parseItem(itemText: string): any {
+  private parseItem(itemText: string): ParsedSlotItem {
     const lines = itemText.split('\n');
-    const item: any = {
+    const item: ParsedSlotItem = {
       rarity: 'Unknown',
       name: '',
       baseType: '',
@@ -317,7 +333,7 @@ export class ShoppingListService {
   /**
    * Analyze build stats from PoB PlayerStat values
    */
-  private analyzeBuildStats(build: PoBBuild): any {
+  private analyzeBuildStats(build: PoBBuild): BuildStatSummary {
     const stats = {
       life: 0,
       es: 0,
@@ -366,7 +382,7 @@ export class ShoppingListService {
   /**
    * Calculate what the build needs
    */
-  private calculateBuildNeeds(buildStats: any): ShoppingList['buildNeeds'] {
+  private calculateBuildNeeds(buildStats: BuildStatSummary): ShoppingList['buildNeeds'] {
     // Target: 75% all res, 4500+ life or 6000+ ES
     const lifeTarget = 4500;
     const resTarget = 75;
@@ -389,7 +405,7 @@ export class ShoppingListService {
    */
   private async analyzeSlot(
     slot: string,
-    currentItem: any | undefined,
+    currentItem: ParsedSlotItem | undefined,
     buildNeeds: ShoppingList['buildNeeds']
   ): Promise<ShoppingListItem | null> {
     // Determine if slot needs upgrade
@@ -465,7 +481,7 @@ export class ShoppingListService {
    */
   private generateRecommendations(
     slot: string,
-    currentItem: any,
+    currentItem: ParsedSlotItem | undefined,
     buildNeeds: ShoppingList['buildNeeds']
   ): ShoppingListItem['recommendations'] {
     // Budget recommendation
@@ -501,7 +517,7 @@ export class ShoppingListService {
     slot: string,
     buildNeeds: ShoppingList['buildNeeds'],
     tier: BudgetTier,
-    currentItem?: any
+    currentItem?: ParsedSlotItem
   ): string[] {
     const stats: string[] = [];
 
@@ -568,7 +584,7 @@ export class ShoppingListService {
    */
   private estimateNetImpact(
     slot: string,
-    currentItem: any,
+    currentItem: ParsedSlotItem | undefined,
     buildNeeds: ShoppingList['buildNeeds']
   ): ShoppingListItem['estimatedImpact'] {
     const impact: ShoppingListItem['estimatedImpact'] = {};
@@ -638,7 +654,7 @@ export class ShoppingListService {
   /**
    * Extract weapon DPS from parsed item properties
    */
-  private extractWeaponDPS(item: any): number {
+  private extractWeaponDPS(item: ParsedSlotItem | undefined): number {
     if (!item || !item.weapon) return 0;
 
     const weapon = item.weapon;
