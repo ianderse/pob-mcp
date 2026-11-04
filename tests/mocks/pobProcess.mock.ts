@@ -1,5 +1,9 @@
 import { EventEmitter } from 'events';
+import { SpawnOptions } from 'child_process';
 import { MOCK_RESPONSES, MOCK_ERROR_RESPONSES } from './responses.mock.js';
+
+type MockResponse = Record<string, unknown> & { ok?: boolean; error?: string };
+interface MockRequest { action: string; params?: Record<string, unknown> }
 
 /**
  * Mock PoB Lua process that simulates stdio communication
@@ -11,8 +15,8 @@ export class MockPoBProcess extends EventEmitter {
   public killed = false;
   public exitCode: number | null = null;
 
-  private responses: Map<string, any>;
-  private pendingRequests: Array<{ action: string; params?: any }> = [];
+  private responses: Map<string, MockResponse>;
+  private pendingRequests: MockRequest[] = [];
 
   constructor() {
     super();
@@ -47,7 +51,7 @@ export class MockPoBProcess extends EventEmitter {
   /**
    * Process a request and send response
    */
-  private processRequest(request: { action: string; params?: any }) {
+  private processRequest(request: MockRequest) {
     const response = this.responses.get(request.action);
 
     if (response) {
@@ -74,12 +78,6 @@ export class MockPoBProcess extends EventEmitter {
     this.stderr.emit('data', data);
   }
 
-  /**
-   * Register a custom response for an action
-   */
-  registerResponse(action: string, response: any) {
-    this.responses.set(action, response);
-  }
 
   /**
    * Register an error response
@@ -88,12 +86,6 @@ export class MockPoBProcess extends EventEmitter {
     this.responses.set(action, MOCK_ERROR_RESPONSES[errorKey]);
   }
 
-  /**
-   * Clear all custom responses (reset to defaults)
-   */
-  resetResponses() {
-    this.responses = new Map(Object.entries(MOCK_RESPONSES));
-  }
 
   /**
    * Simulate process exit
@@ -129,41 +121,19 @@ export class MockPoBProcess extends EventEmitter {
   }
 
   /**
-   * Simulate slow response
-   */
-  simulateSlowResponse(action: string, delayMs: number) {
-    const originalResponse = this.responses.get(action);
-    const slowResponse = () => {
-      setTimeout(() => {
-        if (originalResponse) {
-          this.sendToStdout(JSON.stringify(originalResponse) + '\n');
-        }
-      }, delayMs);
-    };
-    // Store function to call later
-    (this.responses as any).set(action, { _slow: true, _delay: delayMs, _response: originalResponse });
-  }
-
-  /**
    * Get last request made to the process
    */
-  getLastRequest(): { action: string; params?: any } | undefined {
+  getLastRequest(): MockRequest | undefined {
     return this.pendingRequests[this.pendingRequests.length - 1];
   }
 
   /**
    * Get all requests made
    */
-  getAllRequests(): Array<{ action: string; params?: any }> {
+  getAllRequests(): MockRequest[] {
     return [...this.pendingRequests];
   }
 
-  /**
-   * Clear request history
-   */
-  clearRequests() {
-    this.pendingRequests = [];
-  }
 }
 
 /**
@@ -188,7 +158,7 @@ class MockStream extends EventEmitter {
 export function createMockSpawn() {
   let lastProcess: MockPoBProcess | null = null;
 
-  const mockSpawn = jest.fn().mockImplementation((cmd: string, args: string[], options: any) => {
+  const mockSpawn = jest.fn().mockImplementation((cmd: string, args: string[], options: SpawnOptions) => {
     const process = new MockPoBProcess();
     lastProcess = process;
 
@@ -205,19 +175,6 @@ export function createMockSpawn() {
 
   // Helper to get the last created process
   mockSpawn.getLastProcess = () => lastProcess;
-
-  return mockSpawn;
-}
-
-/**
- * Helper to setup child_process mock for tests
- */
-export function setupChildProcessMock() {
-  const mockSpawn = createMockSpawn();
-
-  jest.mock('child_process', () => ({
-    spawn: mockSpawn,
-  }));
 
   return mockSpawn;
 }

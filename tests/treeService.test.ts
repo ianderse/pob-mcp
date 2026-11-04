@@ -1,7 +1,7 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { TreeService } from '../src/services/treeService';
 import { BuildService } from '../src/services/buildService';
-import type { PassiveTreeNode, PassiveTreeData, PoBBuild } from '../src/types';
+import type { PassiveTreeNode, PassiveTreeData, PoBBuild, TreeDataCache } from '../src/types';
 
 // Mock BuildService
 jest.mock('../src/services/buildService');
@@ -9,6 +9,9 @@ jest.mock('../src/services/buildService');
 describe('TreeService', () => {
   let treeService: TreeService;
   let mockBuildService: jest.Mocked<BuildService>;
+
+  // Tests that manipulate the private version cache (refresh/staleness).
+  const cache = () => (treeService as unknown as { treeDataCache: Map<string, TreeDataCache> }).treeDataCache;
 
   beforeEach(() => {
     mockBuildService = new BuildService('/test/pob') as jest.Mocked<BuildService>;
@@ -331,24 +334,21 @@ describe('TreeService', () => {
         nodes: new Map(),
         version: '3_26',
       };
-      (treeService as any).treeDataCache.set('3_26', {
-        data: treeData,
-        timestamp: Date.now(),
-      });
+      cache().set('3_26', { data: treeData, timestamp: Date.now() });
 
       await treeService.refreshTreeData('3_26');
 
-      expect((treeService as any).treeDataCache.has('3_26')).toBe(false);
+      expect(cache().has('3_26')).toBe(false);
     });
 
     it('should clear all versions when no version specified', async () => {
       // Add multiple versions
-      (treeService as any).treeDataCache.set('3_25', { data: {}, timestamp: Date.now() });
-      (treeService as any).treeDataCache.set('3_26', { data: {}, timestamp: Date.now() });
+      cache().set('3_25', { data: {} as PassiveTreeData, timestamp: Date.now() });
+      cache().set('3_26', { data: {} as PassiveTreeData, timestamp: Date.now() });
 
       await treeService.refreshTreeData();
 
-      expect((treeService as any).treeDataCache.size).toBe(0);
+      expect(cache().size).toBe(0);
     });
   });
 

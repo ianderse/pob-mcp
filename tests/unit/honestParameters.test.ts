@@ -1,13 +1,20 @@
 import { describe, it, expect } from '@jest/globals';
 import { handleFindItemUpgrades } from '../../src/handlers/itemShoppingHandler.js';
 import { handleOptimizeTree } from '../../src/handlers/optimizationHandlers.js';
+import type { PoBLuaApiClient } from '../../src/pobLuaBridge.js';
+import type { StatsExport } from '../../src/pobLuaBridge.js';
+
+type ShoppingContext = Parameters<typeof handleFindItemUpgrades>[0];
+type OptContext = Parameters<typeof handleOptimizeTree>[0];
+/** Partial bridge stand-in; handlers only touch the methods each fixture stubs. */
+const stubClient = (impl: Partial<PoBLuaApiClient>) => impl as PoBLuaApiClient;
 
 // Two honesty regressions: placeholders must not masquerade as analysis,
 // and declared constraints must actually shape (or be honestly reported on)
 // the result.
 
 describe('handleFindItemUpgrades without a Lua bridge', () => {
-  const context = { getLuaClient: () => null } as any;
+  const context: ShoppingContext = { getLuaClient: () => null };
 
   it('discloses that build stats are unavailable instead of inventing gaps', async () => {
     const result = await handleFindItemUpgrades(context, { slot: 'Helmet' });
@@ -23,13 +30,13 @@ describe('handleFindItemUpgrades without a Lua bridge', () => {
   });
 
   it('runs the real gap analysis when a bridge is present', async () => {
-    const bridged = {
-      getLuaClient: () => ({
+    const bridged: ShoppingContext = {
+      getLuaClient: () => stubClient({
         getBuildInfo: async () => ({ name: 'Test', className: 'Witch', ascendClassName: 'Occultist' }),
-        getStats: async () => ({ Life: 3000, EnergyShield: 200, FireResist: 50, ColdResist: 75, LightningResist: 75, ChaosResist: 30 }),
+        getStats: async (): Promise<StatsExport> => ({ Life: 3000, EnergyShield: 200, FireResist: 50, ColdResist: 75, LightningResist: 75, ChaosResist: 30 }),
         getItems: async () => [],
       }),
-    } as any;
+    };
     const result = await handleFindItemUpgrades(bridged, { slot: 'Helmet' });
     const text = result.content[0].text;
 
@@ -46,24 +53,24 @@ describe('handleOptimizeTree constraints', () => {
     { nodeId: 333, node: { name: 'Notable B', isNotable: true, stats: [] } },
   ];
 
-  const context = () => ({
+  const context = (): OptContext => ({
     buildService: {
       readBuild: async () => { throw new Error('not on disk'); },
       parseAllocatedNodes: () => [],
       extractBuildVersion: () => '3_26',
-    },
+    } as unknown as OptContext['buildService'],
     treeService: {
-      getTreeData: async () => ({ nodes: {} }),
+      getTreeData: async () => ({ nodes: new Map() }),
       findNearbyNodes: () => nearby,
-    },
+    } as unknown as OptContext['treeService'],
     pobDirectory: '/nonexistent',
-    getLuaClient: () => ({
-      loadBuildXml: async () => {},
-      getStats: async () => ({ Life: 2800, EnergyShield: 500, TotalDPS: 9000, FireResist: 75, ColdResist: 75, LightningResist: 75 }),
-      getTree: async () => ({ nodes: [1, 2, 3], ascendancyPointsUsed: 0 }),
+    getLuaClient: () => stubClient({
+      loadBuildXml: async () => ({ ok: true }),
+      getStats: async (): Promise<StatsExport> => ({ Life: 2800, EnergyShield: 500, TotalDPS: 9000, FireResist: 75, ColdResist: 75, LightningResist: 75 }),
+      getTree: async () => ({ nodes: [1, 2, 3], ascendancyPointsUsed: 0, classId: 0, ascendClassId: 0, secondaryAscendClassId: 0, masteryEffects: {}, treeVersion: '3_26' }),
     }),
     ensureLuaClient: async () => {},
-  }) as any;
+  });
 
   it('excludes protected nodes from recommendations', async () => {
     const result = await handleOptimizeTree(

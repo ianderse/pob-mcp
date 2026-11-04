@@ -156,21 +156,9 @@ export const MOCK_ERROR_RESPONSES = {
     ok: false,
     error: 'Failed to parse XML',
   },
-  invalid_node: {
-    ok: false,
-    error: 'Invalid node ID',
-  },
   build_not_initialized: {
     ok: false,
     error: 'build not initialized',
-  },
-  invalid_params: {
-    ok: false,
-    error: 'invalid params',
-  },
-  invalid_level: {
-    ok: false,
-    error: 'invalid level',
   },
 };
 
