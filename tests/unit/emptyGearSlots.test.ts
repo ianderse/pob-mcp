@@ -1,4 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
+import { XMLParser } from 'fast-xml-parser';
 import { analyzeEquippedItems, isEquippableGearSlot } from '../../src/itemAnalyzer.js';
 import { handleGetBuildIssues } from '../../src/handlers/buildGoalsHandlers.js';
 import { handleAnalyzeItems } from '../../src/handlers/advancedOptimizationHandlers.js';
@@ -222,5 +223,66 @@ describe('handleAnalyzeItems passes the shown gate through to analysis', () => {
       undefined,
     );
     expect(res.content[0].text).toContain('across 3 equipment slots');
+  });
+});
+
+describe('handleAnalyzeItems XML fallback joins items by itemId', () => {
+  // <Slot> elements carry no item text - the bodies live in Items/Item. The
+  // pre-fix fallback read slot.Item (always empty) and mislabeled every
+  // equipped slot as "Slot is empty" while the analyzer's filled rule hid
+  // equipped version-gated slots (delta review N1).
+  const parse = (xml: string) =>
+    (new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '' }).parse(xml).PoB.PathOfBuilding) as never;
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<PoB version="2.8.0">
+<PathOfBuilding>
+<Build level="100" className="Chieftain"/>
+<Tree activeSpec="1">
+<Spec title="Main" treeVersion="3_13"/>
+</Tree>
+<Items activeItemSet="1">
+<Item id="5">
+Item Class: Weapons
+Rarity: UNIQUE
+Doombringer
+6-Link Corrupted Staff
+</Item>
+<Item id="7">
+Item Class: Belts
+Rarity: UNIQUE
+Kaom's Sign
+Simple Belt
+</Item>
+<Item id="9">
+Item Class: Rings
+Rarity: Rare
+Circle of Ambition
+Ruby Ring
+</Item>
+<ItemSet id="1" title="Set 1">
+<Slot name="Weapon 1" itemId="5"/>
+<Slot name="Helmet" itemId="0"/>
+<Slot name="Ring 3" itemId="9"/>
+<Slot name="Graft 1" itemId="0"/>
+</ItemSet>
+</Items>
+</PathOfBuilding>
+</PoB>`;
+
+  const fallbackContext = {
+    buildService: { readBuild: async () => parse(xml) },
+    pobDirectory: '',
+    ensureLuaClient: async () => { throw new Error('no engine'); },
+    getLuaClient: () => null,
+  } as unknown as Parameters<typeof handleAnalyzeItems>[0];
+
+  it('names equipped items, flags the visible empty, hides the pre-3_27 graft empty', async () => {
+    const res = await handleAnalyzeItems(fallbackContext, 'some-build');
+    const text = res.content[0].text;
+    expect(text).toContain('Current: Circle of Ambition'); // item bodies joined by itemId
+    expect(text).toContain('**Helmet**');           // empty + real slot -> named high priority
+    expect(text).toContain('across 3 equipment slots'); // Weapon1 + Helmet + filled Ring 3
+    expect(text).not.toContain('Graft 1');          // empty graft on a 3_13 tree: hidden, not flagged
   });
 });

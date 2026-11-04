@@ -1,7 +1,7 @@
 import { toFiniteNumber, type PoBLuaApiClient } from "../pobLuaBridge.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { BuildService } from "../services/buildService.js";
-import { activeItemSlotsOf } from "../utils/pobXml.js";
+import { activeItemSlotsOf, itemTextMapOf } from "../utils/pobXml.js";
 import {
   analyzeEquippedItems,
   formatItemAnalysis,
@@ -100,12 +100,18 @@ export async function handleAnalyzeItems(
       // previous single-object read silently mishandled.
       const xmlSlots = activeItemSlotsOf(build);
       if (xmlSlots.length > 0) {
+        // Slot elements carry no item text - the bodies live in Items/Item,
+        // joined by itemId (same lookup ShoppingListService uses). No engine
+        // here, so hidden-empty gating relies on treeVersion alone; an empty
+        // Graft/Ring 3 that the engine WOULD hide is simply not flagged in
+        // this fallback path (better silence than false demands).
+        const itemTexts = itemTextMapOf(build);
         items = xmlSlots.map((slot) => {
           const filled = Boolean(slot.itemId && slot.itemId !== '0');
-          const itemText = slot.Item || '';
+          const itemText = filled ? itemTexts.get(String(slot.itemId)) ?? '' : '';
           const lines = itemText.split('\n');
           const rarity = lines[0]?.includes('Rarity:') ? lines[0].split(':')[1]?.trim() : undefined;
-          const name = filled ? (lines[1] || '(empty)') : '';
+          const name = lines.find((l) => l.trim() !== '' && !/^(Item Class|Rarity):/.test(l.trim()))?.trim() ?? '';
 
           return {
             slot: slot.name || 'Unknown',

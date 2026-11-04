@@ -150,7 +150,7 @@ function analyzeItemSlot(
     priority: 'low',
   };
 
-  if (!item || !item.name || item.name === '(empty)') {
+  if (!item || !item.name) {
     analysis.issues.push('Slot is empty');
     analysis.priority = 'high';
     analysis.suggestions.push(`Equip a ${slot.toLowerCase()} to gain defensive stats and offensive bonuses`);
@@ -326,7 +326,7 @@ export function analyzeEquippedItems(
   for (const item of items) {
     if (!item.slot || !isEquippableGearSlot(item.slot) || seenSlots.has(item.slot)) continue;
     const name = item.name?.trim();
-    const filled = Boolean((name && name !== '(empty)') || item.baseName?.trim());
+    const filled = Boolean(name || item.baseName?.trim());
     if (!isGearSlotVisible(item.slot, { shown: item.shown, filled })) continue;
     seenSlots.add(item.slot);
   }
