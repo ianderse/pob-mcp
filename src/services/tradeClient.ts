@@ -9,6 +9,9 @@ import {
   ItemListing,
 } from '../types/tradeTypes.js';
 
+/** 4xx or 429: retrying the identical request will not fix it. */
+class FinalApiError extends Error {}
+
 /**
  * Client for interacting with the Path of Exile Trade API
  *
@@ -28,13 +31,23 @@ export class TradeApiClient {
   private readonly cache = new Map<string, CacheEntry<unknown>>();
   private readonly defaultCacheTTL: number;
   private rateLimitInfo: RateLimitInfo | null = null;
+  // Transient failures (connection reset, timeout, 5xx) are retried with
+  // exponential backoff. 429 is NOT retried here: the limiter hook honours
+  // the server's Retry-After instead. Search POSTs are cheap and idempotent
+  // in effect (a duplicate search costs one query, listings are read-only).
+  private readonly retryMaxAttempts: number;
+  private readonly retryBaseDelayMs: number;
 
   constructor(options?: {
     requestsPerSecond?: number;
     cacheTTL?: number;
+    maxRetries?: number;
+    retryBaseDelayMs?: number;
   }) {
     const requestsPerSecond = options?.requestsPerSecond || 4;
     this.defaultCacheTTL = (options?.cacheTTL || 300) * 1000; // Convert to ms
+    this.retryMaxAttempts = 1 + Math.max(0, options?.maxRetries ?? 2);
+    this.retryBaseDelayMs = options?.retryBaseDelayMs ?? 500;
 
     // Create rate limiter using token bucket algorithm
     this.limiter = new Bottleneck({
@@ -153,37 +166,58 @@ export class TradeApiClient {
         // The official Trade API rejects anonymous weighted-sum searches
         ...(process.env.POE_SESSION_ID ? { Cookie: `POESESSID=${process.env.POE_SESSION_ID}` } : {}),
       },
-      // No timeout here once let a single stalled connection block the
-      // whole queue (the limiter runs at maxConcurrent 1).
-      signal: AbortSignal.timeout(30_000),
+      // The 30s timeout lives on the per-attempt signal: without one, a
+      // stalled connection blocked the whole queue (limiter maxConcurrent 1).
     };
 
     if (body) {
       options.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, options);
+    for (let attempt = 1; ; attempt++) {
+      try {
+        // Fresh timeout per attempt: an AbortSignal.timeout fires once, and a
+        // reused (expired) signal would fail every retry instantly.
+        options.signal = AbortSignal.timeout(30_000);
+        const response = await fetch(url, options);
 
-    // Parse rate limit headers
-    this.updateRateLimitInfo(response);
+        // Parse rate limit headers
+        this.updateRateLimitInfo(response);
 
-    // Handle rate limiting
-    if (response.status === 429) {
-      const retryAfter = parseInt(response.headers.get('Retry-After') || '5', 10) * 1000;
-      this.rateLimitInfo = {
-        limit: this.rateLimitInfo?.limit || 0,
-        remaining: 0,
-        retryAfter,
-      };
-      throw new Error(`Rate limited. Retry after ${retryAfter}ms`);
+        // Handle rate limiting
+        if (response.status === 429) {
+          const retryAfter = parseInt(response.headers.get('Retry-After') || '5', 10) * 1000;
+          this.rateLimitInfo = {
+            limit: this.rateLimitInfo?.limit || 0,
+            remaining: 0,
+            retryAfter,
+          };
+          throw new FinalApiError(`Rate limited. Retry after ${retryAfter}ms`);
+        }
+
+        if (response.status >= 500) {
+          // Cloudflare/origin flakes on the trade API are common; worth another attempt.
+          const errorText = await response.text();
+          throw new Error(`Trade API request failed (${response.status}): ${errorText}`);
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new FinalApiError(`Trade API request failed (${response.status}): ${errorText}`);
+        }
+
+        return await response.json() as T;
+      } catch (error) {
+        // Network/timeout rejections (fetch throws TypeError/TimeoutError) and
+        // 5xx arrive here as retryable; 4xx/429 are FinalApiError.
+        if (error instanceof FinalApiError || attempt >= this.retryMaxAttempts) {
+          throw error;
+        }
+        const delayMs = this.retryBaseDelayMs * 2 ** (attempt - 1);
+        console.error(`[TradeAPI] transient failure (${error instanceof Error ? error.message : String(error)}), retrying in ${delayMs}ms (attempt ${attempt}/${this.retryMaxAttempts})`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
     }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Trade API request failed (${response.status}): ${errorText}`);
-    }
-
-    return response.json();
   }
 
   private updateRateLimitInfo(response: Response): void {

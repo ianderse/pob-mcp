@@ -1,4 +1,4 @@
-import { describe, it, expect, jest } from '@jest/globals';
+import { describe, it, expect, jest, afterEach } from '@jest/globals';
 import { TradeApiClient } from '../../src/services/tradeClient';
 
 interface MakeRequestShim {
@@ -80,5 +80,73 @@ describe('TradeApiClient response cache bounds', () => {
     // eviction victim; with it, the two pushes evict k0/k1 instead.
     expect(internals.getFromCache<string>('hot')).toBe('value');
     expect(shim.cache.has('k0')).toBe(false);
+  });
+});
+
+describe('TradeApiClient transient retry (exponential backoff)', () => {
+  const okResponse = (payload: unknown) =>
+    new Response(JSON.stringify(payload), { status: 200 });
+
+  const fastClient = (opts?: { maxRetries?: number }) =>
+    new TradeApiClient({ requestsPerSecond: 1000, retryBaseDelayMs: 1, ...opts });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('retries a connection failure and succeeds on the next attempt', async () => {
+    const client = fastClient();
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } }))
+      .mockResolvedValueOnce(okResponse({ result: [] }));
+
+    await expect(client.getLeagues()).resolves.toBeDefined();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries 5xx responses (Cloudflare flakes) until success', async () => {
+    const client = fastClient();
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('Bad Gateway', { status: 502 }))
+      .mockResolvedValueOnce(okResponse({ result: [] }));
+
+    await expect(client.getLeagues()).resolves.toBeDefined();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up after maxRetries and surfaces the 5xx error', async () => {
+    const client = fastClient({ maxRetries: 2 });
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response('down', { status: 500 }));
+
+    await expect(client.getLeagues()).rejects.toThrow(/500/);
+    expect(fetchSpy).toHaveBeenCalledTimes(3); // 1 + 2 retries
+  });
+
+  it('does NOT retry a 400 — the same bad query will fail again', async () => {
+    const client = fastClient();
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('bad query', { status: 400 }));
+
+    await expect(client.getLeagues()).rejects.toThrow(/400/);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('backs off exponentially between attempts', async () => {
+    const client = new TradeApiClient({ requestsPerSecond: 1000, retryBaseDelayMs: 20 });
+    jest.spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(okResponse({ result: [] }));
+
+    const started = Date.now();
+    await client.getLeagues();
+    const elapsed = Date.now() - started;
+    // base*2^0 + base*2^1 = 60ms minimum for two retries at base 20
+    expect(elapsed).toBeGreaterThanOrEqual(55);
   });
 });
