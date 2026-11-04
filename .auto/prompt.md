@@ -118,3 +118,13 @@ PoB HIDES per-build (Ring 3 behind AdditionalRingSlot, pre-3_27 Grafts; serializ
 all slots regardless). Both fixed with live fail-before/pass-after; get_items now carries
 PoB's own Control:IsShown gate. 486 tests, debt 0 holds. Meta-lesson: existence-of-number
 assertions cannot prove a simulation applied its override — always assert the delta moves.
+
+Wave 50 (post-delta-review): the wave-49 gate itself failed re-review — treeVersion is a
+<Spec> attribute (the Tree-level read was dead on every real parsed build; hand-shaped
+fixtures can't catch parser-shape mistakes: parse real XML in tests), and handleAnalyzeItems
+dropped `shown` when mapping engine items (equipped Ring 3/Graft analysis regression —
+handler-level tests now pin pass-through). Hardened policy: filled slots are never hidden;
+swap-set Weapon N keeps analysis; Lua gate errors fail conservative only for version-flagged
+slots. 493 tests, debt 0. Meta-lesson: a new mechanism needs its delta reviewed against
+EVERY callsite — unit tests feeding the mechanism's happy shape (shown:false literals)
+coexisted with the main caller dropping the field entirely.
