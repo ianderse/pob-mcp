@@ -50,7 +50,7 @@ export async function handleValidateBuild(
           } catch (e) { noteIgnoredError("no build loaded — safe to load", e); }
 
           if (!otherBuildInMemory) {
-            await luaClient.loadBuildXml(namedBuildXml, buildName, resolveBuildFile(buildName, context.pobDirectory!));
+            await luaClient.loadBuildXml(namedBuildXml, buildName, context.pobDirectory ? resolveBuildFile(buildName, context.pobDirectory) : undefined);
           }
         }
         // A different in-memory build is never replaced, to protect unsaved work,
@@ -130,7 +130,7 @@ export async function handleValidateBuild(
     formattedOutput = validationService.formatValidation(validation);
   } else {
     // Lua-stats-only validation (in-memory build, no file)
-    formattedOutput = formatLuaOnlyValidation(luaStats!);
+    formattedOutput = formatLuaOnlyValidation(luaStats ?? {});
   }
 
   return {

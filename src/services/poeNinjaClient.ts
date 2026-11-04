@@ -196,8 +196,8 @@ export class PoeNinjaClient {
 
     const raw = (await response.json()) as Partial<CurrencyOverview> | null;
     const data: CurrencyOverview = {
-      lines: Array.isArray(raw?.lines) ? raw!.lines : [],
-      currencyDetails: Array.isArray(raw?.currencyDetails) ? raw!.currencyDetails : [],
+      lines: Array.isArray(raw?.lines) ? raw.lines : [],
+      currencyDetails: Array.isArray(raw?.currencyDetails) ? raw.currencyDetails : [],
     };
     this.putInCache(cacheKey, data);
     return data;
@@ -221,14 +221,13 @@ export class PoeNinjaClient {
     const overview = await this.getCurrencyRatesWithSpread(league);
     const opportunities: ArbitrageOpportunity[] = [];
 
-    // Build separate buy-rate and sell-rate maps (all in chaos per unit).
-    // sell = chaos you receive per unit when selling
-    // buy  = chaos you pay per unit when buying
-    const sellRate = new Map<string, number>(); // chaos received when selling 1 unit
-    const buyRate  = new Map<string, number>(); // chaos spent when buying  1 unit
+    // One entry per currency holding BOTH sides, so every downstream lookup is
+    // total — no Map.get with a guaranteed-presence assertion. sell = chaos
+    // received when selling 1 unit; buy = chaos spent when buying 1 unit.
+    type Pair = { sell: number; buy: number };
+    const rates = new Map<string, Pair>();
 
-    sellRate.set('Chaos Orb', 1.0);
-    buyRate.set('Chaos Orb', 1.0);
+    rates.set('Chaos Orb', { sell: 1.0, buy: 1.0 });
 
     for (const line of overview.lines) {
       const name = line.currencyTypeName;
@@ -241,32 +240,27 @@ export class PoeNinjaClient {
       const pay = line.pay?.value;
 
       if (sell != null && sell > 0 && pay != null && pay > 0) {
-        sellRate.set(name, sell);
-        buyRate.set(name, 1 / pay);
+        rates.set(name, { sell, buy: 1 / pay });
       }
     }
 
     // Only Chaos Orb present means no line carried pay/receive data. Returning
     // an empty list here would falsely read as "no arbitrage opportunities".
-    if (sellRate.size <= 1) {
+    if (rates.size <= 1) {
       throw new Error(
         `poe.ninja spread data (pay/receive rates) unavailable for league "${league}" — cannot compute arbitrage opportunities`
       );
     }
 
-    const currencies = Array.from(sellRate.keys());
+    const currencies = Array.from(rates.entries()); // [name, {sell,buy}] — total access, no get()
 
     // 2-step: A → chaos → B → chaos → A
     for (let i = 0; i < currencies.length; i++) {
-      const A = currencies[i];
-      const sA = sellRate.get(A)!;
-      const bA = buyRate.get(A)!;
+      const [A, { sell: sA, buy: bA }] = currencies[i];
 
       for (let j = 0; j < currencies.length; j++) {
         if (i === j) continue;
-        const B = currencies[j];
-        const sB = sellRate.get(B)!;
-        const bB = buyRate.get(B)!;
+        const [B, { sell: sB, buy: bB }] = currencies[j];
 
         // Sell A → chaos, buy B, sell B → chaos, buy A back
         const chaosAfterSellA = sA;               // sell 1 A
@@ -295,21 +289,15 @@ export class PoeNinjaClient {
     // 3-step: A → chaos → B → chaos → C → chaos → A (limit iterations for performance)
     const limit = Math.min(currencies.length, 20);
     for (let i = 0; i < limit; i++) {
-      const A = currencies[i];
-      const sA = sellRate.get(A)!;
-      const bA = buyRate.get(A)!;
+      const [A, { sell: sA, buy: bA }] = currencies[i];
 
       for (let j = 0; j < limit; j++) {
         if (j === i) continue;
-        const B = currencies[j];
-        const sB = sellRate.get(B)!;
-        const bB = buyRate.get(B)!;
+        const [B, { sell: sB, buy: bB }] = currencies[j];
 
         for (let k = 0; k < limit; k++) {
           if (k === i || k === j) continue;
-          const C = currencies[k];
-          const sC = sellRate.get(C)!;
-          const bC = buyRate.get(C)!;
+          const [C, { sell: sC, buy: bC }] = currencies[k];
 
           const chaosA  = sA;
           const unitsB  = chaosA  / bB;

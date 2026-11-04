@@ -396,7 +396,7 @@ export function parseItem(text: string): ParsedItem {
     const line = lines[i];
     if (line === "--------") continue;
     if (STANDALONE_FLAG_MAP.has(line)) {
-      item.itemFlags.push(STANDALONE_FLAG_MAP.get(line)!);
+      item.itemFlags.push(STANDALONE_FLAG_MAP.get(line) ?? line);
       continue;
     }
     const m = line.match(SPEC_LINE) ?? line.match(REQUIRES_LINE);
@@ -462,9 +462,10 @@ export function parseItem(text: string): ParsedItem {
     slotSelections.push(selectedVariant);
   }
   for (const suffix of altSuffixes) {
-    if (hasAlt.get(suffix) && selectedAlt.has(suffix)) {
-      active.add(selectedAlt.get(suffix)!);
-      slotSelections.push(selectedAlt.get(suffix)!);
+    const alt = selectedAlt.get(suffix);
+    if (hasAlt.get(suffix) && alt !== undefined) {
+      active.add(alt);
+      slotSelections.push(alt);
     }
   }
   item.selectedVariant = selectedVariant;

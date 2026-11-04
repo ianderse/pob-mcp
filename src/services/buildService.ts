@@ -164,7 +164,7 @@ export class BuildService {
         const setLabel = itemSets.length > 1 ? ` (Set ${activeItemSetId} of ${itemSets.length})` : '';
         summary += `=== Items${setLabel} ===\n`;
         for (const slot of equippedSlots) {
-          const parsed = parseItem(itemMap.get(slot.itemId!)!);
+          const parsed = parseItem(itemMap.get(slot.itemId) ?? '');
           summary += `${slot.name}: ${itemLabel(parsed)}\n`;
           for (const mod of parsed.mods) {
             summary += `    ${mod.text}\n`;
@@ -484,10 +484,11 @@ export class BuildService {
 
     // Build a map of items by ID
     const itemMap = new Map<string, string>();
-    if (build.Items!.Item) {
-      const items = Array.isArray(build.Items!.Item)
-        ? build.Items!.Item
-        : [build.Items!.Item];
+    const itemsNode = build.Items;
+    if (itemsNode?.Item) {
+      const items = Array.isArray(itemsNode.Item)
+        ? itemsNode.Item
+        : [itemsNode.Item];
 
       for (const item of items) {
         if (item.id && item['#text']) {

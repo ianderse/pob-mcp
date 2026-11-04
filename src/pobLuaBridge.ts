@@ -263,6 +263,9 @@ interface PoBLuaApiOptions {
   timeoutMs?: number; // per-request timeout
 }
 
+/** Constructor input with every defaulted field resolved — what the client stores. */
+type ResolvedOptions = Required<Omit<PoBLuaApiOptions, 'cwd'>> & { cwd?: string };
+
 /**
  * A non-damaging ailment as the engine sees it. `appliedEffect` is what the
  * DPS calculation is actually crediting; `calculatedEffect` is what the skill
@@ -300,7 +303,7 @@ export class PoBLuaApiClient {
 
   getLoadedFilePath(): string | undefined { return this.loadedFilePath; }
   private proc: ChildProcessWithoutNullStreams | null = null;
-  private options: PoBLuaApiOptions;
+  private options: ResolvedOptions;
   private buffer = "";
   private ready = false;
   private isSending = false;
@@ -353,7 +356,7 @@ export class PoBLuaApiClient {
 
     let child: ChildProcessWithoutNullStreams;
     try {
-      child = spawn(this.options.cmd!, this.options.args!, {
+      child = spawn(this.options.cmd, this.options.args, {
         cwd: this.options.cwd,
         env,
         stdio: ["pipe", "pipe", "pipe"],
@@ -468,13 +471,12 @@ export class PoBLuaApiClient {
     this.dataEmitter.emit("data");
   }
 
-  private readLineWithTimeout(timeoutMs?: number): Promise<string> {
-    const ms = timeoutMs ?? this.options.timeoutMs!;
+  private readLineWithTimeout(timeoutMs = this.options.timeoutMs): Promise<string> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         cleanup();
         reject(new Error("Timed out waiting for response"));
-      }, ms);
+      }, timeoutMs);
 
       const tryRead = (): boolean => {
         const idx = this.buffer.indexOf("\n");

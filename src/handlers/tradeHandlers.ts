@@ -233,14 +233,13 @@ export async function handleGetItemPrice(
     const itemIdsToFetch = searchResult.result.slice(0, Math.min(10, searchResult.result.length));
     const items = await context.tradeClient.fetchItems(itemIdsToFetch, searchResult.id);
 
-    // Calculate price statistics
-    const prices = items
-      .map(item => item.listing.price)
-      .filter(price => price !== undefined)
-      .map(price => ({
-        amount: price!.amount,
-        currency: price!.currency,
-      }));
+    // Calculate price statistics — flatMap narrows away unpriced listings,
+    // so the price object needs no re-assertion downstream.
+    const prices = items.flatMap(item =>
+      item.listing.price
+        ? [{ amount: item.listing.price.amount, currency: item.listing.price.currency }]
+        : [],
+    );
 
     if (prices.length === 0) {
       return {
@@ -256,10 +255,12 @@ export async function handleGetItemPrice(
     // Group by currency
     const byCurrency = new Map<string, number[]>();
     for (const price of prices) {
-      if (!byCurrency.has(price.currency)) {
-        byCurrency.set(price.currency, []);
+      const bucket = byCurrency.get(price.currency);
+      if (bucket) {
+        bucket.push(price.amount);
+      } else {
+        byCurrency.set(price.currency, [price.amount]);
       }
-      byCurrency.get(price.currency)!.push(price.amount);
     }
 
     // Format output

@@ -536,7 +536,8 @@ export class TreeService {
     const visited = new Set<string>([start]);
 
     while (queue.length > 0) {
-      const current = queue.shift()!;
+      const current = queue[0];
+      queue.shift();
 
       const neighbors = graph.get(current.node) || [];
       for (const neighbor of neighbors) {
