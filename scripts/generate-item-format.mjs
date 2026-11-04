@@ -247,14 +247,7 @@ const out = `// GENERATED FILE — do not edit by hand.
 // A diff here is usually a metadata key coming or going with a league mechanic;
 // see src/services/itemParser.ts.
 
-/**
- * Path of Building version these tables were derived from.
- *
- * Provenance for \`parseItem().formatVersion\` only — never a check subject.
- * \`--check\` compares the data tables and deliberately ignores this line, so a
- * developer on a different (compatible) PoB revision does not fail CI on the
- * stamp alone. Run the generator to refresh it.
- */
+/** Path of Building version these tables were derived from. */
 export const POB_VERSION = ${JSON.stringify(version)};
 
 /** Metadata keys PoB recognises on a \`Key: value\` item line. */

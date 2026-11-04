@@ -167,11 +167,7 @@ export class TradeQueryBuilder {
     return this;
   }
 
-  /**
-   * Set item rarity filter. The Trade API's rarity.option only accepts
-   * any|nonunique|unique|corrupted|non-corrupted — the PoB-side spellings
-   * normal/magic/rare all mean "any non-unique".
-   */
+  /** Set the requested rarity without broadening it to all non-unique items. */
   withRarity(rarity: 'normal' | 'magic' | 'rare' | 'unique' | 'any'): this {
     if (!this.query.query.filters) {
       this.query.query.filters = {};
@@ -183,9 +179,8 @@ export class TradeQueryBuilder {
       this.query.query.filters.type_filters.filters = {};
     }
 
-    const apiOption = rarity === 'normal' || rarity === 'magic' || rarity === 'rare' ? 'nonunique' : rarity;
     this.query.query.filters.type_filters.filters.rarity = {
-      option: apiOption,
+      option: rarity,
     };
 
     return this;

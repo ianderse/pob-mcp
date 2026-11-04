@@ -13,9 +13,9 @@ describe('TradeQueryBuilder', () => {
   });
 
   const rarityCases = [
-    ['rare', 'nonunique'],
-    ['magic', 'nonunique'],
-    ['normal', 'nonunique'],
+    ['rare', 'rare'],
+    ['magic', 'magic'],
+    ['normal', 'normal'],
     ['unique', 'unique'],
     ['any', 'any'],
   ] as const;

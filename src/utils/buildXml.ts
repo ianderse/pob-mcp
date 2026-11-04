@@ -87,7 +87,7 @@ export class BuildXml {
   getPlayerStats(): Array<{ stat: string; value: string }> {
     const build = this.root.find(node => node.Build);
     return (BuildXml.children(build ?? {}, 'Build') ?? [])
-      .flatMap(node => BuildXml.children(node, 'PlayerStat') ?? [])
+      .filter(node => node.PlayerStat !== undefined)
       .map(stat => {
         const attrs = ATTRS(stat[':@']);
         return { stat: String(attrs['@_stat'] ?? ''), value: String(attrs['@_value'] ?? '') };

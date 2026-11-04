@@ -107,6 +107,27 @@ describe('build persistence', () => {
     expect(current.snapshotPath).toContain('fixture.xml');
   });
 
+  it.each([
+    { label: 'one cached stat', xml: '<PlayerStat stat="Life" value="4000"/>', stats: { life: 4000, allocatedNodes: 2 } },
+    { label: 'multiple cached stats', xml: '<PlayerStat stat="Life" value="4000"/><PlayerStat stat="TotalDPS" value="123456"/>', stats: { life: 4000, dps: 123456, allocatedNodes: 2 } },
+    { label: 'zero DPS', xml: '<PlayerStat stat="Life" value="4000"/><PlayerStat stat="TotalDPS" value="0"/>', stats: { life: 4000, dps: 0, allocatedNodes: 2 } },
+    { label: 'no cached stats', xml: '', stats: { allocatedNodes: 2 } },
+  ])('persists snapshot metadata from $label through a fresh service', async ({ xml, stats }) => {
+    const source = original.replace('<PlayerStat stat="Life" value="4000"/>', xml);
+    await fs.writeFile(path.join(directory, 'fixture.xml'), source);
+    const created = await exports.snapshotBuild({ buildName: 'fixture' });
+
+    const restarted = new BuildExportService(directory);
+    const listed = await restarted.listSnapshots('fixture');
+    expect(listed.total).toBe(1);
+    expect(listed.snapshots[0]?.id).toBe(created.snapshotId);
+    expect(listed.snapshots[0]?.metadata.statsSnapshot).toEqual(stats);
+    expect(await fs.readFile(created.snapshotPath, 'utf8')).toBe(source);
+    expect(restarted.formatSnapshotList(listed)).toContain(
+      `Life: ${stats.life?.toLocaleString() ?? 'N/A'} | DPS: ${stats.dps?.toLocaleString() ?? 'N/A'} | Nodes: 2`
+    );
+  });
+
   it('lists healthy snapshots when one metadata file is corrupt', async () => {
     const dir = path.join(directory, '.pob-mcp', 'snapshots', 'fixture.xml');
     await fs.mkdir(dir, { recursive: true });
