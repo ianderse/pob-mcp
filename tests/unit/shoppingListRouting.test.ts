@@ -38,8 +38,7 @@ function makeDeps() {
   };
 }
 
-const textOf = (r: { content?: Array<{ text?: string }> }) =>
-  (r.content ?? []).map((c) => c.text ?? '').join('');
+import { textOf } from '../helpers/response.js';
 
 describe('routeToolCall generate_shopping_list budget contract', () => {
   it('accepts a numeric budget (legacy schema callers) without crashing', async () => {

@@ -8,7 +8,7 @@ const contextReturning = (ailments: AilmentReport[]) =>
     getLuaClient: () => ({ getAilments: async () => ({ ailments }) }),
   }) as any;
 
-const textOf = (result: any) => result.content[0].text as string;
+import { textOf } from '../helpers/response.js';
 
 const shock = (over: Partial<AilmentReport> = {}): AilmentReport => ({
   name: 'Shock',

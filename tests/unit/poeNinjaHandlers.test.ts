@@ -1,9 +1,8 @@
 import { describe, it, expect } from '@jest/globals';
 import { handleCalculateTradingProfit } from '../../src/handlers/poeNinjaHandlers.js';
-
+import { textOf } from '../helpers/response.js';
 
 describe('handleCalculateTradingProfit incomplete chains', () => {
-  const textOf = (r: { content: Array<{ text?: string }> }) => r.content.map((c) => c.text ?? '').join('');
 
   it('does not print a final Result or profit verdict when a mid-chain currency is missing', async () => {
     const context = {

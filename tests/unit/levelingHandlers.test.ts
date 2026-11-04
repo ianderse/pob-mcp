@@ -2,7 +2,7 @@ import { describe, it, expect } from '@jest/globals';
 import { handlePlanLeveling, type LevelingContext } from '../../src/handlers/levelingHandlers.js';
 import type { PoBBuild } from '../../src/types.js';
 
-const textOf = (result: any) => result.content[0].text as string;
+import { textOf } from '../helpers/response.js';
 
 const gem = (nameSpec: string, support = false) => ({
   nameSpec,

@@ -13,7 +13,7 @@ const installed = ((): boolean => {
 })();
 
 const withPoB = installed ? describe : describe.skip;
-const textOf = (result: { content: Array<{ text: string }> }) => result.content[0].text;
+import { textOf } from '../helpers/response.js';
 
 withPoB('affix tools', () => {
   it('tells the caller a hybrid is one affix, and how many slots stay open', async () => {

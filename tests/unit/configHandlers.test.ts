@@ -24,8 +24,7 @@ function makeContext(setConfigResult: { applied: Record<string, unknown>; reject
   };
 }
 
-const textOf = (r: { content: Array<{ type: string; text?: string }> }) =>
-  r.content.map((c) => c.text ?? '').join('');
+import { textOf } from '../helpers/response.js';
 
 describe('handleSetEnemyStats', () => {
   it('writes PoB-whitelisted option names, not *Resistance spellings', async () => {
