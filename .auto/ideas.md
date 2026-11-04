@@ -10,5 +10,5 @@ Still open:
   `get_tree` returns ids without names. TS-side derivation from fetched tree.lua
   (TreeService.mapNodesToDetails) is possible offline; the LIVE path can only be verified
   with PoB running. Blocked-on-environment, low offline confidence.
-- tradeQueryBuilder.fromItemRequirements: if the purge missed it, it is dead AND stubbed
-  (slot filter no-op). Verify with grep, delete if present.
+- (verified 2026-11-03 wrap) tradeQueryBuilder.fromItemRequirements: purge DID catch it —
+  no such symbol remains. Entry closed.

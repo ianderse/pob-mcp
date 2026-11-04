@@ -806,11 +806,15 @@ export async function handleSearchTreeNodes(
     // Limit results to prevent large responses
     const effectiveMaxResults = Math.min(maxResults || 20, 30); // Default 20, max 30
 
+    // The schema and the Lua engine disagree on the undefined default unless
+    // we resolve it here: Lua treats a missing includeAllocated as `~= false`
+    // i.e. TRUE, which would contradict the documented default (false) and
+    // pollute every default search with already-allocated nodes.
     const results = await luaClient.searchNodes({
       keyword: keyword.trim(),
       nodeType,
       maxResults: effectiveMaxResults,
-      includeAllocated,
+      includeAllocated: includeAllocated ?? false,
     });
 
     const textLines: string[] = ['=== Passive Tree Node Search ===', ''];
