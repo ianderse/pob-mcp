@@ -40,6 +40,19 @@ export interface BuildStats {
 }
 
 /**
+ * Is this PoB slot a real equippable gear slot (vs. UI sub-slots)?
+ *
+ * PoB's slot table mixes base slots with synthetic controls ("Weapon 1 Swap",
+ * "Weapon 1Swap Abyssal Socket 5", jewel sockets reached via items). Hard-
+ * coding a slot list drifted out of date the moment PoB added Ring 3/Grafts,
+ * so consumers filter this predicate over the engine's OWN slot output
+ * instead.
+ */
+export function isEquippableGearSlot(slot: string): boolean {
+  return !/swap|abyssal|jewel|cluster/i.test(slot);
+}
+
+/**
  * Analyze build archetype from class and stats
  */
 export function inferBuildArchetype(
@@ -265,27 +278,18 @@ export function analyzeEquippedItems(
 
   const slotAnalysis: ItemSlotAnalysis[] = [];
 
-  // Standard gear slots to check
-  const expectedSlots = [
-    'Weapon 1',
-    'Weapon 2',
-    'Helmet',
-    'Body Armour',
-    'Gloves',
-    'Boots',
-    'Amulet',
-    'Ring 1',
-    'Ring 2',
-    'Belt',
-    'Flask 1',
-    'Flask 2',
-    'Flask 3',
-    'Flask 4',
-    'Flask 5',
-  ];
+  // Analyze the slots the engine actually reports (filtered to real gear
+  // slots), NOT a hard-coded list: the old 15-name table missed Ring 3 and
+  // Grafts on current PoB and produced phantom 'Slot is empty' spam for
+  // builds whose slot layout differs from 3.27-era.
+  const seenSlots = new Set<string>();
+  for (const item of items) {
+    if (!item.slot || !isEquippableGearSlot(item.slot) || seenSlots.has(item.slot)) continue;
+    seenSlots.add(item.slot);
+  }
 
   // Analyze each slot
-  for (const expectedSlot of expectedSlots) {
+  for (const expectedSlot of seenSlots) {
     const item = items.find((i) => i.slot === expectedSlot);
     const itemData = item
       ? { name: item.name || '', baseName: item.baseName, rarity: item.rarity }

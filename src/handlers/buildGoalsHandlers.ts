@@ -1,5 +1,6 @@
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
+import { isEquippableGearSlot } from '../itemAnalyzer.js';
 import type { BuildIssue } from "../types.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
@@ -126,17 +127,19 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
           });
         }
 
-        // Check for unequipped gear slots
-        const gearSlots = ['Weapon 1', 'Body Armour', 'Helmet', 'Gloves', 'Boots', 'Belt', 'Ring 1', 'Ring 2', 'Amulet'];
-        for (const slotName of gearSlots) {
-          const slot = items.find(it => it.slot === slotName);
-          if (slot && (!slot.id || slot.id === 0)) {
-            issues.push({
-              severity: 'warning',
-              category: 'items',
-              message: `${slotName} slot is empty — equip an item for more stats.`,
-            });
-          }
+        // Check for unequipped gear slots. The engine's own slot output is
+        // the truth (this picks up Ring 3/Grafts on current PoB versions);
+        // empty flasks have their own check below and jewel sockets are
+        // covered by the emptyJewelSlots check, so both are excluded here.
+        for (const it of items) {
+          if ((it.id ?? 0) !== 0) continue;
+          if (!it.slot || !isEquippableGearSlot(it.slot)) continue;
+          if (/flask/i.test(it.slot)) continue;
+          issues.push({
+            severity: 'warning',
+            category: 'items',
+            message: `${it.slot} slot is empty — equip an item for more stats.`,
+          });
         }
 
         // Check for empty flask slots
