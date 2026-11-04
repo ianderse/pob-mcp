@@ -185,11 +185,11 @@ export async function handleOptimizeSkillLinks(
         const skillData = await luaClient.getSkills();
 
         if (skillData && skillData.groups) {
-          skillGroups = skillData.groups.map((group: any) => ({
+          skillGroups = skillData.groups.map((group) => ({
             index: group.index,
             label: group.label,
             slot: group.slot,
-            enabled: group.enabled,
+            enabled: group.enabled ?? true,
             isMainSkill: group.index === skillData.mainSocketGroup,
             gems: group.gems || group.skills?.map((skillName: string) => ({ name: skillName })) || [],
             includeInFullDPS: group.includeInFullDPS,
@@ -228,7 +228,7 @@ export async function handleOptimizeSkillLinks(
       // Extract skills from XML
       const skills = asArray(activeSkillSet(build)?.Skill);
       if (skills.length > 0) {
-        skillGroups = skills.map((skill: any, idx: number) => {
+        skillGroups = skills.map((skill, idx: number) => {
           const gems = Array.isArray(skill.Gem) ? skill.Gem : skill.Gem ? [skill.Gem] : [];
 
           return {
@@ -237,7 +237,7 @@ export async function handleOptimizeSkillLinks(
             slot: skill.slot,
             enabled: skill.enabled !== 'false',
             isMainSkill: idx === 0, // Assume first is main
-            gems: gems.map((gem: any) => ({
+            gems: gems.map((gem) => ({
               name: gem.name || 'Unknown',
               level: parseInt(gem.level || '1', 10),
               quality: parseInt(gem.quality || '0', 10),
@@ -309,7 +309,7 @@ export async function handleCreateBudgetBuild(
       const firstSkill = skills[0];
       if (firstSkill?.Gem) {
         const gems = Array.isArray(firstSkill.Gem) ? firstSkill.Gem : [firstSkill.Gem];
-        const activeGem = gems.find((g: any) => g.enabled !== 'false' && !g.name?.includes('Support'));
+        const activeGem = gems.find((g) => g.enabled !== 'false' && !g.name?.includes('Support'));
         if (activeGem?.name) main_skill = activeGem.name;
       }
     }

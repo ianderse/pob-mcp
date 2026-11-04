@@ -67,7 +67,7 @@ export interface ShoppingListItem {
   };
 }
 
-export interface ItemRecommendation {
+interface ItemRecommendation {
   searchCriteria: string;
   estimatedPrice: {
     min: number;

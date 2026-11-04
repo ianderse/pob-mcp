@@ -1,4 +1,4 @@
-import { toFiniteNumber, type PoBLuaApiClient } from "../pobLuaBridge.js";
+import { toFiniteNumber, type PoBLuaApiClient, type SearchedNode } from "../pobLuaBridge.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
@@ -73,8 +73,8 @@ export async function handleAnalyzeDefenses(
     try {
       const specsResult = await luaClient.listSpecs();
       const itemSetsResult = await luaClient.listItemSets();
-      const activeSpec = specsResult?.specs?.find((s: any) => s.active);
-      const activeItemSet = itemSetsResult?.itemSets?.find((s: any) => s.active);
+      const activeSpec = specsResult?.specs?.find((s) => s.active);
+      const activeItemSet = itemSetsResult?.itemSets?.find((s) => s.active);
       const parts: string[] = [];
       if (activeSpec && specsResult?.specs?.length > 1) {
         parts.push(`Spec ${activeSpec.index}/${specsResult.specs.length}: "${activeSpec.title}" (${activeSpec.nodeCount} nodes)`);
@@ -181,7 +181,7 @@ export async function handleSuggestOptimalNodes(
     const keywords = goalKeywords[goal] || (buildKeywords.length > 0 ? [...buildKeywords, goal] : [goal]);
 
     // Search for relevant notable/keystone nodes
-    let allNodes: any[] = [];
+    let allNodes: SearchedNode[] = [];
     for (const keyword of keywords.slice(0, 3)) {
       try {
         const results = await luaClient.searchNodes({

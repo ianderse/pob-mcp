@@ -122,7 +122,7 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
           issues.push({
             severity: 'warning',
             category: 'items',
-            message: `${emptyJewelSlots.length} jewel socket(s) empty: ${emptyJewelSlots.map((j: any) => j.slot).join(', ')}. Jewels provide significant stats.`,
+            message: `${emptyJewelSlots.length} jewel socket(s) empty: ${emptyJewelSlots.map((j) => j.slot).join(', ')}. Jewels provide significant stats.`,
           });
         }
 
@@ -156,18 +156,18 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
     try {
       const skillsData = await luaClient.getSkills();
       if (skillsData?.groups) {
-        for (const group of skillsData.groups as any[]) {
+        for (const group of skillsData.groups) {
           if (!group.enabled || !group.gems || group.gems.length < 2) continue;
-          const gems = (group.gems as any[]).filter(g => g.enabled);
+          const gems = group.gems.filter(g => g.enabled);
           const supports = gems.filter(g => g.isSupport);
           if (supports.length < 2) continue;
 
           const supportNames = supports.map(g => (g.name || '').toLowerCase());
 
           // Check for Brutality + elemental/chaos supports (direct conflict)
-          const hasBrutality = supportNames.some((n: string) => n.includes('brutality'));
+          const hasBrutality = supportNames.some((n) => n.includes('brutality'));
           if (hasBrutality) {
-            const eleOrChaos = supportNames.filter((n: string) =>
+            const eleOrChaos = supportNames.filter((n) =>
               n.includes('elemental') || n.includes('fire') || n.includes('cold') ||
               n.includes('lightning') || n.includes('chaos') || n.includes('void manipulation') ||
               n.includes('added fire') || n.includes('added cold') || n.includes('added lightning')
@@ -199,7 +199,7 @@ export async function handleGetBuildIssues(context: BuildGoalsHandlerContext) {
   });
 }
 
-export function formatIssuesResponse(issues: BuildIssue[], stats: Record<string, any>) {
+export function formatIssuesResponse(issues: BuildIssue[], stats: Record<string, unknown>) {
   const errors = issues.filter(i => i.severity === 'error');
   const warnings = issues.filter(i => i.severity === 'warning');
   const infos = issues.filter(i => i.severity === 'info');
@@ -236,7 +236,7 @@ export function formatIssuesResponse(issues: BuildIssue[], stats: Record<string,
   text += `Life: ${stats.Life ?? 'N/A'}  |  ES: ${stats.EnergyShield ?? 'N/A'}  |  Mana: ${stats.Mana ?? 'N/A'}\n`;
   text += `Fire: ${stats.FireResist ?? 0}%  |  Cold: ${stats.ColdResist ?? 0}%  |  Lightning: ${stats.LightningResist ?? 0}%  |  Chaos: ${stats.ChaosResist ?? 0}%\n`;
   const dps = stats.CombinedDPS ?? stats.TotalDPS ?? 0;
-  const minionDps = stats.MinionTotalDPS ?? 0;
+  const minionDps = Number(stats.MinionTotalDPS ?? 0);
   text += `DPS: ${Number(dps).toLocaleString()}${minionDps > 0 ? `  |  Minion DPS: ${Number(minionDps).toLocaleString()}` : ''}\n`;
 
   return {

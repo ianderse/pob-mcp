@@ -131,7 +131,7 @@ export async function handleGetEquippedItems(context: ItemSkillHandlerContext) {
     if (!items || items.length === 0) {
       text += "No items equipped.\n";
     } else {
-      const equipped = items.filter((item: any) => item.id !== 0 && item.name);
+      const equipped = items.filter((item) => item.id !== 0 && item.name);
       if (equipped.length === 0) {
         text += "No items equipped.\n";
       } else {
@@ -211,7 +211,7 @@ export async function handleToggleFlask(
         'FireResist', 'ColdResist', 'LightningResist', 'ChaosResist',
         'PhysicalDamageReduction', 'ManaUnreserved',
       ]);
-      const fmt = (v: any) => v != null ? String(v) : '-';
+      const fmt = (v: unknown) => v != null ? String(v) : '-';
       text += `\n\nUpdated stats:\n`;
       text += `  Life: ${fmt(stats.Life)}  |  Armour: ${fmt(stats.Armour)}  |  Evasion: ${fmt(stats.Evasion)}\n`;
       text += `  Fire: ${fmt(stats.FireResist)}%  Cold: ${fmt(stats.ColdResist)}%  Lightning: ${fmt(stats.LightningResist)}%  Chaos: ${fmt(stats.ChaosResist)}%\n`;
@@ -254,7 +254,7 @@ export async function handleGetSkillSetup(context: ItemSkillHandlerContext, main
     } else {
       const totalGroups = skillData.groups.length;
       const groups = mainOnly
-        ? skillData.groups.filter((g: any) => g.index === skillData.mainSocketGroup)
+        ? skillData.groups.filter((g) => g.index === skillData.mainSocketGroup)
         : skillData.groups;
 
       if (mainOnly && totalGroups > 1) {

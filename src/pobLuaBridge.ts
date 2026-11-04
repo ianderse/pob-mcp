@@ -46,7 +46,7 @@ export interface TreeState {
 }
 
 /** export_stats meta block (string fields nested under _meta, not numeric) */
-export interface StatsMeta {
+interface StatsMeta {
   treeVersion?: string;
   level?: number;
   buildName?: string;
@@ -76,13 +76,13 @@ export function toFiniteNumber(v: unknown): number | undefined {
  * calc_with raw PoB output: numeric stats plus the nested Minion table and
  * functions stripped by sanitize_for_json.
  */
-export type CalcOutput = { [stat: string]: number | undefined } & {
+type CalcOutput = { [stat: string]: number | undefined } & {
   Minion?: { [stat: string]: number | undefined };
   _meta?: StatsMeta;
 };
 
 /** get_items entry (M.get_items) */
-export interface EquippedItem {
+interface EquippedItem {
   slot: string;
   id: number;
   name?: string;
@@ -96,7 +96,7 @@ export interface EquippedItem {
 }
 
 /** get_skills */
-export interface SkillGemEntry {
+interface SkillGemEntry {
   index: number;
   name: string;
   level: number;
@@ -124,7 +124,7 @@ export interface SkillsOutput {
 }
 
 /** search_nodes */
-export interface SearchNodesResult {
+interface SearchNodesResult {
   nodes: SearchedNode[];
   count: number;
 }
@@ -157,7 +157,7 @@ export interface SpecEntry {
   nodeCount: number;
 }
 
-export interface SpecList {
+interface SpecList {
   specs: SpecEntry[];
   activeSpec: number;
 }
@@ -170,7 +170,7 @@ export interface ItemSetEntry {
   useSecondWeaponSet: boolean;
 }
 
-export interface ItemSetList {
+interface ItemSetList {
   itemSets: ItemSetEntry[];
   activeItemSetId: number;
 }
@@ -181,7 +181,7 @@ export interface ConfigValues {
 }
 
 /** get_capabilities (plus the offline fallback shape) */
-export interface BridgeCapabilities {
+interface BridgeCapabilities {
   mode?: string;
   adapter?: string;
   actions?: string[];
@@ -190,14 +190,14 @@ export interface BridgeCapabilities {
 }
 
 /** add_item_text */
-export interface AddedItem {
+interface AddedItem {
   id: number;
   name?: string;
   slot?: string;
 }
 
 /** create_socket_group */
-export interface CreatedSocketGroup {
+interface CreatedSocketGroup {
   index: number;
   label?: string;
   enabled?: boolean;
@@ -205,35 +205,35 @@ export interface CreatedSocketGroup {
 }
 
 /** add_gem */
-export interface AddedGem {
+interface AddedGem {
   gemIndex: number;
   name?: string;
 }
 
 /** get_mastery_options */
-export interface MasteryOptionEffect {
+interface MasteryOptionEffect {
   effectId: number;
   stat: string;
 }
 
-export interface MasteryOptionNode {
+interface MasteryOptionNode {
   nodeId: number | string;
   nodeName: string;
   allocatedEffect?: number;
   availableEffects: MasteryOptionEffect[];
 }
 
-export interface MasteryOptions {
+interface MasteryOptions {
   masteries: MasteryOptionNode[];
 }
 
 /** new_build / load_build_xml / import_code envelope result (state facts only) */
-export interface BuildLoadResult {
+interface BuildLoadResult {
   ok: true;
 }
 
 /** save_build */
-export interface SavedBuild {
+interface SavedBuild {
   path: string;
   /** byte size of the XML PoB serialized */
   size: number;
@@ -607,7 +607,7 @@ export class PoBLuaApiClient {
       }
       throw error;
     } finally {
-      await fs.unlink(temporary).catch((error: any) => { if (error.code !== 'ENOENT') throw error; });
+      await fs.unlink(temporary).catch((error: unknown) => { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; });
     }
   }
 

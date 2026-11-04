@@ -34,7 +34,7 @@ describe('build persistence', () => {
 
   it('edits only the active spec, keeps XML semantics, and retries without drift', async () => {
     const options = { buildName: 'fixture', nodes: ['6338', '456'], masteryEffects: { 6338: 31556 } };
-    const first = await exports.saveTree(builds, options);
+    const first = await exports.saveTree(options);
     const saved = await fs.readFile(path.join(directory, 'fixture.xml'), 'utf8');
     const before = parse(original), after = parse(saved);
     for (const name of ['Build', 'Notes', 'Items', 'Skills', 'Config']) expect(after[name]).toEqual(before[name]);
@@ -45,11 +45,11 @@ describe('build persistence', () => {
     expect(after.Tree.Spec[1]['@_masteryEffects']).toBe('{6338,31556}');
     expect(after.Tree.Spec[1].MasteryEffect).toBeUndefined();
     expect(await fs.readFile(first.backupPath!, 'utf8')).toBe(original);
-    const second = await exports.saveTree(builds, options);
+    const second = await exports.saveTree(options);
     expect(second.backupPath).not.toBe(first.backupPath);
     expect(await fs.readFile(path.join(directory, 'fixture.xml'), 'utf8')).toBe(saved);
     expect((await new BuildService(directory).readBuild('fixture')).Notes).toBe('Original & <notes>');
-    await exports.saveTree(builds, { ...options, masteryEffects: {} });
+    await exports.saveTree({ ...options, masteryEffects: {} });
     expect(parse(await builds.readBuildXml('fixture')).Tree.Spec[1]['@_masteryEffects']).toBe('');
   });
 
@@ -99,7 +99,7 @@ describe('build persistence', () => {
     await fs.mkdir(legacy, { recursive: true });
     await fs.writeFile(path.join(legacy, 'old_legacy.xml'), original);
     await fs.writeFile(path.join(legacy, 'old_metadata.json'), JSON.stringify({ tag: 'legacy', timestamp: '2020-01-01' }));
-    const current = await exports.snapshotBuild(builds, { buildName: 'fixture.xml', tag: 'current' });
+    const current = await exports.snapshotBuild({ buildName: 'fixture.xml', tag: 'current' });
     expect((await exports.listSnapshots('fixture')).total).toBe(2);
     expect((await exports.listSnapshots('fixture.xml')).total).toBe(2);
     await exports.restoreSnapshot({ buildName: 'fixture.xml', snapshotId: 'old' });
@@ -118,7 +118,7 @@ describe('build persistence', () => {
   });
 
   it.each([false, true])('reports the live reload outcome after restore (fails=%s)', async (fail) => {
-    const snapshot = await exports.snapshotBuild(builds, { buildName: 'fixture' });
+    const snapshot = await exports.snapshotBuild({ buildName: 'fixture' });
     await fs.writeFile(path.join(directory, 'fixture.xml'), original.replace('4000', '2000'));
     const loadBuildXml = jest.fn(async () => { if (fail) throw new Error('bridge unavailable'); });
     const context = { buildService: builds, exportService: exports, luaClient: {
@@ -132,7 +132,7 @@ describe('build persistence', () => {
   });
 
   it('does not replace another in-memory build while restoring a file', async () => {
-    const snapshot = await exports.snapshotBuild(builds, { buildName: 'fixture' });
+    const snapshot = await exports.snapshotBuild({ buildName: 'fixture' });
     const loadBuildXml = jest.fn();
     const result = await handleRestoreSnapshot({ buildService: builds, exportService: exports, luaClient: {
       getLoadedFilePath: () => path.join(directory, 'other.xml'), loadBuildXml,

@@ -1,7 +1,7 @@
 import type { BuildService } from "../services/buildService.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { ValidationService } from "../services/validationService.js";
-import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import type { PoBLuaApiClient, StatsExport } from "../pobLuaBridge.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { resolveBuildFile } from "../utils/pathSanitizer.js";
 import { readNamedBuild } from "../utils/namedBuild.js";
@@ -61,12 +61,12 @@ export async function handleValidateBuild(
 
           // Get flask immunities from the same build as the live stats.
           try {
-            const items = await (luaClient as any).getItems();
+            const items = await luaClient.getItems();
             if (Array.isArray(items)) {
-              const flaskItems = items.filter((it: any) =>
+              const flaskItems = items.filter((it) =>
                 it.slot && it.slot.startsWith('Flask') && it.raw
               );
-              const allFlaskText = flaskItems.map((it: any) => (it.raw || '').toLowerCase()).join(' ');
+              const allFlaskText = flaskItems.map((it) => (it.raw || '').toLowerCase()).join(' ');
               luaFlaskImmunities = {
                 bleed: allFlaskText.includes('bleed') || allFlaskText.includes('corrupted blood'),
                 freeze: allFlaskText.includes('freeze') || allFlaskText.includes('chill'),
@@ -147,7 +147,7 @@ export async function handleValidateBuild(
 /**
  * Lightweight validation using only Lua bridge stats (no build XML available).
  */
-function formatLuaOnlyValidation(stats: Record<string, any>): string {
+function formatLuaOnlyValidation(stats: StatsExport): string {
   const lines: string[] = ['=== Build Validation (Lua Bridge Stats) ===\n'];
   const issues: string[] = [];
   const warnings: string[] = [];

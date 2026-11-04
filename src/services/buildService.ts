@@ -368,7 +368,7 @@ export class BuildService {
     return isNaN(num) ? undefined : num;
   }
 
-  private getInputValue(input: ConfigInput): any {
+  private getInputValue(input: ConfigInput): boolean | number | string | undefined {
     return input.boolean !== undefined ? this.parseBoolean(input.boolean) :
            input.number !== undefined ? this.parseNumber(input.number) :
            input.string;

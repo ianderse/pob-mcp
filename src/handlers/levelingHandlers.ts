@@ -110,7 +110,7 @@ export async function handlePlanLeveling(
         const skills = await luaClient.getSkills();
         if (skills?.groups?.length > 0) {
           const mainGroup =
-            skills.groups.find((g: any) => g.index === skills.mainSocketGroup) ||
+            skills.groups.find((g) => g.index === skills.mainSocketGroup) ||
             skills.groups[0];
           mainSkill =
             mainGroup?.gems?.[0]?.name ||

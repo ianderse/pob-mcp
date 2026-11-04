@@ -1,4 +1,4 @@
-import type { PoBLuaApiClient } from '../pobLuaBridge.js';
+import type { PoBLuaApiClient, StatsExport } from '../pobLuaBridge.js';
 import type { PoeNinjaClient } from '../services/poeNinjaClient.js';
 import { fetchBaseModData } from '../services/craftingDataService.js';
 import { wrapHandler, noteIgnoredError,} from '../utils/errorHandling.js';
@@ -14,7 +14,7 @@ interface CraftingResponseInput {
   desiredMods: string[];
   modData: string;
   currencyRates: { chaos: number; divine: number; live: boolean };
-  buildContext: Record<string, any> | null;
+  buildContext: StatsExport | null;
   ilvl?: number;
   budget?: 'low' | 'medium' | 'high';
 }
@@ -99,7 +99,7 @@ export async function handleSuggestCrafting(
     const { slot, desired_mods = [], league = 'Standard' } = args;
 
     let base = args.base;
-    let buildContext: Record<string, any> | null = null;
+    let buildContext: StatsExport | null = null;
 
     const luaClient = context.getLuaClient();
     if (luaClient) {
@@ -146,8 +146,8 @@ export async function handleSuggestCrafting(
     try {
       const data = await fetchBaseModData(base);
       modData = data.modText;
-    } catch (err: any) {
-      modData = `(Could not fetch poedb data for "${base}": ${err.message})`;
+    } catch (err) {
+      modData = `(Could not fetch poedb data for "${base}": ${err instanceof Error ? err.message : String(err)})`;
     }
 
     const responseText = buildCraftingResponse({

@@ -67,7 +67,7 @@ export async function handleSaveTree(
   return wrapHandler('save tree', async () => {
   const { exportService, buildService } = context;
 
-  const result = await exportService.saveTree(buildService, {
+  const result = await exportService.saveTree({
     buildName: args.build_name,
     nodes: args.nodes,
     masteryEffects: args.mastery_effects,
@@ -102,9 +102,9 @@ export async function handleSnapshotBuild(
   }
 ) {
   return wrapHandler('snapshot build', async () => {
-  const { exportService, buildService } = context;
+  const { exportService } = context;
 
-  const result = await exportService.snapshotBuild(buildService, {
+  const result = await exportService.snapshotBuild({
     buildName: args.build_name,
     description: args.description,
     tag: args.tag,

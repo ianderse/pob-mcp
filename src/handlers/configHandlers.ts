@@ -50,10 +50,10 @@ export async function handleLoadConfigPreset(context: ConfigPresetContext, name:
   if (!luaClient) throw new Error('Lua bridge not active. Use lua_load_build first.');
 
   const filePath = await getPresetPath(context.pobDirectory, name);
-  let config: Record<string, any>;
+  let config: Record<string, string | number | boolean>;
   try {
     const raw = await fs.readFile(filePath, 'utf-8');
-    config = JSON.parse(raw);
+    config = JSON.parse(raw) as Record<string, string | number | boolean>;
   } catch {
     throw new Error(`Preset "${name}" not found. Use save_config_preset to create it first.`);
   }
@@ -134,8 +134,7 @@ export async function handleSetConfig(
   const oldValue = currentConfig[args.config_name];
 
   // Set new value - build params object dynamically
-  const params: Record<string, any> = {};
-  params[args.config_name] = args.value;
+  const params: Record<string, string | number | boolean> = { [args.config_name]: args.value };
   const result = await luaClient.setConfig(params);
 
   // Get updated stats
@@ -204,15 +203,15 @@ export async function handleSetEnemyStats(
 
   // Get current DPS and config before changes
   const oldStats = await luaClient.getStats(['TotalDPS', 'CombinedDPS', 'Life', 'EnergyShield']);
-  let currentConfig: Record<string, any> = {};
+  let currentConfig: ConfigValues = {};
   try {
     currentConfig = await luaClient.getConfig() ?? {};
   } catch (e) { noteIgnoredError("old values unavailable — omit them from output", e); }
 
   // Build config update params. `paramKey` is PoB's own config option name —
   // set_config rejects anything outside its whitelist, so these must match.
-  const params: Record<string, any> = {};
-  const changesSummary: Array<{ paramKey: string; label: string; old: any; new: any }> = [];
+  const params: Record<string, string | number | boolean> = {};
+  const changesSummary: Array<{ paramKey: string; label: string; old: unknown; new: unknown }> = [];
 
   if (args.level !== undefined) {
     changesSummary.push({ paramKey: "enemyLevel", label: "Enemy Level", old: currentConfig.enemyLevel, new: args.level });
@@ -398,15 +397,18 @@ function formatConfigOutput(config: ConfigValues, labels: Record<string, string>
 }
 
 /**
- * Format a value for display
+ * Format a value for display. Input is any JSON value read off the wire
+ * (config values are boolean/number/string on the PoB side).
  */
-function formatValue(value: any): string {
+function formatValue(value: unknown): string {
   if (typeof value === 'boolean') {
     return value ? 'Yes' : 'No';
   }
   if (typeof value === 'number') {
     return formatNumber(value);
   }
+  if (value === null || value === undefined) return String(value);
+  if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
 }
 

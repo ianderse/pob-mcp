@@ -21,7 +21,7 @@ import {
 export class TradeApiClient {
   private readonly baseUrl = 'https://www.pathofexile.com/api/trade';
   private readonly limiter: Bottleneck;
-  private readonly cache = new Map<string, CacheEntry<any>>();
+  private readonly cache = new Map<string, CacheEntry<unknown>>();
   private readonly defaultCacheTTL: number;
   private rateLimitInfo: RateLimitInfo | null = null;
 
@@ -139,7 +139,7 @@ export class TradeApiClient {
   private async makeRequest<T>(
     method: 'GET' | 'POST',
     url: string,
-    body?: any
+    body?: unknown
   ): Promise<T> {
     const options: RequestInit = {
       method,
@@ -202,7 +202,7 @@ export class TradeApiClient {
   }
 
   private getFromCache<T>(key: string, customTTL?: number): T | null {
-    const entry = this.cache.get(key) as CacheEntry<T> | undefined;
+    const entry = this.cache.get(key);
     if (!entry) {
       return null;
     }
@@ -214,7 +214,9 @@ export class TradeApiClient {
       return null;
     }
 
-    return entry.data;
+    // The key encodes the request shape, so hits always hold this T; the cache
+    // itself only stores `unknown` envelopes.
+    return entry.data as T;
   }
 
   private putInCache<T>(key: string, data: T, ttl: number): void {

@@ -7,8 +7,8 @@ export async function atomicWriteFile(filePath: string, content: string, overwri
   const temporary = path.join(path.dirname(filePath), `.pob-write-${randomUUID()}.tmp`);
   try {
     let mode: number | undefined;
-    try { mode = (await fs.stat(filePath)).mode; } catch (error: any) {
-      if (error.code !== 'ENOENT') throw error;
+    try { mode = (await fs.stat(filePath)).mode; } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
     const file = await fs.open(temporary, 'wx', mode);
     try {
@@ -22,8 +22,8 @@ export async function atomicWriteFile(filePath: string, content: string, overwri
       await fs.link(temporary, filePath);
     }
   } finally {
-    await fs.unlink(temporary).catch((error: any) => {
-      if (error.code !== 'ENOENT') throw error;
+    await fs.unlink(temporary).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     });
   }
 }

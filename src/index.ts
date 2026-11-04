@@ -141,7 +141,7 @@ class PoBMCPServer {
     };
 
     // Handle EPIPE errors (broken pipe) gracefully
-    process.stdout.on('error', (err: any) => {
+    process.stdout.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EPIPE') {
         // Client disconnected, exit gracefully
         process.exit(0);
@@ -150,7 +150,7 @@ class PoBMCPServer {
       }
     });
 
-    process.stderr.on('error', (err: any) => {
+    process.stderr.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EPIPE') {
         // Client disconnected, exit gracefully
         process.exit(0);

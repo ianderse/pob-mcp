@@ -8,7 +8,7 @@
  * - Overall value score
  */
 
-import { ItemListing } from '../types/tradeTypes.js';
+import { ItemListing, TradeItem } from '../types/tradeTypes.js';
 
 interface StatExtraction {
   life: number;
@@ -175,7 +175,7 @@ export class CostBenefitAnalyzer {
   /**
    * Calculate physical DPS from weapon properties
    */
-  private calculateDPS(item: any): number {
+  private calculateDPS(item: TradeItem): number {
     let physDPS = 0;
     let aps = 1.0;
 
@@ -204,7 +204,7 @@ export class CostBenefitAnalyzer {
   /**
    * Calculate elemental DPS
    */
-  private calculateElementalDPS(item: any): number {
+  private calculateElementalDPS(item: TradeItem): number {
     let eleDPS = 0;
     let aps = 1.0;
 

@@ -9,6 +9,7 @@ import { TradeApiClient } from './tradeClient.js';
 import { TradeQueryBuilder } from './tradeQueryBuilder.js';
 import {
   ItemListing,
+  TradeItem,
   BudgetConstraints,
   ItemRecommendation,
   ResistanceRequirements,
@@ -122,7 +123,7 @@ export class ItemRecommendationEngine {
 
     // Calculate total needed resistance provided
     let totalResistanceProvided = 0;
-    let resistGain: any = {};
+    const resistGain: { fire?: number; cold?: number; lightning?: number; chaos?: number } = {};
 
     if (resistanceGaps.fire > 0 && resistances.fire > 0) {
       const provided = Math.min(resistances.fire, resistanceGaps.fire);
@@ -252,7 +253,7 @@ export class ItemRecommendationEngine {
   // Helper Methods
   // ========================================
 
-  private extractResistances(item: any): {
+  private extractResistances(item: TradeItem): {
     fire: number;
     cold: number;
     lightning: number;

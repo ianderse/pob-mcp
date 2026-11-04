@@ -527,7 +527,7 @@ export async function handleLuaGetBuildSnapshot(context: LuaHandlerContext) {
 
     const groups = Array.isArray(skills?.groups) ? skills.groups : [];
     lines.push('', `**Skills:** ${groups.length} socket group${groups.length === 1 ? '' : 's'} | Main group: ${skills?.mainSocketGroup ?? 'None'}`);
-    const mainGroup = groups.find((group: any) => group.index === skills?.mainSocketGroup);
+    const mainGroup = groups.find((group) => group.index === skills?.mainSocketGroup);
     if (mainGroup?.gems?.length) {
       lines.push(`Main gems: ${mainGroup.gems.map(gem => gem.name).filter(Boolean).join(', ')}`);
     }
@@ -603,7 +603,7 @@ export async function handleLuaGetTree(context: LuaHandlerContext, includeNodeId
   });
 }
 
-export async function handleLuaSetTree(context: LuaHandlerContext, args: any) {
+export async function handleLuaSetTree(context: LuaHandlerContext, args: unknown) {
   return wrapHandler('set passive tree', async () => {
     await context.ensureLuaClient();
 
@@ -612,15 +612,25 @@ export async function handleLuaSetTree(context: LuaHandlerContext, args: any) {
       throw new Error('Lua client not initialized');
     }
 
-    if (!Array.isArray(args.nodes)) {
+    const { nodes, classId: rawClassId, ascendClassId: rawAscendClassId, secondaryAscendClassId: rawSecondary, treeVersion: rawTreeVersion, masteryEffects } =
+      (args ?? {}) as {
+        nodes?: unknown;
+        classId?: number;
+        ascendClassId?: number;
+        secondaryAscendClassId?: number;
+        treeVersion?: string;
+        masteryEffects?: Record<string, number>;
+      };
+
+    if (!Array.isArray(nodes)) {
       throw new Error('nodes must be an array');
     }
 
     // If classId/ascendClassId not provided, read them from current build to preserve class
-    let classId = args.classId;
-    let ascendClassId = args.ascendClassId;
-    let secondaryAscendClassId = args.secondaryAscendClassId;
-    let treeVersion = args.treeVersion;
+    let classId = rawClassId;
+    let ascendClassId = rawAscendClassId;
+    let secondaryAscendClassId = rawSecondary;
+    let treeVersion = rawTreeVersion;
 
     if (classId === undefined || ascendClassId === undefined) {
       const currentTree = await luaClient.getTree();
@@ -637,13 +647,13 @@ export async function handleLuaSetTree(context: LuaHandlerContext, args: any) {
       classId,
       ascendClassId,
       secondaryAscendClassId,
-      nodes: (args.nodes as string[]).map(Number),
-      masteryEffects: args.masteryEffects,
+      nodes: (nodes as string[]).map(Number),
+      masteryEffects,
       treeVersion,
     });
 
-    const actualCount = (tree && Array.isArray(tree.nodes)) ? tree.nodes.length : args.nodes.length;
-    const requested = args.nodes.length;
+    const actualCount = (tree && Array.isArray(tree.nodes)) ? tree.nodes.length : nodes.length;
+    const requested = nodes.length;
     const dropped = requested - actualCount;
     let text = `✅ Passive tree updated. Allocated ${actualCount} nodes.`;
     if (dropped > 0) {

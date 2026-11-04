@@ -108,7 +108,7 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
       ? { Tree: { ...build.Tree, activeSpec: String(luaActiveSpecIndex) } }
       : {}),
     ...(luaActiveItemSetId !== null && build.Items
-      ? { Items: { ...(build.Items as any), activeItemSet: luaActiveItemSetId } }
+      ? { Items: { ...build.Items, activeItemSet: luaActiveItemSetId } }
       : {}),
   };
 
@@ -306,12 +306,12 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
   }
 
   if (luaOk && r1 && r2) {
-    const fmtNum = (n: any) =>
+    const fmtNum = (n: string | number | undefined) =>
       n != null && !isNaN(Number(n)) && Number(n) !== 0
         ? Math.round(Number(n)).toLocaleString()
         : 'N/A';
 
-    const row = (label: string, v1: any, v2: any, higherIsBetter = true) => {
+    const row = (label: string, v1: string | number | undefined, v2: string | number | undefined, higherIsBetter = true) => {
       const n1 = Number(v1 || 0);
       const n2 = Number(v2 || 0);
       const winner = n1 === n2 ? '  ='

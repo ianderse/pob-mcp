@@ -1,6 +1,7 @@
 import type { BuildService } from "../services/buildService.js";
+import type { PoBBuild, PoBGem } from "../types.js";
 import type { SkillGemService } from "../services/skillGemService.js";
-import type { PoBLuaApiClient } from "../pobLuaBridge.js";
+import type { PoBLuaApiClient, SocketGroupEntry } from "../pobLuaBridge.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 
 interface SkillGemHandlerContext {
@@ -452,7 +453,7 @@ export async function handleGemUpgradePath(
   if (!luaClient) throw new Error('Lua bridge not active. Use lua_load_build first.');
 
   const skills = await luaClient.getSkills();
-  const groups: any[] = skills?.groups ?? [];
+  const groups: SocketGroupEntry[] = skills?.groups ?? [];
 
   const budgetTier = ((args.budget || 'endgame') as 'league_start' | 'mid_league' | 'endgame');
   const budgetMap: Record<string, number> = { league_start: 0, mid_league: 50, endgame: 999 };
@@ -474,7 +475,7 @@ export async function handleGemUpgradePath(
   for (const group of groups) {
     const isMain = group.index === skills.mainSocketGroup;
     for (const gem of (group.gems ?? [])) {
-      const name: string = gem.name || gem;
+      const name: string = gem.name;
       const level: number = gem.level ?? 1;
       const quality: number = gem.quality ?? 0;
       const isSupport = name.includes('Support') || name.includes('Mirage') || gem.isSupport;
@@ -568,8 +569,8 @@ export async function handleGemUpgradePath(
 /**
  * Helper: Extract skills from build
  */
-function extractSkills(build: any): Array<{ gems: any[]; slot: string }> {
-  const skills: Array<{ gems: any[]; slot: string }> = [];
+function extractSkills(build: PoBBuild): Array<{ gems: PoBGem[]; slot: string }> {
+  const skills: Array<{ gems: PoBGem[]; slot: string }> = [];
 
   if (build.Skills?.SkillSet) {
     const skillSets = Array.isArray(build.Skills.SkillSet)
