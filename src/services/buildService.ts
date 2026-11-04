@@ -598,15 +598,7 @@ export class BuildService {
     const baseType = parsed.base || this.extractFlaskBase(parsed.name);
 
     // Prefix/suffix hold PoB's internal mod ids, not display text.
-    let prefix: string | undefined;
-    let suffix: string | undefined;
-    for (const line of lines) {
-      if (line.startsWith('Prefix:') && !line.includes('None')) {
-        prefix = line.replace(/Prefix:\s*{[^}]*}/, '').trim();
-      } else if (line.startsWith('Suffix:') && !line.includes('None')) {
-        suffix = line.replace(/Suffix:\s*{[^}]*}/, '').trim();
-      }
-    }
+    const { prefix, suffix } = this.affixIds(lines);
 
     return {
       id: `flask_${slotNumber}`,
@@ -625,6 +617,24 @@ export class BuildService {
         ? String(parsed.selectedVariants[parsed.selectedVariants.length - 1])
         : undefined,
     };
+  }
+
+  /**
+   * PoB writes its internal mod ids on `Prefix:`/`Suffix:` lines, sometimes
+   * prefixed by a `{tag}` group marker; "None" means the slot is empty. Shared
+   * by the flask and jewel parsers, which used to carry this block verbatim.
+   */
+  private affixIds(lines: string[]): { prefix?: string; suffix?: string } {
+    let prefix: string | undefined;
+    let suffix: string | undefined;
+    for (const line of lines) {
+      if (line.startsWith('Prefix:') && !line.includes('None')) {
+        prefix = line.replace(/Prefix:\s*{[^}]*}/, '').trim();
+      } else if (line.startsWith('Suffix:') && !line.includes('None')) {
+        suffix = line.replace(/Suffix:\s*{[^}]*}/, '').trim();
+      }
+    }
+    return { prefix, suffix };
   }
 
   private extractFlaskBase(name: string): string {
@@ -879,16 +889,7 @@ export class BuildService {
     const levelRequirement = Number(parsed.meta.get('LevelReq') ?? 0) || 0;
 
     // Parse prefix and suffix
-    let prefix: string | undefined;
-    let suffix: string | undefined;
-
-    for (const line of lines) {
-      if (line.startsWith('Prefix:') && !line.includes('None')) {
-        prefix = line.replace(/Prefix:\s*{[^}]*}/, '').trim();
-      } else if (line.startsWith('Suffix:') && !line.includes('None')) {
-        suffix = line.replace(/Suffix:\s*{[^}]*}/, '').trim();
-      }
-    }
+    const { prefix, suffix } = this.affixIds(lines);
 
     // Parse cluster jewel specifics
     let clusterJewelSkill: string | undefined;

@@ -1,10 +1,14 @@
 # Ideas backlog (deferred)
-- ToolGate is a permanent no-op placeholder threaded through router deps — remove entirely or make real. Decide with owner; removal reduces plumbing.
-- `optimizationHandlers.optimize_tree` either enforce constraints (real node-filtering) or drop params — behavior change to advertise in tool description.
-- Replace hand-rolled smoke transports with mcpClient.mjs; wire state-truthfulness.mjs into package.json.
-- treeService.analyzePathOptimizations stub ("Same for now") — implement or remove output line that implies it works.
-- itemParser `{corruptedRange}` parsed but never consumed — wire into applyRange or stop storing.
-- CI workflow (finding 24): jest-only workflow (smoke needs PoB). Build + jest --coverage.
-- keystones section (finding 17): exportHandlers renders `tree.keystones` — bridge get_tree has no names. Needs either TS-side derivation from fetched tree.lua (TreeService.mapNodesToDetails exists) or Lua return. Smoke-only verification here; low confidence offline.
-- empty_catch pool (50): many are legit `catch {}` around best-effort console error paths; need per-site triage with `catch (e) { /* reason */ }` — the counter may only count truly empty `{}` blocks; check detector semantics before mass-editing.
-- tradeQueryBuilder.fromItemRequirements: dead AND stubbed (slot filter no-op) — verify whether purge removed it; if present, delete unless slot-filter-from-item is wanted.
+
+Closed (do not re-add): ToolGate removal (wave 11) · optimize_tree enforcement (wave 8) ·
+smoke transports → mcpClient.mjs + state-truthfulness runner (waves 20, 25) ·
+analyzePathOptimizations real BFS-vs-optimal (wave 28) · {corruptedRange} wired (wave 29) ·
+CI workflow (wave 8) · empty catches triaged + logged (wave 6) · generator stamp tolerance (wave 26).
+
+Still open:
+- keystones section (finding 17): exportHandlers renders `tree.keystones`, but the bridge
+  `get_tree` returns ids without names. TS-side derivation from fetched tree.lua
+  (TreeService.mapNodesToDetails) is possible offline; the LIVE path can only be verified
+  with PoB running. Blocked-on-environment, low offline confidence.
+- tradeQueryBuilder.fromItemRequirements: if the purge missed it, it is dead AND stubbed
+  (slot filter no-op). Verify with grep, delete if present.
