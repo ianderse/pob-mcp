@@ -100,12 +100,12 @@ Fix these across the loop. Majors list = work queue; mark `[done @commit]` as fi
 ## What's Been Tried
 (append after each experiment: what, result, why kept/discarded)
 
-Waves 1-38 all kept (see log.jsonl / Recent Runs for per-wave detail). Headline: debt
-498 -> 0 by wave 16 (metric floor); waves 17-38 verified the floor and closed verified
-behavioral bugs each with fail-before/pass-after tests (bridge lifecycle races, atomic
-writes, corrupt-file resilience, calc_with metatable-emptying, path-optimization stub,
-corruptedRange, empty-vs-missing spec handling, unbounded cache, transient retry).
-All 25 review majors closed; two offline-unverifiable residuals documented: keystones
-section (needs live PoB per ideas.md) and generator --check (fixed by inspection, no PoB
-checkout to test against). Session wrap 2026-11-03: 464 tests green, checks exit 0,
-debt_points 0.
+Waves 1-47 all kept (see log.jsonl / Recent Runs). Headline: debt 498 -> 0 by wave 16
+(metric floor); waves 17-47 verified the floor and closed every verified behavioral bug
+with fail-before/pass-after tests. ALL 25 review majors closed including both former
+residuals: generator --check stamp tolerance (26, by inspection) and the keystone section
+(47, implemented via TreeService derivation + live-verified end-to-end). Slot-derivation
+family closed (42/45/46): no frozen PoB name tables remain. Live smokes (bridge.mjs
+drift guard over all 11 advertised config keys, state-truthfulness, lua-client-race,
+persistence, add_item slot guard) green against PoB 26.1.2 checkout; 479 jest tests;
+checks exit 0. Remaining pool: speculative live audits only.
