@@ -534,7 +534,7 @@ export class PoBLuaApiClient {
       // Read lines until we get valid JSON response
       // Skip non-JSON lines (like "LOADING", warnings, etc.)
       let attempts = 0;
-      const maxAttempts = 100;
+      const maxAttempts = 10000;
 
       while (attempts < maxAttempts) {
         let line: string;
@@ -569,7 +569,12 @@ export class PoBLuaApiClient {
         }
       }
 
-      throw new Error(`Failed to receive valid JSON response after ${maxAttempts} lines`);
+      // The real reply may still arrive later and would be consumed by the next
+      // request. Terminate so the manager restarts from a clean state.
+      this.killed = true;
+      this.buffer = "";
+      try { this.proc?.kill(); } catch (e) { noteIgnoredError("kill on stop (process likely already exited)", e); }
+      throw new Error(`Failed to receive valid JSON response after ${maxAttempts} lines; the PoB bridge was terminated to avoid protocol desync and will restart on the next call`);
     } finally {
       this.isSending = false;
     }
