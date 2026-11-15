@@ -96,6 +96,14 @@ try {
   }
   const badSlot = await request('tools/call', { name: 'lua_simulate', arguments: { slotName: 'Chest', itemText: 'Rarity: RARE\nX\nQuilted Jacket' } });
   if (badSlot.result?.isError !== true) throw new Error('lua_simulate must reject a slot name PoB does not know');
+  const weights = await request('tools/call', { name: 'lua_stat_weights', arguments: { focus: 'defence' } });
+  if (weights.error || weights.result?.isError) throw new Error(`lua_stat_weights failed: ${JSON.stringify(weights.error ?? weights.result)}`);
+  const weightsText = weights.result?.content?.[0]?.text || '';
+  if (!weightsText.includes('=== Stat weights (defence) ===') || !/maximum Life {2}\(roll \d+\): DPS [+-]?[\d.]+%, EHP \+[\d.]+%/.test(weightsText)) {
+    throw new Error(`lua_stat_weights did not report a life weight: ${weightsText}`);
+  }
+  const badFocus = await request('tools/call', { name: 'lua_stat_weights', arguments: { focus: 'speed' } });
+  if (badFocus.result?.isError !== true) throw new Error('lua_stat_weights must reject an unknown focus');
   if (weightedSmoke) {
     if (!process.env.POE_SESSION_ID) throw new Error('POE_SESSION_ID is required for the weighted smoke test.');
     const weighted = await request('tools/call', { name: 'find_weighted_trade_items', arguments: { league: 'Standard', slot: 'Amulet', limit: 1 } });

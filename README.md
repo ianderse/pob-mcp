@@ -384,6 +384,7 @@ PoB installation or checkout containing the relevant mod tables.
 | `lua_get_stats` | Get calculated stats (`category`: `offense`/`defense`/`all`) |
 | `lua_get_timeless_jewels` | Timeless jewels as applied: seed, conqueror, lookup-table status, every conquered passive; warns when a jewel is doing nothing |
 | `lua_get_ailments` | Non-damaging ailment magnitude, and whether the DPS calc is crediting it |
+| `lua_stat_weights` | Measure what a typical roll of each common affix is worth to this build, as % DPS and % EHP, ranked |
 | `lua_simulate` | Try an item swap, flask toggle, passive or mastery change and read the delta, without changing the build |
 | `export_full_stats` | Every numeric stat PoB calculated (several hundred keys), optionally filtered by key substring |
 | `parse_item` | Dry-run an item text through PoB's parser without equipping it; flags mod lines PoB cannot read |

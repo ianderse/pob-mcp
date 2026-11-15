@@ -58,6 +58,12 @@ nothing to undo. It also names an attribute requirement the swap would leave unm
 the other read paths quote full DPS for that gear. Mutate only when the change is
 not one `lua_simulate` can express, and then on a scratch build.
 
+To decide which affixes are worth crafting or shopping for, call `lua_stat_weights`
+first: it measures a typical roll of each common affix against this build, so the
+ranking comes from the build's own scaling and caps. Read its "No effect" and
+"Capped" lists as findings, not gaps, and treat a `[nonlinear]` row as good only
+near the roll it measured.
+
 ```text
 before = read the relevant live state
 apply one change

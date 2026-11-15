@@ -603,6 +603,17 @@ export function getLuaToolSchemas(): ToolSchema[] {
       },
     },
     {
+      name: "lua_stat_weights",
+      description: "Measure what a typical high-tier roll of each common affix is worth to THIS build: percentage change in DPS and in EHP for about fifty affixes (life, resistances, armour, evasion, damage types, speed, crit, flat added damage, penetration), ranked. Use it to decide what to craft or buy for, or to explain why one affix matters more than another on this build. Each probe is a real PoB calculation (a copy of an equipped ring, amulet or armour piece with one extra line, nothing equipped or saved), so the numbers reflect the build's actual scaling, caps and breakpoints rather than a generic weighting. Resistances are limited to the room below their cap; an affix whose effect changes with size is flagged nonlinear; a line PoB cannot parse is reported rather than shown as zero. What it does NOT do: the figures are single-roll effects at the current build, not per-point exchange rates, and they shift as the build changes; it measures DPS and EHP only, so movement speed, recovery, charges and ailment effects are not scored; weapon-local mods (physical damage on a weapon, local attack speed) are not covered; it ranks affixes, not trade listings, and does not price anything.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          focus: { type: "string", enum: ["dps", "defence", "both"], description: "What the ranking scores: 'dps', 'defence' (EHP), or 'both' (default, equal weight)." },
+          slot: { type: "string", description: "Equipped slot to carry the probe lines, exactly as PoB names it (e.g. 'Ring 2'). Default: the first filled ring, amulet, belt or armour slot, which disturbs the build least." },
+        },
+      },
+    },
+    {
       name: "lua_get_ailments",
       description: "Show non-damaging ailments (Shock, Chill, Scorch, Brittle, Sap) with what the DPS calculation is actually crediting next to what the main skill would inflict on the configured enemy. Call this for any build that shocks or chills: PoB applies a chance-based ailment only when its magnitude is entered by hand, so an uncounted shock silently understates every DPS figure. Magnitude is measured for the MAIN skill against the CURRENT enemy config, and it falls off steeply with enemy life, so re-read it per enemy rather than quoting one number for all content.",
       inputSchema: { type: "object", properties: {} },
