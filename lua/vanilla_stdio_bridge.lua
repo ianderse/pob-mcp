@@ -53,7 +53,68 @@ do
   end
 end
 
+-- Headless runs in dev mode, which autosaves the outgoing build to
+-- buildPath/~~temp~~.xml on every switch and opens an error popup when that
+-- fails. Loads now treat any popup as a failure, so switch the autosave off.
+if _G.launch and _G.launch.main then _G.launch.main.disableDevAutoSave = true end
+
 local BuildOps = assert(loadfile(ADAPTER_DIR .. 'pob_ops.lua'))(Compat)
+
+-- Set when the last load_build_xml failed: the bridge then refuses build-reading
+-- actions instead of answering with whatever build happens to be in memory.
+local lastLoadError = nil
+
+
+local function closePopups()
+  local main = _G.launch and _G.launch.main -- HeadlessWrapper keeps its main object local; PoB publishes it as `launch`
+  local titles = {}
+  if main and main.popups then
+    for i, popup in ipairs(main.popups) do titles[i] = tostring(popup.title) end
+    while #main.popups > 0 do main:ClosePopup() end
+  end
+  return titles
+end
+
+-- Load a build without inheriting anything from the outgoing one, and fail
+-- loudly instead of leaving the previous build's output in place. Returns true
+-- when PoB had to convert the build to the current game version.
+local function loadFresh(xml, name)
+  if _G.launch then _G.launch.promptMsg = nil end
+  closePopups()
+  -- PoB reuses the build object across loads. Cluster jewel subGraphs from the
+  -- outgoing build point at sockets the next load has already replaced, and
+  -- PostLoad asserts while trying to remove them.
+  if build and build.spec then build.spec.subGraphs = {} end
+  -- Loading straight over another build can read the outgoing build's tabs
+  -- (e.g. a stale activeSpec index); passing through an empty build resets them.
+  _G.newBuild()
+  local stale = build and build.calcsTab and build.calcsTab.mainOutput
+  _G.loadBuildFromXML(xml, name)
+  local prompt = _G.launch and _G.launch.promptMsg
+  if _G.launch then _G.launch.promptMsg = nil end
+  if prompt then error('PoB prompt: ' .. tostring(prompt), 0) end
+  -- A build without a supported targetVersion (old saves, minimal XML) opens
+  -- the "Game Version" conversion popup. Do what its default button does in the
+  -- GUI: convert to the current game version, which reloads the build.
+  local converted = false
+  local main = _G.launch and _G.launch.main
+  local popup = main and main.popups and main.popups[1]
+  if popup and #main.popups == 1 and popup.title == 'Game Version'
+      and popup.controls and popup.controls.convert and popup.controls.convert.onClick then
+    popup.controls.convert.onClick()
+    converted = true
+  end
+  local popups = closePopups()
+  if #popups > 0 then error('PoB opened a popup: ' .. table.concat(popups, ' | '), 0) end
+  -- PoB can close the build without throwing. Shutdown clears savers, so stale
+  -- build fields alone do not prove a load.
+  if not build or not build.savers or not build.spec then
+    error('PoB did not initialize the build; check the XML and supported build version', 0)
+  end
+  local output = build.calcsTab and build.calcsTab.mainOutput
+  if not output or output == stale then error('build did not produce a fresh calculation', 0) end
+  return converted
+end
 
 -- json.encode raises on cycles, NaN and functions. An uncaught raise here kills
 -- the process and takes the caller's loaded build with it, so a payload we
@@ -207,7 +268,9 @@ end
 
 handlers.new_build = function(params)
   if not _G.newBuild then return { ok = false, error = 'headless wrapper not initialized' } end
+  if build and build.spec then build.spec.subGraphs = {} end
   _G.newBuild()
+  lastLoadError = nil
   if params and (params.className or params.ascendancy) then
     local classId = params.className and (CLASS_IDS[params.className] or CLASS_IDS[params.className:lower()]) or 0
     local ascendId = params.ascendancy and ASCENDANCY_IDS[classId] and ASCENDANCY_IDS[classId][params.ascendancy] or 0
@@ -221,14 +284,13 @@ end
 handlers.load_build_xml = function(params)
   if not params or type(params.xml) ~= 'string' then return { ok = false, error = 'missing xml' } end
   if not _G.loadBuildFromXML then return { ok = false, error = 'headless wrapper not initialized' } end
-  local ok, err = pcall(_G.loadBuildFromXML, params.xml, (params.name and tostring(params.name)) or 'API Build')
-  if not ok then return { ok = false, error = tostring(err) } end
-  -- PoB can close the build or stop at a conversion popup without throwing.
-  -- Shutdown clears savers, so stale build fields alone do not prove a load.
-  if not build or not build.savers or not build.spec then
-    return { ok = false, error = 'PoB did not initialize the build; check the XML and supported build version' }
+  local ok, res = pcall(loadFresh, params.xml, (params.name and tostring(params.name)) or 'API Build')
+  if not ok then
+    lastLoadError = tostring(res)
+    return { ok = false, error = lastLoadError }
   end
-  return { ok = true, build_id = 1 }
+  lastLoadError = nil
+  return { ok = true, build_id = 1, converted = res == true or nil }
 end
 
 handlers.get_stats = function(params)
@@ -354,6 +416,14 @@ handlers.get_capabilities = function()
   return { ok = true, capabilities = { mode = 'vanilla', adapter = 'vanilla-stdio-v2', actions = actions } }
 end
 
+-- Actions that still answer after a failed load; everything else reads the
+-- build in memory, so it refuses until the next successful load. Every other
+-- handler above needs a loaded build; add new build-independent actions here.
+local LOAD_INDEPENDENT = {
+  ping = true, version = true, get_capabilities = true,
+  new_build = true, load_build_xml = true,
+}
+
 reply({ ok = true, ready = true, version = { adapter = 'vanilla-stdio-v2' } })
 for line in io.lines() do
   local request = json.decode(line)
@@ -371,6 +441,8 @@ for line in io.lines() do
     local handler = handlers[action]
     if not handler then
       reply({ ok = false, error = 'unknown action: ' .. tostring(action) })
+    elseif lastLoadError and not LOAD_INDEPENDENT[action] then
+      reply({ ok = false, error = 'last build load failed: ' .. lastLoadError })
     else
       local ok, res = pcall(handler, params)
       if not ok then

@@ -72,6 +72,32 @@ try {
   if (restored.ascendClassId !== tree.ascendClassId || restored.nodes.join(',') !== tree.nodes.join(',')) {
     throw new Error('tree mutation did not restore the original allocation');
   }
+  // A build without targetVersion is converted like the GUI's default button
+  // (PoB opens its "Game Version" popup for old saves and minimal XML).
+  const minimal = await client.loadBuildXml('<?xml version="1.0" encoding="UTF-8"?><PathOfBuilding><Build level="1" className="Witch"/></PathOfBuilding>', 'convert-smoke');
+  if (minimal.converted !== true) throw new Error(`minimal XML was not converted: ${JSON.stringify(minimal)}`);
+  if (typeof (await client.getStats(['Life'])).Life !== 'number') throw new Error('converted build has no Life');
+  // A failed load must not leave the previous build's stats readable, and the
+  // build-independent actions must keep answering until the next good load.
+  let failed = false;
+  try { await client.loadBuildXml('<PathOfBuilding><Build', 'broken-load-smoke'); } catch { failed = true; }
+  if (!failed) throw new Error('loading a broken XML did not fail');
+  for (const [name, call] of [
+    ['get_stats', () => client.getStats(['Life'])],
+    ['get_tree', () => client.getTree()],
+    ['get_items', () => client.getItems()],
+  ]) {
+    let stale = true;
+    try { await call(); } catch (e) { stale = !/last build load failed/.test(e.message); }
+    if (stale) throw new Error(`${name} answered after a failed load (stale build)`);
+  }
+  if (!await client.ping()) throw new Error('ping must answer after a failed load');
+  if (!(await client.getCapabilities()).actions?.includes('get_stats')) throw new Error('get_capabilities must answer after a failed load');
+  await client.newBuild();
+  if (typeof (await client.getStats(['Life'])).Life !== 'number') throw new Error('new_build must recover from a failed load');
+  await client.loadBuildXml(await readFile(resolve('example-build.xml'), 'utf8'), 'recovered-load-smoke');
+  if (typeof (await client.getStats(['Life'])).Life !== 'number') throw new Error('a good load must recover from a failed load');
+
   // A chance-based ailment is never applied to the enemy by PoB unless the
   // "Effect of Shock" config is filled in, so a shock build silently reads as
   // dealing no shock at all. get_ailments has to expose both halves: what the
