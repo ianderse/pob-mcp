@@ -443,6 +443,9 @@ export class PoBLuaApiClient {
         cwd: this.options.cwd,
         env,
         stdio: ["pipe", "pipe", "pipe"],
+        // A GUI-hosted MCP server (Claude Desktop) would otherwise flash a console
+        // window for the bridge on Windows.
+        windowsHide: true,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -4,13 +4,15 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import zlib from 'node:zlib';
 import { PoBLuaApiClient } from '../../build/pobLuaBridge.js';
-import { gearedBuildXml, smokePoBSrc } from './pobSource.mjs';
+import { gearedBuildXml, smokeLaunch, smokePoBSrc } from './pobSource.mjs';
 
 const cwd = smokePoBSrc();
 
+const launch = await smokeLaunch([resolve('lua/vanilla_stdio_bridge.lua')]);
 const client = new PoBLuaApiClient({
   cwd,
-  args: [resolve('lua/vanilla_stdio_bridge.lua')],
+  cmd: launch.cmd,
+  args: launch.args,
   env: { POB_API_STDIO: '0' },
   timeoutMs: 60_000,
 });

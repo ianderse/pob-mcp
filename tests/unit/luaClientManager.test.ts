@@ -140,4 +140,11 @@ describe('LuaClientManager.ensureClient', () => {
     await manager.ensureClient();
     expect(mockCalls()[0].args).toEqual(['one', 'two']);
   });
+
+  it('accepts POB_ARGS as a JSON array so paths with spaces survive', async () => {
+    process.env.POB_ARGS = '["C:\\\\My Files\\\\bridge.lua"]';
+    const manager = new LuaClientManager(true);
+    await manager.ensureClient();
+    expect(mockCalls()[0].args).toEqual(['C:\\My Files\\bridge.lua']);
+  });
 });

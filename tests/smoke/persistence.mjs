@@ -9,7 +9,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { XMLParser } from 'fast-xml-parser';
 import { PoBLuaApiClient } from '../../build/pobLuaBridge.js';
-import { smokePoBSrc, gearedBuildXml } from './pobSource.mjs';
+import { smokeLaunch, smokePoBSrc, gearedBuildXml } from './pobSource.mjs';
 
 const cwd = smokePoBSrc();
 const directory = await mkdtemp(join(tmpdir(), 'pob-persistence-smoke-'));
@@ -32,8 +32,9 @@ async function call(name, args = {}, expectError = false) {
   return result.content.map(part => part.text ?? '').join('\n');
 }
 const life = text => Number(text.match(/^Life: ([\d.]+)/m)?.[1]);
-const engine = new PoBLuaApiClient({ cwd, cmd: process.env.POB_CMD,
-  args: [resolve('lua/vanilla_stdio_bridge.lua')], env: { POB_API_STDIO: '0' }, timeoutMs: 60000 });
+const engineLaunch = await smokeLaunch([resolve('lua/vanilla_stdio_bridge.lua')]);
+const engine = new PoBLuaApiClient({ cwd, cmd: engineLaunch.cmd,
+  args: engineLaunch.args, env: { POB_API_STDIO: '0' }, timeoutMs: 60000 });
 try {
   await client.connect(transport);
   await call('analyze_build', { build_name: 'lean' });
@@ -97,7 +98,8 @@ try {
   await engine.start();
   await engine.newBuild({ className: 'Witch' });
   const tree = await engine.getTree();
-  const selection = execFileSync(process.env.POB_CMD || 'luajit', ['-', join(cwd, 'TreeData', tree.treeVersion, 'tree.lua'), String(tree.nodes[0])], {
+  const treeLaunch = await smokeLaunch(['-', join(cwd, 'TreeData', tree.treeVersion, 'tree.lua'), String(tree.nodes[0])]);
+  const selection = execFileSync(treeLaunch.cmd, treeLaunch.args, {
     encoding: 'utf8', input: `local t = dofile(arg[1])
 local start = tonumber(arg[2])
 local queue, previous, index = {start}, {[start] = false}, 1
