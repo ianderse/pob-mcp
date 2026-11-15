@@ -9,14 +9,12 @@ For each item it emits PoB's own serialisation (`BuildRaw`) plus the mod lines
 PoB considers live, so the comparison is against behaviour rather than against
 a transcription of the format.
 
-Run it through the generator wrapper, which sets the paths and picks the
-patched interpreter:
+Run it through the generator wrapper, which sets the paths and the interpreter:
 
     node scripts/generate-item-oracle.mjs
 
-Requires a LuaJIT that accepts PoB's compound assignment operators — stock
-LuaJIT fails to parse Modules/Main.lua with a syntax error. Point POB_CMD at a
-LuaJIT built against the lua51.dll Path of Building ships.
+Requires a LuaJIT that accepts PoB's compound assignment operators, which v2.1
+builds from July 2026 on do. Point POB_CMD at another interpreter if needed.
 ]]
 
 if not GetVirtualScreenSize then
@@ -25,6 +23,10 @@ end
 
 local outPath = ...
 assert(outPath, "usage: pob-item-oracle.lua <output.json>")
+
+local SCRIPT_DIR = (arg and arg[0] or ''):gsub('[^/\\]*$', '')
+local Compat = dofile(SCRIPT_DIR .. '../lua/pob_compat.lua')
+Compat.accept_launcher_headers()
 
 -- HeadlessWrapper chatters over stdout; keep it out of the JSON.
 dofile("HeadlessWrapper.lua")
@@ -81,7 +83,7 @@ for _, selection in ipairs({
 	{ label = "zana-es-nocrit-chilled", groups = { [1] = 2, [2] = 5, [3] = 12 } },
 	{ label = "zana-mana-pen-shocked", groups = { [1] = 3, [2] = 7, [3] = 10 } },
 }) do
-	local item = new("Item"):Item(zanaRaw)
+	local item = Compat.construct("Item", zanaRaw)
 	table.insert(samples, sample(selection.label, item, function(it)
 		it.variantGroupSelections = {}
 		for groupId, variantId in pairs(selection.groups) do
@@ -97,7 +99,7 @@ for _, selection in ipairs({
 	{ label = "watchers-eye-two-mods", variant = 46, alts = { 27 } },
 	{ label = "watchers-eye-one-mod", variant = 46, alts = {} },
 }) do
-	local item = new("Item"):Item(watcherRaw)
+	local item = Compat.construct("Item", watcherRaw)
 	table.insert(samples, sample(selection.label, item, function(it)
 		it.variant = selection.variant
 		it.hasAltVariant = selection.alts[1] ~= nil
@@ -120,7 +122,7 @@ for _, catalyst in ipairs({ "Intrinsic", "Prismatic" }) do
 		"{tags:attribute}{range:1}+(10-13) to all Attributes",
 		"{tags:resistance}{range:0.5}+(20-40)% to Chaos Resistance",
 	}, "\n")
-	local item = new("Item"):Item(raw)
+	local item = Compat.construct("Item", raw)
 	table.insert(samples, sample("catalyst-" .. catalyst:lower(), item, function() end))
 end
 

@@ -1,5 +1,7 @@
 -- Thin wrappers around PoB headless objects for programmatic operations
 
+local Compat = ...
+
 local M = {}
 
 -- PoB's own config option table is the only authoritative list of valid config
@@ -710,7 +712,7 @@ function M.add_item_text(params)
     return nil, string.format('item text too long (max %d bytes)', MAX_ITEM_TEXT_LENGTH)
   end
 
-  local ok, item = pcall(new, 'Item', params.text)
+  local ok, item = pcall(Compat.construct, 'Item', params.text)
   if not ok then return nil, 'invalid item text: ' .. tostring(item) end
   if not item or not item.baseName then return nil, 'failed to parse item' end
 
@@ -1169,7 +1171,7 @@ function M.create_spec(params)
     end
   end
   local version = (source and source.treeVersion) or (build.spec and build.spec.treeVersion) or latestTreeVersion
-  local newSpec = new('PassiveSpec', build, version)
+  local newSpec = Compat.construct('PassiveSpec', build, version)
   if source then
     -- Same copy mechanism TreeTab uses for its spec management popup
     newSpec.jewels = copyTable(source.jewels)

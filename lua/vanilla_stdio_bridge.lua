@@ -13,6 +13,9 @@ if not GetVirtualScreenSize then
   function GetVirtualScreenSize() return 1920, 1080 end
 end
 
+local Compat = dofile(ADAPTER_DIR .. 'pob_compat.lua')
+Compat.accept_launcher_headers()
+
 -- The upstream wrapper initializes PoB and exposes newBuild/loadBuildFromXML plus `build`.
 dofile('HeadlessWrapper.lua')
 
@@ -50,7 +53,7 @@ do
   end
 end
 
-local BuildOps = dofile(ADAPTER_DIR .. 'pob_ops.lua')
+local BuildOps = assert(loadfile(ADAPTER_DIR .. 'pob_ops.lua'))(Compat)
 
 -- json.encode raises on cycles, NaN and functions. An uncaught raise here kills
 -- the process and takes the caller's loaded build with it, so a payload we
@@ -148,9 +151,18 @@ local function generate_weighted_trade_query(params)
   options.statWeights = options.statWeights or build.itemsTab.tradeQuery.statSortSelectionList
   if not options.statWeights or #options.statWeights == 0 then options.statWeights = { { label = 'Full DPS', stat = 'FullDPS', weightMult = 1.0 }, { label = 'Effective Hit Pool', stat = 'TotalEHP', weightMult = 0.5 } } end
   local ok, result = pcall(function()
-    local generator = new('TradeQueryGenerator', build.itemsTab.tradeQuery)
+    local generator = Compat.construct('TradeQueryGenerator', build.itemsTab.tradeQuery)
     local query, warning
-    generator.requesterCallback = function(_, generated, err) query, warning = generated, err end
+    -- PoB 2.67 hands over the whole request body as JSON. PoB dev (3.30) hands
+    -- over only the inner query table and adds sort and engine in TradeQuery.
+    generator.requesterCallback = function(_, generated, err)
+      if type(generated) == 'table' then
+        query = { query = generated, sort = { ['statgroup.0'] = 'desc' }, engine = 'new' }
+      else
+        query = generated
+      end
+      warning = err
+    end
     generator.requesterContext = {}
     generator.tradeTypeIndex = 2 -- available listings, matching the MCP default
     generator:StartQuery(slot, options)

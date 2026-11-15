@@ -109,8 +109,8 @@ export async function handleRefreshTreeData(context: WatchHandlerContext, versio
       content: [{
         type: "text" as const,
         text: version
-          ? `Passive tree data cache cleared for version ${version}.\n\nTree data will be re-fetched on next analysis.`
-          : `All passive tree data caches cleared.\n\nTree data will be re-fetched on next analysis.`,
+          ? `Passive tree data cache cleared for version ${version}.\n\nTree data will be re-read from Path of Building on next analysis.`
+          : `All passive tree data caches cleared.\n\nTree data will be re-read from Path of Building on next analysis.`,
       }],
     };
   });
