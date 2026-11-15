@@ -343,6 +343,16 @@ class PoBMCPServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error("Path of Building MCP Server running on stdio");
+
+    // Opt-in: booting PoB takes seconds, so start it now and the first
+    // Lua-backed tool call does not pay for it. ensureClient() joins this start
+    // if a call arrives first, and a failure is only logged: the next call
+    // retries the start and reports its own error.
+    if (process.env.POB_LUA_PREWARM === 'true' && this.luaClientManager.isEnabled()) {
+      this.luaClientManager.ensureClient().catch((error) => {
+        console.error('[Lua Bridge] Prewarm failed:', error instanceof Error ? error.message : String(error));
+      });
+    }
   }
 }
 
