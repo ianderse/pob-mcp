@@ -1,5 +1,5 @@
 import { describe, it, expect, jest } from '@jest/globals';
-import { handleSetEnemyStats } from '../../src/handlers/configHandlers.js';
+import { handleSetConfig, handleSetEnemyStats } from '../../src/handlers/configHandlers.js';
 
 interface SetConfigCall {
   params: Record<string, unknown>;
@@ -101,5 +101,25 @@ describe('handleSaveConfigPreset — atomic write', () => {
       await handle.close().catch(() => {});
       fsSync.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('handleSetConfig customMods', () => {
+  it('warns about modifier lines PoB could not parse', async () => {
+    const { context } = makeContext({
+      applied: { customMods: '+10 to maximum Life\nnot a real mod' },
+      rejected: { customModsUnparsed: 'not a real mod' },
+    });
+    const result = await handleSetConfig(context as never, { config_name: 'customMods', value: '+10 to maximum Life\nnot a real mod' });
+    const text = textOf(result as never);
+    expect(text).toContain('=== Configuration Updated ===');
+    expect(text).toContain('could not parse these lines');
+    expect(text).toContain('not a real mod');
+  });
+
+  it('does not warn when every line parsed', async () => {
+    const { context } = makeContext({ applied: { customMods: '+10 to maximum Life' }, rejected: {} });
+    const result = await handleSetConfig(context as never, { config_name: 'customMods', value: '+10 to maximum Life' });
+    expect(textOf(result as never)).not.toContain('could not parse');
   });
 });
