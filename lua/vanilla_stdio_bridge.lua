@@ -503,12 +503,12 @@ handlers.calc_with = function(params)
     end
     if not wantsFullDPS then params.useFullDPS = false end
   end
-  local out, base = BuildOps.calc_with(params)
+  local out, base, unrecognised = BuildOps.calc_with(params)
   if out == nil then return { ok = false, error = base or 'operation failed' } end
   if fields then
     out, base = pickFields(out, fields), pickFields(base, fields)
   end
-  return { ok = true, output = out, base = base }
+  return { ok = true, output = out, base = base, unrecognisedLines = unrecognised }
 end
 handlers.export_build_xml = op(BuildOps.export_build_xml, 'xml')
 handlers.add_item_text = op(BuildOps.add_item_text, 'item')

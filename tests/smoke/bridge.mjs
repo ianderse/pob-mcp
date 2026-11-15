@@ -235,6 +235,19 @@ try {
     throw new Error(`draining 100 Strength should leave a requirement unmet: Str ${drained.output.Str} vs ReqStr ${drained.output.ReqStr}`);
   }
 
+  // A line PoB cannot parse calculates to a zero delta, indistinguishable from a
+  // mod that does not matter, so the bridge has to name it.
+  const garbled = ['Rarity: RARE', 'Garbled Jacket', 'Quilted Jacket', 'Item Level: 84',
+    'Quality: 20', 'LevelReq: 72', 'Implicits: 0', '+100 to maximum Life', 'Grants a wholly invented effect'].join('\n');
+  const garbledResult = await client.calcWith({ repItem: garbled, repSlotName: 'Body Armour' });
+  if (!garbledResult.unrecognisedLines?.some((line) => line.includes('invented effect'))) {
+    throw new Error(`an unparsable line must be reported: ${JSON.stringify(garbledResult.unrecognisedLines)}`);
+  }
+  if (garbledResult.unrecognisedLines.some((line) => line.includes('maximum Life'))) {
+    throw new Error('a recognised line must not be reported as unrecognised');
+  }
+  if (swapped.unrecognisedLines?.length) throw new Error(`a fully parsed item reported unrecognised lines: ${swapped.unrecognisedLines}`);
+
   // The flask override flips the slot rather than setting it: Flask 2 is the
   // fixture's granite flask, so simulating it off has to drop armour.
   const flaskOff = await client.calcWith({ toggleFlask: 2 });

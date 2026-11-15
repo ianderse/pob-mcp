@@ -963,10 +963,18 @@ async setTree(params: {
     };
   }
 
-  async calcWith(params: CalcWithParams): Promise<{ output: CalcOutput; base: CalcOutput }> {
+  /**
+   * `unrecognisedLines` is present only for an item substitution: the lines PoB
+   * could not parse, which contribute nothing to `output`.
+   */
+  async calcWith(params: CalcWithParams): Promise<{ output: CalcOutput; base: CalcOutput; unrecognisedLines?: string[] }> {
     const res = await this.send({ action: "calc_with", params });
     if (!res.ok) throw new Error(res.error || "calc_with failed");
-    return { output: res.output as CalcOutput, base: res.base as CalcOutput };
+    return {
+      output: res.output as CalcOutput,
+      base: res.base as CalcOutput,
+      unrecognisedLines: Array.isArray(res.unrecognisedLines) ? (res.unrecognisedLines as string[]) : undefined,
+    };
   }
 
   async getMasteryOptions(): Promise<MasteryOptions> {
