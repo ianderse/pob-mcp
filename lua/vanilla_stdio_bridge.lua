@@ -19,6 +19,13 @@ Compat.accept_launcher_headers()
 -- The upstream wrapper initializes PoB and exposes newBuild/loadBuildFromXML plus `build`.
 dofile('HeadlessWrapper.lua')
 
+-- Headless runs in PoB's dev mode, which autosaves the outgoing build to
+-- buildPath/~~temp~~.xml on every build switch (and renames it "~~temp~~"), and
+-- opens an error popup when that write fails. Nothing here wants that file.
+if type(main) == 'table' then
+  main.disableDevAutoSave = true
+end
+
 -- HeadlessWrapper stubs Inflate() to return "", which makes PoB's timeless jewel
 -- loader overwrite its .bin cache with an empty file and skip conquered nodes.
 -- Provide a real implementation via the system zlib (LuaJIT FFI).
