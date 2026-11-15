@@ -21,6 +21,7 @@ import {
   type SweepStep,
 } from "../defensiveAnalyzer.js";
 import type { CalcWithParams } from "../pobLuaBridge.js";
+import { CARRIER_SLOTS, pickCarrier } from "./carrier.js";
 
 /** Only the bridge surface the sweep uses, so a test can supply a plain object. */
 export interface SweepClient {
@@ -33,14 +34,6 @@ interface SweepResult {
   /** Why no sweep ran. */
   note?: string;
 }
-
-/**
- * Slots whose item can carry an extra modifier. Rings first: they are the
- * least likely to be the build's damage source, so substituting one disturbs least.
- */
-const CARRIER_SLOTS: readonly string[] = [
-  'Ring 2', 'Ring 1', 'Amulet', 'Belt', 'Gloves', 'Boots', 'Helmet', 'Body Armour',
-];
 
 const DEFAULT_STEP = 5;
 const DEFAULT_MAX_DELTA = 60;
@@ -81,9 +74,7 @@ export async function runResistanceSweep(
   const maxDelta = options.maxDelta ?? DEFAULT_MAX_DELTA;
 
   const items = await client.getItems();
-  const carrier = CARRIER_SLOTS
-    .map((slot) => items.find((item) => item?.slot === slot && typeof item?.raw === 'string'))
-    .find((item) => item !== undefined);
+  const carrier = pickCarrier(items);
   if (!carrier) {
     return {
       note: `Sweep skipped: no equipped ring, amulet, belt or armour piece to carry a test modifier (tried ${CARRIER_SLOTS.join(', ')}).`,
