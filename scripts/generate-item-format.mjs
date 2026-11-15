@@ -18,11 +18,16 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { resolvePoBLayout } from "../build/utils/pobLayout.js";
+// The server's own resolver, from the compiled output.
+const { resolvePoBLayout } = await import("../build/utils/pobLayout.js").catch((error) => {
+  console.error(`generate-item-format: cannot load build/utils/pobLayout.js (${error.code ?? error.message}). Run: npm run build`);
+  process.exit(1);
+});
 
 // Resolved the way the server resolves it, so an installed PoB needs no
 // configuration. POB_PATH still wins, and points at a checkout's src/.
-const POB_SRC = resolvePoBLayout(process.env.POB_PATH || process.env.POB_FORK_PATH).src;
+const LAYOUT = resolvePoBLayout(process.env.POB_PATH || process.env.POB_FORK_PATH);
+const POB_SRC = LAYOUT.src;
 const ITEM_LUA = path.join(POB_SRC, "Classes", "Item.lua");
 const OUT = path.resolve("src", "data", "itemFormat.generated.ts");
 const checkOnly = process.argv.includes("--check");
@@ -223,7 +228,8 @@ const version = (() => {
     spawnSync("git", ["-C", root, ...args], { encoding: "utf-8" }).stdout?.trim();
   const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   const commit = git(["rev-parse", "--short", "HEAD"]);
-  if (branch && commit) return `${number} (${branch} @ ${commit})`;
+  // Only a checkout is its own git tree; an installed app would pick up an ancestor's.
+  if (LAYOUT.kind === "checkout" && branch && commit) return `${number} (${branch} @ ${commit})`;
   // An installed app is not a git tree, so the manifest's own branch is all
   // there is to add.
   const manifestBranch = xml.match(/branch="([^"]+)"/)?.[1];

@@ -20,7 +20,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { resolvePoBLayout } from "../build/utils/pobLayout.js";
+// The server's own resolver, from the compiled output.
+const { resolvePoBLayout } = await import("../build/utils/pobLayout.js").catch((error) => {
+  console.error(`generate-item-oracle: cannot load build/utils/pobLayout.js (${error.code ?? error.message}). Run: npm run build`);
+  process.exit(1);
+});
 
 const LAYOUT = resolvePoBLayout(process.env.POB_PATH || process.env.POB_FORK_PATH);
 const POB_SRC = LAYOUT.src;
@@ -32,6 +36,12 @@ const checkOnly = process.argv.includes("--check");
 function fail(msg) {
   console.error(`generate-item-oracle: ${msg}`);
   process.exit(1);
+}
+
+// An installed release predates the variant groups the oracle records, so writing
+// from it would replace the fixture with older data and drop its revision stamp.
+if (!checkOnly && LAYOUT.kind !== "checkout") {
+  fail("regenerating the fixture needs a PathOfBuilding dev checkout. Set POB_PATH to its src/. --check works on an installed PoB.");
 }
 
 if (!fs.existsSync(path.join(POB_SRC, "HeadlessWrapper.lua"))) {
@@ -71,14 +81,6 @@ if (!fs.existsSync(tmp)) {
         `Point POB_CMD at a patched LuaJIT (see README).\n\n${stderr}`
     );
   }
-  // Variant groups reach a dev checkout before any release writes them, so the
-  // release an installed app ships has no such API to call.
-  if (/attempt to call method 'Item'/.test(stderr)) {
-    fail(
-      `PoB ${LAYOUT.kind === "macos-app" ? "as installed" : `at ${POB_SRC}`} predates the variant-group API this oracle records.\n` +
-        `Set POB_PATH to the src/ of a PathOfBuilding dev checkout.\n\n${stderr}`
-    );
-  }
   fail(`the oracle produced no output.\n\n${stderr || result.stdout}`);
 }
 
@@ -91,7 +93,8 @@ const rev = (args) =>
   spawnSync("git", ["-C", POB_SRC, ...args], { encoding: "utf-8" }).stdout?.trim();
 const branch = rev(["rev-parse", "--abbrev-ref", "HEAD"]);
 const commit = rev(["rev-parse", "--short", "HEAD"]);
-if (branch && commit) oracle.pobRevision = `${branch} @ ${commit}`;
+// An installed app sits in no git tree of its own, and an ancestor's would mislabel it.
+if (LAYOUT.kind === "checkout" && branch && commit) oracle.pobRevision = `${branch} @ ${commit}`;
 
 // Re-serialise rather than pass the capture through, so check mode is not
 // sensitive to formatting or line endings.
@@ -117,7 +120,8 @@ if (checkOnly) {
   if (stripStamps(current) !== withoutStamps) {
     fail(
       "tests/fixtures/item-oracle.json is out of date.\n" +
-        "PoB now parses these items differently. Run: node scripts/generate-item-oracle.mjs"
+        "PoB now parses these items differently, or this PoB predates the variant groups the oracle records\n" +
+        "(a release does; a PathOfBuilding dev checkout does not). Run against a dev checkout: node scripts/generate-item-oracle.mjs"
     );
   }
   let recordedStamp = null;
