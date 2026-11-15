@@ -13,26 +13,8 @@ if not GetVirtualScreenSize then
   function GetVirtualScreenSize() return 1920, 1080 end
 end
 
--- PoB's launcher files open with a `#@` line that PoB's own runtime skips.
--- LuaJIT since c41d727d (Oct 2026) parses a leading `#` as a line number
--- directive and skips only `#!`, so the header becomes a comment here. The
--- replacement keeps the line count, so error line numbers stay correct.
-local loadfileWithHashLine = loadfile
-local dofileWithHashLine = dofile
-
-function loadfile(path)
-  if path == nil then return loadfileWithHashLine() end
-  local file = io.open(path, 'rb')
-  if not file then return nil, 'cannot open ' .. path end
-  local source = file:read('*a')
-  file:close()
-  return loadstring((source:gsub('^#', '--', 1)), '@' .. path)
-end
-
-function dofile(path)
-  if path == nil then return dofileWithHashLine() end
-  return assert(loadfile(path))()
-end
+local Compat = dofile(ADAPTER_DIR .. 'pob_compat.lua')
+Compat.accept_launcher_headers()
 
 -- The upstream wrapper initializes PoB and exposes newBuild/loadBuildFromXML plus `build`.
 dofile('HeadlessWrapper.lua')
@@ -71,7 +53,7 @@ do
   end
 end
 
-local BuildOps = dofile(ADAPTER_DIR .. 'pob_ops.lua')
+local BuildOps = assert(loadfile(ADAPTER_DIR .. 'pob_ops.lua'))(Compat)
 
 -- json.encode raises on cycles, NaN and functions. An uncaught raise here kills
 -- the process and takes the caller's loaded build with it, so a payload we
@@ -169,7 +151,7 @@ local function generate_weighted_trade_query(params)
   options.statWeights = options.statWeights or build.itemsTab.tradeQuery.statSortSelectionList
   if not options.statWeights or #options.statWeights == 0 then options.statWeights = { { label = 'Full DPS', stat = 'FullDPS', weightMult = 1.0 }, { label = 'Effective Hit Pool', stat = 'TotalEHP', weightMult = 0.5 } } end
   local ok, result = pcall(function()
-    local generator = BuildOps.construct('TradeQueryGenerator', build.itemsTab.tradeQuery)
+    local generator = Compat.construct('TradeQueryGenerator', build.itemsTab.tradeQuery)
     local query, warning
     -- PoB 2.67 hands over the whole request body as JSON. PoB dev (3.30) hands
     -- over only the inner query table and adds sort and engine in TradeQuery.
