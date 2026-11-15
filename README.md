@@ -323,8 +323,8 @@ Finally, update the Claude Desktop configuration above and restart Claude Deskto
 ## Available Tools
 
 With `POB_LUA_ENABLED=true`, `POE_TRADE_ENABLED=true`, and `POE_SESSION_ID` set,
-the server advertises **105 tools**. It advertises **39** with Lua and Trade disabled,
-and **96** with Lua enabled and Trade disabled. Tool discovery is not a guarantee
+the server advertises **106 tools**. It advertises **39** with Lua and Trade disabled,
+and **97** with Lua enabled and Trade disabled. Tool discovery is not a guarantee
 that the required engine, data files, credentials, or network service are usable.
 
 ### XML-Based Tools (Always Available)
@@ -454,6 +454,7 @@ loaded build and fetches crafting/currency context from network services.
 | `check_boss_readiness` | Evaluate readiness for specific boss encounters |
 | `suggest_watchers_eye` | Suggest Watcher's Eye mods for the build's auras |
 | `find_best_anointment` | Rank anointable notables by live DPS/EHP impact (Amulet or anointable Belt) |
+| `generate_weighted_trade_query` | Build PoB's stat-weighted trade query for a slot as JSON plus a trade-site link; no network call, no `POE_SESSION_ID` |
 | `analyze_cluster_jewels` | Analyze a cluster jewel setup from a build file |
 | `analyze_build_cluster_jewels` | Analyze cluster jewels equipped in the loaded build |
 | `suggest_crafting` | Suggest crafting methods using a slot, base, desired mods, and available build context |

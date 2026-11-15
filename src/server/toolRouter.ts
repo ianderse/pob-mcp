@@ -26,7 +26,7 @@ import { handleGetConfig, handleSetConfig, handleSetEnemyStats, handleSaveConfig
 import { handleValidateBuild } from "../handlers/validationHandlers.js";
 import { handleExportBuild, handleSaveTree, handleSnapshotBuild, handleListSnapshots, handleRestoreSnapshot, handleExportBuildSummary } from "../handlers/exportHandlers.js";
 import { handleAnalyzeSkillLinks, handleSuggestSupportGems, handleCompareGemSetups, handleValidateGemQuality, handleFindOptimalLinks, handleGemUpgradePath } from "../handlers/skillGemHandlers.js";
-import { handleSearchTradeItems, handleGetItemPrice, handleGetLeagues, handleSearchStats, handleFindResistanceGear, handleCompareTradeItems, handleFindWeightedTradeItems } from "../handlers/tradeHandlers.js";
+import { handleSearchTradeItems, handleGetItemPrice, handleGetLeagues, handleSearchStats, handleFindResistanceGear, handleCompareTradeItems, handleFindWeightedTradeItems, handleGenerateWeightedTradeQuery } from "../handlers/tradeHandlers.js";
 import { handleGetCurrencyRates, handleFindArbitrage, handleCalculateTradingProfit } from "../handlers/poeNinjaHandlers.js";
 import { handleSearchClusterJewels, handleAnalyzeClusterJewels, handleAnalyzeBuildClusterJewels } from "../handlers/clusterJewelHandlers.js";
 import { handleGenerateShoppingList } from "../handlers/shoppingListHandlers.js";
@@ -764,6 +764,10 @@ export async function routeToolCall(
     case "find_best_anointment":
       if (!args?.slot || typeof args.slot !== 'string') throw new Error('find_best_anointment requires a slot');
       return await handleFindBestAnointment({ getLuaClient: deps.getLuaClient, ensureLuaClient: deps.ensureLuaClient }, { slot: args.slot, focus: args.focus as 'dps' | 'defence' | 'both' | undefined, max_results: args.max_results as number | undefined });
+
+    case "generate_weighted_trade_query":
+      if (!args?.slot || typeof args.slot !== 'string') throw new Error('generate_weighted_trade_query requires a slot');
+      return await handleGenerateWeightedTradeQuery({ getLuaClient: deps.getLuaClient, ensureLuaClient: deps.ensureLuaClient }, { slot: args.slot, league: args.league as string | undefined, options: args.options as Record<string, unknown> | undefined });
 
     case "get_build_notes":
       if (!args?.build_name) throw new Error("Missing build_name");

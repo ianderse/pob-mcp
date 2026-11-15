@@ -1840,6 +1840,11 @@ export function getBuildGoalsToolSchemas(): ToolSchema[] {
       inputSchema: { type: "object", properties: { slot: { type: "string", enum: ["Amulet", "Belt"] }, focus: { type: "string", enum: ["dps", "defence", "both"] }, max_results: { type: "number" } }, required: ["slot"] },
     },
     {
+      name: "generate_weighted_trade_query",
+      description: "Run upstream PoB's TradeQueryGenerator stat weights for an equipment slot of the loaded build and return the weighted trade request body as JSON (plus a trade-site link when league is given). Makes no Trade API request and needs no POE_SESSION_ID.",
+      inputSchema: { type: "object", properties: { slot: { type: "string", description: "Equipment slot, e.g. 'Amulet', 'Ring 1', 'Body Armour', 'Weapon 1'" }, league: { type: "string", description: "Exact league name for the trade-site link (optional)" }, options: { type: "object" } }, required: ["slot"] },
+    },
+    {
       name: "analyze_build_cluster_jewels",
       truncatable: true,
       description: "Analyze the cluster jewels currently equipped in the build, evaluate which notables synergize with the build archetype, and flag wasted notables",

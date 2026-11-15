@@ -35,6 +35,27 @@ export async function handleFindWeightedTradeItems(context: TradeContext & { get
   });
 }
 
+/**
+ * Run PoB's own stat-weight generator for a slot and return the trade request body.
+ * Makes no Trade API request, so it needs neither POE_TRADE_ENABLED nor POE_SESSION_ID.
+ * The bridge already returns the full body ({ query, sort, engine }).
+ */
+export async function handleGenerateWeightedTradeQuery(context: { getLuaClient: () => import('../pobLuaBridge.js').PoBLuaApiClient | null; ensureLuaClient: () => Promise<void> }, args: { slot: string; league?: string; options?: Record<string, unknown> }) {
+  return wrapHandler('generate weighted trade query', async () => {
+    await context.ensureLuaClient();
+    const client = context.getLuaClient();
+    if (!client) throw new Error('Lua bridge not active. Load a build first.');
+    const { query, warning } = await client.generateWeightedTradeQuery(args.slot, args.options);
+    if (!query || typeof query !== 'object') throw new Error('PoB returned no trade query');
+    const json = JSON.stringify(query);
+    const lines = [`=== Weighted Trade Query (slot: ${args.slot}) ===`];
+    if (warning) lines.push(`Warning: ${warning}`);
+    if (args.league) lines.push(`Trade site link: https://www.pathofexile.com/trade/search/${encodeURIComponent(args.league)}?q=${encodeURIComponent(json)}`);
+    lines.push('', 'Request body:', json);
+    return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+  });
+}
+
 // ========================================
 // Trade Site URL Helpers
 // ========================================
