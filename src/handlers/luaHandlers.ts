@@ -1296,7 +1296,7 @@ export async function handleLuaSimulate(
       throw new Error('nothing to simulate: pass at least one of itemText+slotName, toggleFlask, addNodes, removeNodes or masteryEffects');
     }
 
-    const { output, base } = await luaClient.calcWith({ ...hypothesis, useFullDPS: args.useFullDPS });
+    const { output, base, unrecognisedLines } = await luaClient.calcWith({ ...hypothesis, useFullDPS: args.useFullDPS });
 
     const described = [
       args.itemText && args.slotName ? `swap ${args.slotName}` : undefined,
@@ -1334,6 +1334,11 @@ export async function handleLuaSimulate(
     // rather than let it read as a confirmed no-op.
     if (!moved) {
       lines.push('', 'None of the stats listed above moved. A change to something outside this list (block, suppression, crit, charges, ailments) would not show here, and a rejected override looks the same, so check before reporting this as no gain.');
+    }
+
+    if (unrecognisedLines && unrecognisedLines.length > 0) {
+      lines.push('', 'PoB did not recognise these item lines, so they add nothing to the numbers above:');
+      for (const line of unrecognisedLines) lines.push(`  ${line}`);
     }
 
     const unmet = unmetRequirements(output, base);

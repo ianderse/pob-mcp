@@ -623,6 +623,26 @@ function M.is_allocatable(node)
   return true
 end
 
+-- Item lines PoB could not turn into modifiers. A line it does not understand
+-- contributes nothing, so a substituted item carrying one calculates to a zero
+-- delta that looks exactly like a mod that simply does not matter. PoB marks such
+-- lines (and the unparsed remainder of partly understood ones) with modLine.extra.
+local UNPARSED_LINE_LISTS = {
+  'enchantModLines', 'scourgeModLines', 'implicitModLines', 'explicitModLines', 'crucibleModLines',
+}
+function M.unrecognised_item_lines(item)
+  local found = {}
+  for _, listName in ipairs(UNPARSED_LINE_LISTS) do
+    for _, modLine in ipairs(item[listName] or {}) do
+      if modLine.extra then
+        local text = tostring(modLine.line or modLine.extra):gsub('{[^}]*}', '')
+        table.insert(found, text)
+      end
+    end
+  end
+  return found
+end
+
 -- params: { addNodes?: number[], removeNodes?: number[], masteryEffects?: {[nodeId]: effectId},
 --           repItem?: string (item text), repSlotName?: string, toggleFlask?: number (1-NUM_FLASK_SLOTS),
 --           useFullDPS?: boolean }
@@ -630,6 +650,7 @@ function M.calc_with(params)
   if not build or not build.calcsTab then return nil, 'build not initialized' end
   local calcFunc, baseOut = build.calcsTab:GetMiscCalculator()
   local override = {}
+  local unrecognised = nil
   if params and (params.repItem ~= nil or params.repSlotName ~= nil) then
     if type(params.repItem) ~= 'string' or type(params.repSlotName) ~= 'string' then
       return nil, 'repItem (item text) and repSlotName must be given together'
@@ -652,6 +673,7 @@ function M.calc_with(params)
     item:BuildModList()
     override.repSlotName = params.repSlotName
     override.repItem = item
+    unrecognised = M.unrecognised_item_lines(item)
   end
   if params and params.toggleFlask ~= nil then
     local idx = tonumber(params.toggleFlask)
@@ -727,7 +749,7 @@ function M.calc_with(params)
   if type(out) ~= 'table' then
     return nil, 'calc_with produced no stats table'
   end
-  return M.sanitize_for_json(shallowcopy(out)), M.sanitize_for_json(shallowcopy(baseOut))
+  return M.sanitize_for_json(shallowcopy(out)), M.sanitize_for_json(shallowcopy(baseOut)), unrecognised
 end
 
 
