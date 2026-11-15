@@ -2,6 +2,17 @@
 
 local M = {}
 
+-- PoB 2.67 and older construct with new("Item", raw). PoB dev (3.30) splits
+-- this into new("Item"):Item(raw) and its new() takes no constructor
+-- arguments, so only the old new() is variadic.
+local newTakesConstructorArgs = debug.getinfo(new, 'u').isvararg
+
+function M.construct(className, ...)
+  if newTakesConstructorArgs then return new(className, ...) end
+  local object = new(className)
+  return object[className](object, ...)
+end
+
 -- PoB's own config option table is the only authoritative list of valid config
 -- vars and their types. Deriving from it means new upstream options work here
 -- without a code change; a hand-maintained allowlist silently drifts instead.
@@ -490,7 +501,7 @@ function M.calc_with(params)
     if not (build.itemsTab and build.itemsTab.slots and build.itemsTab.slots[params.repSlotName]) then
       return nil, 'unknown slot: ' .. params.repSlotName
     end
-    local parsed, item = pcall(new, 'Item', params.repItem)
+    local parsed, item = pcall(M.construct, 'Item', params.repItem)
     if not parsed then return nil, 'invalid item text: ' .. tostring(item) end
     if not item or not item.baseName then return nil, 'failed to parse item' end
     item:NormaliseQuality()
@@ -701,7 +712,7 @@ function M.add_item_text(params)
     return nil, string.format('item text too long (max %d bytes)', MAX_ITEM_TEXT_LENGTH)
   end
 
-  local ok, item = pcall(new, 'Item', params.text)
+  local ok, item = pcall(M.construct, 'Item', params.text)
   if not ok then return nil, 'invalid item text: ' .. tostring(item) end
   if not item or not item.baseName then return nil, 'failed to parse item' end
 
@@ -1130,7 +1141,7 @@ function M.create_spec(params)
     end
   end
   local version = (source and source.treeVersion) or (build.spec and build.spec.treeVersion) or latestTreeVersion
-  local newSpec = new('PassiveSpec', build, version)
+  local newSpec = M.construct('PassiveSpec', build, version)
   if source then
     -- Same copy mechanism TreeTab uses for its spec management popup
     newSpec.jewels = copyTable(source.jewels)
