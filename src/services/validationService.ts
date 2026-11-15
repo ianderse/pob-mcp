@@ -452,7 +452,7 @@ export class ValidationService {
           ].filter(Boolean).join(', ') || 'none'}. ` +
           'A build relying on a single layer will die when that layer is bypassed.',
         suggestions: [
-          !hasAvoidance ? 'Avoidance: evasion (Grace aura), spell suppression (50%), dodge (Acrobatics), or block (shield)' : 'Avoidance: ✓ active',
+          !hasAvoidance ? 'Avoidance: evasion (Grace aura), spell suppression (chance caps at 100%; each suppressed hit is reduced by 40%), dodge (Acrobatics), or block (shield)' : 'Avoidance: ✓ active',
           !hasMitigation ? 'Mitigation: armour (Determination aura), endurance charges, or high PDR' : 'Mitigation: ✓ active',
           !hasRecovery ? 'Recovery: life regen nodes, life leech, or gain-on-hit' : 'Recovery: ✓ active',
         ].filter((s) => !s.endsWith('✓ active')),

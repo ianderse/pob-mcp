@@ -35,6 +35,7 @@ import { handleCheckBossReadiness } from "../handlers/bossReadinessHandlers.js";
 import { handleSuggestWatchersEye } from "../handlers/jewelAdvisorHandlers.js";
 import { handleSuggestCrafting } from "../handlers/craftingAdvisorHandler.js";
 import { handleFindItemUpgrades as handleFindItemUpgradesNew } from "../handlers/itemShoppingHandler.js";
+import * as toolSchemas from "./toolSchemas.js";
 import { handleClassifyItemAffixes, handleListCraftableMods, handleFindAffixTiers } from "../handlers/affixHandlers.js";
 
 export interface ToolRouterDependencies {
@@ -57,12 +58,62 @@ type ToolResponse = Promise<{
 /**
  * Routes a tool call to its handler with appropriate context
  */
+/**
+ * name -> { required, declared } from every tool-schema source, built once on
+ * first use. Used only for pre-dispatch argument validation.
+ */
+let argSpecByTool: Map<string, { required: string[]; declared: Set<string> }> | null = null;
+function getArgSpecByTool() {
+  if (!argSpecByTool) {
+    argSpecByTool = new Map();
+    const all = [
+      ...toolSchemas.getToolSchemas(),
+      ...toolSchemas.getLuaToolSchemas(),
+      ...toolSchemas.getOptimizationToolSchemas(),
+      ...toolSchemas.getConfigToolSchemas(),
+      ...toolSchemas.getValidationToolSchemas(),
+      ...toolSchemas.getExportToolSchemas(),
+      ...toolSchemas.getSkillGemToolSchemas(),
+      ...toolSchemas.getTradeToolSchemas(),
+      ...toolSchemas.getPoeNinjaToolSchemas(),
+      ...toolSchemas.getBuildGoalsToolSchemas(),
+    ];
+    for (const tool of all) {
+      const schema = tool?.inputSchema as { required?: string[]; properties?: Record<string, unknown> } | undefined;
+      if (!schema) continue;
+      argSpecByTool.set(tool.name, {
+        required: Array.isArray(schema.required) ? schema.required : [],
+        declared: new Set(Object.keys(schema.properties ?? {})),
+      });
+    }
+  }
+  return argSpecByTool;
+}
+
 export async function routeToolCall(
   name: string,
   args: Record<string, unknown> | undefined,
   deps: ToolRouterDependencies
 ): ToolResponse {
-  // Check tool gate first
+  // Reject calls missing a declared-required argument BEFORE dispatch. Otherwise the
+  // argument arrives as `undefined`, the handler may run anyway, and the tool can
+  // report success having done nothing. A misspelled parameter is the usual cause,
+  // so undeclared arguments are listed in the error (reported only, never rejected:
+  // some handlers legitimately read arguments their schema omits).
+  const spec = getArgSpecByTool().get(name);
+  if (spec && spec.required.length > 0) {
+    const missing = spec.required.filter((key) => args?.[key] === undefined);
+    if (missing.length > 0) {
+      const extras = Object.keys(args ?? {}).filter((key) => !spec.declared.has(key));
+      throw new Error(
+        `${name}: missing required argument${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}.` +
+          (extras.length > 0
+            ? ` Also received undeclared argument${extras.length > 1 ? "s" : ""}: ${extras.join(", ")}` +
+              ` - likely a name mismatch. Declared: ${[...spec.declared].join(", ")}.`
+            : ""),
+      );
+    }
+  }
 
   // Create handler contexts using contextBuilder
   const handlerContext = deps.contextBuilder.buildHandlerContext();

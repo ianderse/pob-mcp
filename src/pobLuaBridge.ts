@@ -8,6 +8,17 @@ import { randomUUID } from "crypto";
 import { atomicWriteFile } from "./utils/atomicWrite.js";
 import { resolvePoBLayout } from "./utils/pobLayout.js";
 
+/**
+ * Normalise CRLF/CR to LF before handing build XML to PoB, matching what PoB's own
+ * loader gets from a text-mode io.open(path, "r"). PoB saves in text mode, so every
+ * "\n" inside a text field (Notes, custom modifier blocks) is written as "\r\n"; if
+ * a raw CRLF file is loaded back verbatim the "\r" survives into the field and the
+ * next save writes "\r\r\n" - one more CR per load/save cycle.
+ */
+export function normalizeEol(xml: string): string {
+  return xml.replace(/\r+\n/g, "\n").replace(/\r/g, "\n");
+}
+
 /** Lua bridge request envelope */
 // params is only ever serialised, so an interface with declared keys is as valid
 // a payload here as a bag of unknowns.
@@ -658,7 +669,7 @@ export class PoBLuaApiClient {
     // A failed import may already have closed the previous native build.
     this.loadedFilePath = undefined;
     this.buildGeneration++;
-    const res = await this.send({ action: "load_build_xml", params: { xml, name } });
+    const res = await this.send({ action: "load_build_xml", params: { xml: normalizeEol(xml), name } });
     if (!res.ok) throw new Error(res.error || "load_build_xml failed");
     this.loadedFilePath = sourcePath ? path.resolve(sourcePath) : undefined;
     return { ok: true };
