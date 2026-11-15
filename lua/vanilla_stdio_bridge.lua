@@ -142,6 +142,8 @@ local function loadFresh(xml, name)
   -- Loading straight over another build can read the outgoing build's tabs
   -- (e.g. a stale activeSpec index); passing through an empty build resets them.
   _G.newBuild()
+  -- A blank build still calculates, so restore after it, not before.
+  restoreSharedData()
   local stale = build and build.calcsTab and build.calcsTab.mainOutput
   _G.loadBuildFromXML(xml, name)
   local prompt = _G.launch and _G.launch.promptMsg
@@ -339,7 +341,6 @@ end
 handlers.load_build_xml = function(params)
   if not params or type(params.xml) ~= 'string' then return { ok = false, error = 'missing xml' } end
   if not _G.loadBuildFromXML then return { ok = false, error = 'headless wrapper not initialized' } end
-  restoreSharedData()
   local ok, res = pcall(loadFresh, params.xml, (params.name and tostring(params.name)) or 'API Build')
   if not ok then
     lastLoadError = tostring(res)
