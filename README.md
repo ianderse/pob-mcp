@@ -323,8 +323,8 @@ Finally, update the Claude Desktop configuration above and restart Claude Deskto
 ## Available Tools
 
 With `POB_LUA_ENABLED=true`, `POE_TRADE_ENABLED=true`, and `POE_SESSION_ID` set,
-the server advertises **105 tools**. It advertises **39** with Lua and Trade disabled,
-and **96** with Lua enabled and Trade disabled. Tool discovery is not a guarantee
+the server advertises **106 tools**. It advertises **39** with Lua and Trade disabled,
+and **97** with Lua enabled and Trade disabled. Tool discovery is not a guarantee
 that the required engine, data files, credentials, or network service are usable.
 
 ### XML-Based Tools (Always Available)
@@ -373,6 +373,7 @@ PoB installation or checkout containing the relevant mod tables.
 | `lua_new_build` | Create a blank build for a given class/ascendancy |
 | `lua_load_build` | Load a build file into the engine |
 | `lua_import_code` | Decode a PoB import/export code (e.g. from pobb.in or the desktop app's Generate button) and load it into the engine |
+| `lua_import_pobb` | Fetch a build from a pobb.in or poedb.tw link (https, those hosts only) and load it via the same path as `lua_import_code` |
 | `lua_save_build` | Save the current in-memory build to a `.xml` file |
 | `lua_reload_build` | Reload the current build from disk |
 | `lua_get_build_info` | Get current build metadata (class, level, etc.) |
