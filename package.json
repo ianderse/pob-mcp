@@ -10,6 +10,7 @@
     "generate:item-format:check": "node scripts/generate-item-format.mjs --check",
     "generate:item-oracle": "node scripts/generate-item-oracle.mjs",
     "generate:item-oracle:check": "node scripts/generate-item-oracle.mjs --check",
+    "dossier:tree": "node scripts/dossier-tree.mjs",
     "start": "node build/index.js",
     "dev": "tsc --watch",
     "test": "jest",
@@ -25,7 +26,8 @@
     "test:smoke:crafting": "node tests/smoke/crafting-mcp.mjs",
     "test:smoke:persistence": "node tests/smoke/persistence.mjs",
     "test:smoke:race": "node tests/smoke/lua-client-race.mjs",
-    "test:smoke:truthfulness": "node tests/smoke/state-truthfulness.mjs"
+    "test:smoke:truthfulness": "node tests/smoke/state-truthfulness.mjs",
+    "test:smoke:dossier": "node tests/smoke/dossier-tree.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

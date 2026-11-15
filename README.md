@@ -305,6 +305,7 @@ The additional suites are:
 | `npm run test:smoke:persistence` | Overwrite protection, cache refresh, snapshot reload, XML notes/masteries, and rejected incomplete imports | Compatible PoB engine and interpreter |
 | `npm run test:smoke:trade` | Live league, stat, item-search, price, resistance-gear, currency-rate, and trading-profit requests through MCP | Network access |
 | `npm run test:smoke:crafting` | Live currency rates and base-mod data through MCP | Compatible PoB engine and interpreter, plus network access |
+| `npm run test:smoke:dossier` | Dossier tree drawing from a build's own spec, and rejection of a missing spec or a stray planned node | LuaJIT and a PoB with tree 3_13 (any current install) |
 
 For the authenticated weighted trade smoke, set your `POE_SESSION_ID` in the shell
 and run:
@@ -674,6 +675,17 @@ Nodes must form a valid connected path from the class starting node. Disconnecte
 npm run build   # compile TypeScript
 npm run dev     # watch mode
 ```
+
+### Drawing a build's passive tree
+
+```bash
+npm run dossier:tree -- --build "/path/to/Build.xml" --out ./dossier [--spec N] [--planned id,id] [--icons]
+```
+
+Writes `tree.svg`, and `ascendancy.svg` when the spec has an ascendancy, for the
+offline build reports the `building-character-dossiers` agent skill describes.
+The tree version, class, ascendancy, and allocation come from the selected spec;
+node positions come from the same PoB the server uses.
 
 ## Path of Building XML Structure
 
