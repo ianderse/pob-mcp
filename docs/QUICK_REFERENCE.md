@@ -60,6 +60,7 @@ POE_TRADE_ENABLED="true"                           # Enable Trade API tools
 | `plan_tree` | Plan from goals | "Plan crit bow Deadeye pathing" |
 | `get_nearby_nodes` | Discover nearby notables | "Nearby life notables within 5" |
 | `find_path_to_node` | Shortest path to node | "Path to node 26725" |
+| `connect_nodes` | Cheapest tree linking several nodes | "Connect these three notables for the fewest points" |
 | `allocate_nodes` | Apply node IDs and diff stats | "Allocate [12345,23456] on MyBuild.xml" |
 
 ### Phase 4 Tools (Require Lua Bridge)

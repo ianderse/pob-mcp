@@ -2,7 +2,9 @@ import type { BuildService } from "../services/buildService.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
 import type { TreeService } from "../services/treeService.js";
 import type { SearchedNode } from "../pobLuaBridge.js";
-import type { TreeComparison } from "../types.js";
+import type { PassiveTreeData, PassiveTreeNode, TreeComparison } from "../types.js";
+import { SteinerSolver } from "../services/steinerSolver.js";
+import { loadBuildIfDifferent } from "../utils/namedBuild.js";
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
 
@@ -691,4 +693,230 @@ function formatTreeComparison(comparison: TreeComparison): string {
   );
 
   return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// connect_nodes: cheapest connected tree through a set of target nodes
+// ---------------------------------------------------------------------------
+
+const ALLOCATED_HUB = '__allocated__';
+const CLASS_START_NAMES = new Set(['Scion', 'Marauder', 'Ranger', 'Witch', 'Duelist', 'Templar', 'Shadow']);
+const MAX_CONNECT_TARGETS = 40;
+
+/** Stats reported when validating the result with calcWith. */
+const CONNECT_VALIDATION_STATS: Array<[string, string]> = [
+  ['CombinedDPS', 'Combined DPS'],
+  ['TotalDPS', 'Total DPS'],
+  ['Life', 'Life'],
+  ['EnergyShield', 'Energy Shield'],
+  ['TotalEHP', 'Total EHP'],
+  ['FireResist', 'Fire resist'],
+  ['ColdResist', 'Cold resist'],
+  ['LightningResist', 'Lightning resist'],
+  ['ChaosResist', 'Chaos resist'],
+];
+
+interface ConnectNodesContext extends TreeHandlerContext {
+  pobDirectory?: string;
+  ensureLuaClient?: () => Promise<void>;
+}
+
+/**
+ * Build the graph the solver works on: every allocated node collapsed into one
+ * free hub, with nodes PoB cannot path through (other classes' start nodes,
+ * masteries, ascendancies that are neither allocated nor targeted) removed.
+ */
+function buildConnectGraph(treeData: PassiveTreeData, allocated: Set<string>, targets: string[]): PassiveTreeData {
+  const allowedAscendancies = new Set<string>();
+  for (const id of [...allocated, ...targets]) {
+    const asc = treeData.nodes.get(id)?.ascendancyName;
+    if (asc) allowedAscendancies.add(asc);
+  }
+  const eligible = (id: string): boolean => {
+    const node = treeData.nodes.get(id);
+    if (!node || node.isMastery) return false;
+    if (allocated.has(id)) return true; // folded into the hub below
+    if (node.name && CLASS_START_NAMES.has(node.name) && !node.stats?.length) return false;
+    if (node.ascendancyName && !allowedAscendancies.has(node.ascendancyName)) return false;
+    return true;
+  };
+
+  // Symmetric adjacency: the tree lists most edges on both ends, not all.
+  const neighbors = new Map<string, Set<string>>();
+  for (const [id, node] of treeData.nodes) {
+    for (const other of [...(node.out ?? []), ...(node.in ?? [])]) {
+      if (!treeData.nodes.has(other)) continue;
+      if (!neighbors.has(id)) neighbors.set(id, new Set());
+      if (!neighbors.has(other)) neighbors.set(other, new Set());
+      neighbors.get(id)!.add(other);
+      neighbors.get(other)!.add(id);
+    }
+  }
+
+  const nodes = new Map<string, PassiveTreeNode>();
+  const hubOut = new Set<string>();
+  for (const [id, node] of treeData.nodes) {
+    if (allocated.has(id) || !eligible(id)) continue;
+    const out = new Set<string>();
+    for (const other of neighbors.get(id) ?? []) {
+      if (!eligible(other)) continue;
+      if (allocated.has(other)) {
+        out.add(ALLOCATED_HUB);
+        hubOut.add(id);
+      } else {
+        out.add(other);
+      }
+    }
+    nodes.set(id, { skill: node.skill, name: node.name, out: [...out], in: [] });
+  }
+  nodes.set(ALLOCATED_HUB, { skill: -1, name: 'allocated tree', out: [...hubOut], in: [] });
+  return { nodes, version: treeData.version };
+}
+
+export async function handleConnectNodes(
+  context: ConnectNodesContext,
+  buildName: string | undefined,
+  targetNodeIds: string[],
+  validate: boolean = true
+) {
+  try {
+    const targets = [...new Set((targetNodeIds ?? []).map(String))];
+    if (targets.length === 0) throw new Error('target_node_ids must contain at least one node ID');
+    if (targets.length > MAX_CONNECT_TARGETS) {
+      throw new Error(`Too many targets (${targets.length}); the maximum is ${MAX_CONNECT_TARGETS}`);
+    }
+
+    let allocatedIds: string[] = [];
+    let treeVersion: string | undefined;
+    let luaClient: PoBLuaApiClient | null = null;
+
+    if (buildName) {
+      const build = await context.buildService.readBuild(buildName);
+      allocatedIds = context.buildService.parseAllocatedNodes(build);
+      treeVersion = context.buildService.extractBuildVersion(build);
+      luaClient = context.getLuaClient?.() ?? null;
+    } else {
+      if (context.ensureLuaClient) await context.ensureLuaClient();
+      luaClient = context.getLuaClient?.() ?? null;
+      if (!luaClient) throw new Error('Provide a build_name, or load a build with lua_load_build first.');
+      const tree = await luaClient.getTree();
+      allocatedIds = (tree.nodes || []).map(String);
+      treeVersion = tree.treeVersion;
+    }
+    if (allocatedIds.length === 0) throw new Error('The build has no allocated passive nodes to connect from.');
+
+    const treeData = await context.treeService.getTreeData(treeVersion);
+    const missing = targets.filter(id => !treeData.nodes.has(id));
+    if (missing.length > 0) throw new Error(`Node(s) not found in tree data: ${missing.join(', ')}`);
+
+    const allocated = new Set(allocatedIds.filter(id => treeData.nodes.has(id)));
+    const masteries = targets.filter(id => treeData.nodes.get(id)?.isMastery);
+    if (masteries.length > 0) {
+      throw new Error(`Mastery nodes are selected through their parent notable, not pathed to: ${masteries.join(', ')}`);
+    }
+    const alreadyAllocated = targets.filter(id => allocated.has(id));
+    const pending = targets.filter(id => !allocated.has(id));
+    const label = (id: string) => `${treeData.nodes.get(id)?.name || 'Node'} [${id}]`;
+
+    const lines: string[] = ['=== Cheapest Connection ===', '', `Build: ${buildName || '(in-memory build)'}`, `Targets: ${targets.length}`];
+    if (alreadyAllocated.length > 0) {
+      lines.push(`Already allocated: ${alreadyAllocated.map(label).join(', ')}`);
+    }
+    if (pending.length === 0) {
+      lines.push('', 'Every target is already allocated; nothing to connect.');
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    }
+
+    const graph = buildConnectGraph(treeData, allocated, pending);
+    const solver = new SteinerSolver(graph, new Set([ALLOCATED_HUB, ...pending]));
+    const result = solver.solve();
+
+    const unreachable = result.unreachable.filter(id => id !== ALLOCATED_HUB);
+    if (result.unreachable.includes(ALLOCATED_HUB) || result.terminalCount < 2) {
+      lines.push('', 'No target can be reached from the allocated tree (different class region or an ascendancy you have not started).');
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    }
+
+    const chosen = new Set([...result.nodes].filter(id => id !== ALLOCATED_HUB));
+    // Allocation order: breadth-first outward from the allocated tree.
+    const ordered: string[] = [];
+    const seen = new Set<string>([ALLOCATED_HUB]);
+    let frontier: string[] = [ALLOCATED_HUB];
+    while (frontier.length > 0) {
+      const next: string[] = [];
+      for (const id of frontier) {
+        for (const nb of graph.nodes.get(id)?.out ?? []) {
+          if (!seen.has(nb) && chosen.has(nb)) {
+            seen.add(nb);
+            ordered.push(nb);
+            next.push(nb);
+          }
+        }
+      }
+      frontier = next;
+    }
+
+    // Baseline: price each target on its own with no sharing between paths.
+    let separate = 0;
+    for (const id of pending) {
+      if (unreachable.includes(id)) continue;
+      const single = new SteinerSolver(graph, new Set([ALLOCATED_HUB, id])).solve();
+      separate += single.nodes.size - 1;
+    }
+
+    const method = result.method === 'exact'
+      ? 'exact (proven minimum)'
+      : result.method === 'reduced-dp'
+        ? 'dynamic programming on the shortest-path corridor (near-optimal, not proven)'
+        : `KMB approximation (at most about 2x the minimum travel)${result.timedOut ? '; the exact search timed out' : ''}`;
+    const targetCount = ordered.filter(id => pending.includes(id)).length;
+    lines.push(
+      `Method: ${method}`,
+      `Passive points to spend: ${ordered.length} (${ordered.length - targetCount} travel + ${targetCount} target)`,
+      `Separate shortest paths with no sharing would cost: ${separate} (saved ${separate - ordered.length})`,
+      ''
+    );
+    if (unreachable.length > 0) {
+      lines.push(`Unreachable targets (skipped): ${unreachable.map(label).join(', ')}`, '');
+    }
+    lines.push('Allocation order:');
+    ordered.forEach((id, i) => {
+      const isTarget = pending.includes(id);
+      lines.push(`  ${i + 1}. ${label(id)}${isTarget ? ' <- TARGET' : ''}`);
+      if (isTarget) for (const stat of treeData.nodes.get(id)?.stats ?? []) lines.push(`       ${stat}`);
+    });
+    lines.push('', `Node IDs: ${ordered.join(', ')}`);
+
+    if (validate && luaClient) {
+      try {
+        if (buildName && context.pobDirectory) {
+          await loadBuildIfDifferent(luaClient, buildName, context.pobDirectory);
+        }
+        const { output, base } = await luaClient.calcWith({ addNodes: ordered.map(Number) });
+        const deltas: string[] = [];
+        for (const [key, title] of CONNECT_VALIDATION_STATS) {
+          const before = base?.[key];
+          const after = output?.[key];
+          if (typeof before !== 'number' || typeof after !== 'number' || before === after) continue;
+          const diff = after - before;
+          deltas.push(`  ${title}: ${Math.round(before).toLocaleString()} -> ${Math.round(after).toLocaleString()} (${diff > 0 ? '+' : ''}${Math.round(diff).toLocaleString()})`);
+        }
+        lines.push('', '=== Stat change if allocated (PoB calcWith) ===');
+        lines.push(...(deltas.length > 0 ? deltas : ['  No change in the tracked stats.']));
+      } catch (e) {
+        noteIgnoredError('connect_nodes calcWith validation skipped', e);
+        lines.push('', `Stat validation skipped: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    } else if (validate) {
+      lines.push('', 'Stat validation skipped: the Lua bridge is not running (lua_start / lua_load_build enables the stat preview).');
+    }
+    lines.push('', 'Use lua_set_tree to apply (include your existing allocated nodes).');
+
+    return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+  } catch (error) {
+    return {
+      content: [{ type: 'text' as const, text: `Error connecting nodes: ${error instanceof Error ? error.message : String(error)}` }],
+      isError: true,
+    };
+  }
 }

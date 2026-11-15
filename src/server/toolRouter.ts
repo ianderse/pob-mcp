@@ -14,7 +14,7 @@ import type { PoeNinjaClient } from "../services/poeNinjaClient.js";
 // Import handlers
 import { handleListBuilds, handleAnalyzeBuild, handleCompareBuilds, handleGetBuildStats, handleGetBuildNotes, handleSetBuildNotes } from "../handlers/buildHandlers.js";
 import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handleWatchStatus, handleRefreshTreeData } from "../handlers/watchHandlers.js";
-import { handleCompareTrees, handleGetNearbyNodes, handleFindPath, handleGetPassiveUpgrades, handleSuggestMasteries } from "../handlers/treeHandlers.js";
+import { handleCompareTrees, handleGetNearbyNodes, handleFindPath, handleConnectNodes, handleGetPassiveUpgrades, handleSuggestMasteries } from "../handlers/treeHandlers.js";
 import { handleGetBuildIssues, formatIssuesResponse } from "../handlers/buildGoalsHandlers.js";
 import { handleFindBestAnointment } from "../handlers/anointHandlers.js";
 import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaSaveBuild, handleLuaLoadBuild, handleLuaImportCode, handleLuaImportPobb, handleLuaGetAilments, handleLuaGetTimelessJewels, handleLuaSimulate, handleExportFullStats,
@@ -184,6 +184,15 @@ export async function routeToolCall(
         args.build_name as string,
         args.target_node_id as string,
         args.from_node_id as string | undefined
+      );
+
+    case "connect_nodes":
+      if (!args) throw new Error("Missing arguments");
+      return await handleConnectNodes(
+        treeContext,
+        args.build_name as string | undefined,
+        args.target_node_ids as string[],
+        args.validate as boolean | undefined
       );
 
     // Lua bridge tools

@@ -351,6 +351,7 @@ that the required engine, data files, credentials, or network service are usable
 | `compare_trees` | Show node differences between two builds |
 | `get_nearby_nodes` | Find notables/keystones reachable from current allocation |
 | `find_path_to_node` | Shortest path to a target node ID |
+| `connect_nodes` | Cheapest connected set of nodes linking several targets to your tree (Steiner tree); previews stat change when the Lua bridge is running |
 
 ### Affix Data (Always Advertised)
 
