@@ -13,6 +13,27 @@ if not GetVirtualScreenSize then
   function GetVirtualScreenSize() return 1920, 1080 end
 end
 
+-- PoB's launcher files open with a `#@` line that PoB's own runtime skips.
+-- LuaJIT since c41d727d (Oct 2026) parses a leading `#` as a line number
+-- directive and skips only `#!`, so the header becomes a comment here. The
+-- replacement keeps the line count, so error line numbers stay correct.
+local loadfileWithHashLine = loadfile
+local dofileWithHashLine = dofile
+
+function loadfile(path)
+  if path == nil then return loadfileWithHashLine() end
+  local file = io.open(path, 'rb')
+  if not file then return nil, 'cannot open ' .. path end
+  local source = file:read('*a')
+  file:close()
+  return loadstring((source:gsub('^#', '--', 1)), '@' .. path)
+end
+
+function dofile(path)
+  if path == nil then return dofileWithHashLine() end
+  return assert(loadfile(path))()
+end
+
 -- The upstream wrapper initializes PoB and exposes newBuild/loadBuildFromXML plus `build`.
 dofile('HeadlessWrapper.lua')
 
