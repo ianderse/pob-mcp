@@ -70,6 +70,29 @@ end
 -- ids/effects are coerced to numbers. That way the invariant holds for every
 -- caller, present and future, instead of each one having to re-implement it.
 function M.import_from_node_list(spec, classId, ascendId, secondaryId, nodes, overrides, mastery, treeVersion)
+  -- ImportFromNodeList replaces spec.hashOverrides wholesale. Those overrides are the
+  -- build's tattoos and runegrafts, so passing {} quietly strips them on every tree
+  -- edit (a build with 19 of them lost 7% DPS and 29% EHP on an identity re-import).
+  -- PoB's own undo path passes a copy of the current overrides; so do we. Consequence:
+  -- an empty `overrides` means "keep the build's", not "clear them".
+  if (overrides == nil or next(overrides) == nil) and spec.hashOverrides then
+    overrides = {}
+    for id, override in pairs(spec.hashOverrides) do overrides[id] = override end
+  end
+  -- Cluster-jewel nodes (ids >= 65536) are re-allocated on every import from
+  -- spec.allocExtendedNodes, so a removed cluster node silently came back (and the
+  -- tree ended up a point over budget). Keep only the cluster nodes the caller asked
+  -- for. get_tree / lua_get_tree include allocated cluster nodes, so round trips and
+  -- update_tree_delta keep them; a caller that sends only base-tree ids drops them.
+  if type(spec.allocExtendedNodes) == 'table' and type(nodes) == 'table' then
+    local wanted = {}
+    for _, id in ipairs(nodes) do wanted[tonumber(id)] = true end
+    local keep = {}
+    for _, id in ipairs(spec.allocExtendedNodes) do
+      if wanted[tonumber(id)] then table.insert(keep, id) end
+    end
+    spec.allocExtendedNodes = keep
+  end
   local mergedMastery = {}
   for k, v in pairs(spec.masterySelections or {}) do mergedMastery[k] = v end
   if type(mastery) == 'table' then
