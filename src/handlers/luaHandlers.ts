@@ -486,6 +486,34 @@ export async function handleLuaGetTimelessJewels(context: LuaHandlerContext, inc
 }
 
 /**
+ * Validate an item text with PoB's own parser before anything is bought or
+ * equipped. The item is parsed and never added to the build.
+ */
+export async function handleParseItem(context: LuaHandlerContext, text: string | undefined) {
+  return wrapHandler('parse item', async () => {
+    if (typeof text !== 'string' || text.trim() === '') {
+      throw new Error('item text is required');
+    }
+    await context.ensureLuaClient();
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized');
+    }
+
+    const item = await luaClient.parseItem(text);
+    const lines = [`=== Parsed item: ${item.name ?? item.base} ===`, '', JSON.stringify(item, null, 2)];
+    if (item.unparsed.length > 0) {
+      lines.push(
+        '',
+        `WARNING: PoB could not turn ${item.unparsed.length} mod line(s) into modifiers, so they would calculate as nothing. Check the wording against the in-game text before relying on this item: ${item.unparsed.map((l) => JSON.stringify(l)).join(', ')}`,
+      );
+    }
+    lines.push('', 'The loaded build is unchanged; this item was not added or equipped.');
+    return { content: [{ type: "text" as const, text: lines.join('\n') }] };
+  });
+}
+
+/**
  * Non-damaging ailments, showing what the DPS calculation is crediting next to
  * what the skill would actually inflict. Those two disagree for every
  * chance-based ailment, because PoB applies only guaranteed or hand-configured

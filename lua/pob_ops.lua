@@ -359,6 +359,82 @@ function M.export_full_stats()
   return result
 end
 
+local MAX_PARSE_MOD_LINES = 200
+
+local function modLineTexts(modLines, into)
+  into = into or {}
+  for _, line in ipairs(modLines or {}) do
+    if #into >= MAX_PARSE_MOD_LINES then break end
+    if type(line) == 'table' and type(line.line) == 'string' then
+      table.insert(into, line.line)
+    end
+  end
+  return into
+end
+
+-- Dry-run an item through PoB's own parser without touching the build: the item
+-- is constructed and its mods built, but never added to itemsTab, so the loaded
+-- build, its item list and its undo history are exactly as they were.
+function M.parse_item(params)
+  if type(params) ~= 'table' or type(params.text) ~= 'string' then
+    return nil, 'missing item text'
+  end
+  if #params.text == 0 then return nil, 'item text cannot be empty' end
+  if #params.text > MAX_ITEM_TEXT_LENGTH then
+    return nil, string.format('item text too long (max %d bytes)', MAX_ITEM_TEXT_LENGTH)
+  end
+
+  local ok, item = pcall(Compat.construct, 'Item', params.text)
+  if not ok then return nil, 'invalid item text: ' .. tostring(item) end
+  if not item or not item.baseName then
+    return nil, 'failed to parse item: no recognised base type'
+  end
+
+  local built, buildErr = pcall(function()
+    item:NormaliseQuality()
+    item:BuildModList()
+  end)
+  if not built then return nil, 'item mods could not be built: ' .. tostring(buildErr) end
+
+  local crafted, fractured, explicits = {}, {}, {}
+  local unparsed = {}
+  for _, line in ipairs(item.explicitModLines or {}) do
+    if type(line) == 'table' and type(line.line) == 'string' and #explicits + #crafted + #fractured < MAX_PARSE_MOD_LINES then
+      if line.crafted then table.insert(crafted, line.line)
+      elseif line.fractured then table.insert(fractured, line.line)
+      else table.insert(explicits, line.line) end
+    end
+  end
+  -- PoB keeps a line it could not turn into a modifier (typo, wrong wording,
+  -- unsupported mod) with `extra` set. Such a line is calculated as nothing.
+  for _, group in ipairs({ item.enchantModLines or {}, item.implicitModLines or {}, item.explicitModLines or {} }) do
+    for _, line in ipairs(group) do
+      if type(line) == 'table' and line.extra ~= nil and type(line.line) == 'string' and #unparsed < MAX_PARSE_MOD_LINES then
+        table.insert(unparsed, line.line)
+      end
+    end
+  end
+
+  local req = type(item.requirements) == 'table' and item.requirements or {}
+  return {
+    name = item.name,
+    base = item.baseName,
+    rarity = item.rarity,
+    type = item.type,
+    itemLevel = item.itemLevel,
+    quality = item.quality,
+    corrupted = item.corrupted == true,
+    identified = item.identified ~= false,
+    implicits = modLineTexts(item.implicitModLines),
+    explicits = explicits,
+    crafted = crafted,
+    fractured = fractured,
+    enchants = modLineTexts(item.enchantModLines),
+    unparsed = unparsed,
+    requirements = { level = req.level, str = req.str, dex = req.dex, int = req.int },
+  }
+end
+
 function M.get_tree()
   if not build or not build.spec then
     return nil, "build/spec not initialized"

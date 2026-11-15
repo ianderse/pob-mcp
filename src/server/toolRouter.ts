@@ -17,7 +17,7 @@ import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handle
 import { handleCompareTrees, handleGetNearbyNodes, handleFindPath, handleConnectNodes, handleGetPassiveUpgrades, handleSuggestMasteries } from "../handlers/treeHandlers.js";
 import { handleGetBuildIssues, formatIssuesResponse } from "../handlers/buildGoalsHandlers.js";
 import { handleFindBestAnointment } from "../handlers/anointHandlers.js";
-import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaSaveBuild, handleLuaLoadBuild, handleLuaImportCode, handleLuaImportPobb, handleLuaGetAilments, handleLuaGetTimelessJewels, handleLuaSimulate, handleExportFullStats,
+import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaSaveBuild, handleLuaLoadBuild, handleLuaImportCode, handleLuaImportPobb, handleLuaGetAilments, handleLuaGetTimelessJewels, handleLuaSimulate, handleParseItem, handleExportFullStats,
   handleLuaGetStats, handleLuaGetBuildSnapshot, handleLuaGetTree, handleLuaSetTree, handleSearchTreeNodes, handleLuaGetBuildInfo, handleLuaReloadBuild, handleUpdateTreeDelta, handleCreateSpec, handleListSpecs, handleSelectSpec, handleDeleteSpec, handleRenameSpec, handleListItemSets, handleSelectItemSet } from "../handlers/luaHandlers.js";
 import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems, handleSetSocketGroupEnabled, handleSetGemEnabled } from "../handlers/itemSkillHandlers.js";
 import { handleAnalyzeDefenses, handleSuggestOptimalNodes, handleOptimizeTree } from "../handlers/optimizationHandlers.js";
@@ -279,6 +279,9 @@ export async function routeToolCall(
 
     case "export_full_stats":
       return await handleExportFullStats(luaContext, args?.filter as string | undefined);
+
+    case "parse_item":
+      return await handleParseItem(luaContext, args?.text as string | undefined);
 
     case "lua_get_stats":
       return await handleLuaGetStats(luaContext, args?.category as string | undefined);

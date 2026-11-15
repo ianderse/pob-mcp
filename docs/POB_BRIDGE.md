@@ -185,6 +185,12 @@ Expose atomic tools that map to the PoB API. Names prefixed `lua_` to avoid conf
     optional `filter` substring so the full set is not dumped when one stat is wanted.
   - Input: `{}` (bridge) / `{ filter?: string }` (MCP)
   - Output: `{ stats: Record<string, number> }`
+- `parse_item`
+  - Description: Construct an item from text and build its mods without adding it to the
+    build. Reports base, rarity, quality, requirements and mod lines, and `unparsed` lines
+    that PoB kept as text but could not turn into modifiers.
+  - Input: `{ text: string }` (max 10240 bytes)
+  - Output: `{ item: {...} }`
 
 - `lua_get_tree`
   - Description: Return current passive tree data.
