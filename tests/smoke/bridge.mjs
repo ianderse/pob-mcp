@@ -22,7 +22,7 @@ try {
   for (const action of ['get_capabilities', 'get_items', 'get_skills', 'set_tree', 'generate_weighted_trade_query',
     'add_gem', 'set_config', 'save_build', 'search_nodes', 'get_mastery_options', 'calc_with',
     'create_spec', 'delete_spec', 'rename_spec', 'set_socket_group_enabled', 'set_gem_enabled',
-    'get_ailments']) {
+    'get_ailments', 'export_full_stats']) {
     if (!capabilities.actions?.includes(action)) throw new Error(`missing adapter capability: ${action}`);
   }
   await client.loadBuildXml(await readFile(resolve('example-build.xml'), 'utf8'), 'bridge-smoke');
@@ -32,6 +32,11 @@ try {
   const stats = await client.getStats(['Life', 'TotalEHP']);
   const items = await client.getItems();
   const skillSetup = await client.getSkills();
+  const full = await client.exportFullStats();
+  const fullKeys = Object.keys(full).filter((k) => !k.startsWith('_'));
+  if (fullKeys.length < 100 || full.Life !== stats.Life || !Array.isArray(full._skillDPS) || full._meta?.buildName !== 'bridge-smoke') {
+    throw new Error(`export_full_stats must carry the whole stat set and agree with get_stats: ${fullKeys.length} keys`);
+  }
   if (!info?.className || !Array.isArray(tree?.nodes) || typeof stats.Life !== 'number' || !Array.isArray(items) || !Array.isArray(skillSetup?.groups)) {
     throw new Error('unexpected adapter response shape');
   }

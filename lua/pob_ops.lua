@@ -315,6 +315,50 @@ function M.export_stats(fields)
   return result
 end
 
+-- Every finite numeric stat PoB computed for the main skill, unfiltered.
+-- export_stats serves a curated list; this is the escape hatch for a stat that
+-- list never carried. NaN and +-inf are dropped because json.encode rejects them
+-- and one bad value would otherwise cost the caller the whole response.
+local function numericStats(tbl)
+  local out = {}
+  for k, v in pairs(tbl) do
+    if type(k) == 'string' and type(v) == 'number' and v == v and v ~= math.huge and v ~= -math.huge then
+      out[k] = v
+    end
+  end
+  return out
+end
+
+function M.export_full_stats()
+  local output, err = M.get_main_output()
+  if not output then return nil, err end
+
+  local result = numericStats(output)
+
+  -- output.SkillDPS is a list of { name, dps, count, ... } rows, one per skill
+  -- the calc breaks out for full DPS.
+  if type(output.SkillDPS) == 'table' then
+    local skills = {}
+    for _, row in ipairs(output.SkillDPS) do
+      if type(row) == 'table' and type(row.dps) == 'number' and row.dps == row.dps and row.dps ~= math.huge then
+        table.insert(skills, { name = tostring(row.name), dps = row.dps, count = tonumber(row.count) })
+      end
+    end
+    result._skillDPS = skills
+  end
+
+  if type(output.Minion) == 'table' then
+    result._minion = numericStats(output.Minion)
+  end
+
+  result._meta = {
+    treeVersion = build and build.targetVersion and tostring(build.targetVersion) or nil,
+    level = build and tonumber(build.characterLevel) or nil,
+    buildName = build and build.buildName and tostring(build.buildName) or nil,
+  }
+  return result
+end
+
 function M.get_tree()
   if not build or not build.spec then
     return nil, "build/spec not initialized"

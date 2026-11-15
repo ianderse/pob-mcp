@@ -328,6 +328,13 @@ export interface CalcWithParams {
   fields?: string[];
 }
 
+/** The unfiltered stat dump: every numeric key plus underscore-prefixed groups. */
+export type FullStatsExport = Record<string, number> & {
+  _skillDPS?: Array<{ name: string; dps: number; count?: number }>;
+  _minion?: Record<string, number>;
+  _meta?: { treeVersion?: string; level?: number; buildName?: string };
+};
+
 export class PoBLuaApiClient {
   private loadedFilePath?: string;
   private buildGeneration = 0;
@@ -688,6 +695,13 @@ export class PoBLuaApiClient {
     const res = await this.send({ action: "get_stats", params: { fields } });
     if (!res.ok) throw new Error(res.error || "get_stats failed");
     return res.stats as StatsExport;
+  }
+
+  /** Every finite numeric stat the engine computed, not the curated default set. */
+  async exportFullStats(): Promise<FullStatsExport> {
+    const res = await this.send({ action: "export_full_stats" });
+    if (!res.ok) throw new Error(res.error || "export_full_stats failed");
+    return res.stats as FullStatsExport;
   }
 
   async getTree(): Promise<TreeState> {
