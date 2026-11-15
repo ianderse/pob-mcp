@@ -154,6 +154,25 @@ For a checkout or a nonstandard engine location, also set `POB_PATH` in that
 }
 ```
 
+#### A new league before PoB releases it
+
+A new league's passive tree and game data land on PathOfBuilding's `dev` branch days or
+weeks before a release ships them. To use them early, clone `dev` and set `POB_PATH` to
+its `src/`. On macOS the server keeps using the installed app's C modules, so no other
+setup is necessary:
+
+```bash
+git clone --branch dev https://github.com/PathOfBuildingCommunity/PathOfBuilding.git
+```
+
+```json
+        "POB_PATH": "/path/to/PathOfBuilding/src"
+```
+
+Run `git pull` in the clone to get later fixes, then restart the MCP server. The tree
+tools read passive tree data from the same PoB the Lua bridge runs. A tree version that
+PoB does not have is an error. The server does not substitute another league's tree.
+
 ### Environment Variables
 
 | Variable | Default | Description |
@@ -611,6 +630,12 @@ before using a system package; some PoB revisions require patched syntax support
 The interpreter cannot parse the chosen PoB source. Increasing the timeout or
 installing a Lua module will not add syntax support. Use a compatible interpreter
 and verify it with the compile-only command in the setup section.
+
+**`HeadlessWrapper.lua:1: unexpected symbol near '#'`**
+PoB's launcher files start with a `#@` line. LuaJIT builds from 20 Oct 2026 on read a
+leading `#` as a line number directive and skip only `#!`. The adapter removes the
+header before it loads these files, so this error means an adapter older than that fix.
+Update this server.
 
 **`Failed to find valid ready banner`**
 `POB_PATH` must point to the directory containing `HeadlessWrapper.lua`:
