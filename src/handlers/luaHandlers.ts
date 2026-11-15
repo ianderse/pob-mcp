@@ -436,6 +436,56 @@ export async function handleExportFullStats(context: LuaHandlerContext, filter?:
 }
 
 /**
+ * Timeless jewels as the engine applied them: seed, conqueror, lookup-table status
+ * and every conquered passive with its post-conquest stats. The silent failure this
+ * exposes is a jewel that is socketed but does nothing (no zlib in a headless engine,
+ * an unallocated socket, or a table that failed to load).
+ */
+export async function handleLuaGetTimelessJewels(context: LuaHandlerContext, includeUnallocated = false) {
+  return wrapHandler('get timeless jewels', async () => {
+    await context.ensureLuaClient();
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized');
+    }
+
+    const report = await luaClient.getTimelessJewels();
+    const lines: string[] = ['=== Timeless Jewels ===', ''];
+
+    if (!report.zlib) {
+      lines.push('⚠️ This engine has no working Inflate (zlib), so NO timeless jewel can take effect.');
+      lines.push('   Stats for any build with a timeless jewel are wrong until that is fixed.');
+      lines.push('');
+    }
+    if (report.jewels.length === 0) {
+      lines.push('No timeless jewels are socketed in the passive tree.');
+      return { content: [{ type: "text" as const, text: lines.join('\n') }] };
+    }
+
+    for (const j of report.jewels) {
+      const allocated = j.conquered.filter((n) => n.allocated);
+      lines.push(`**${j.name}** in socket ${j.socketNodeId} (seed ${j.seed}, ${j.conqueror.type} #${j.conqueror.id})`);
+      const problems: string[] = [];
+      if (!j.socketAllocated) problems.push('socket not allocated, so the jewel has no effect');
+      // PoB loads a lookup table lazily, on first use by an allocated socket, so an
+      // unloaded table is only a fault once the socket is allocated.
+      if (j.socketAllocated && !j.lutLoaded) problems.push('lookup table did not load, so conquered passives are vanilla');
+      if (j.socketAllocated && j.conqueredCount === 0) problems.push('conquers nothing');
+      for (const p of problems) lines.push(`  ⚠️ ${p}`);
+      lines.push(`  Conquered passives in range: ${j.conqueredCount} (${allocated.length} allocated)`);
+      const shown = includeUnallocated ? j.conquered : allocated;
+      for (const n of shown) {
+        const rename = n.originalName && n.originalName !== n.name ? `${n.originalName} → ${n.name}` : n.name;
+        const stats = n.stats.filter((s) => s.trim() !== '').join('; ');
+        lines.push(`  - [${n.nodeId}] ${rename}${n.allocated ? '' : ' (unallocated)'}: ${stats}`);
+      }
+      lines.push('');
+    }
+    return { content: [{ type: "text" as const, text: lines.join('\n') }] };
+  });
+}
+
+/**
  * Non-damaging ailments, showing what the DPS calculation is crediting next to
  * what the skill would actually inflict. Those two disagree for every
  * chance-based ailment, because PoB applies only guaranteed or hand-configured

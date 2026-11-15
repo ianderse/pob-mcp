@@ -534,6 +534,19 @@ export function getLuaToolSchemas(): ToolSchema[] {
       },
     },
     {
+      name: "lua_get_timeless_jewels",
+      description: "List timeless jewels (Glorious Vanity, Lethal Pride, Brutal Restraint, Militant Faith, Elegant Hubris, Heroic Tragedy, and the Abyss eye jewels) as the engine actually applied them: seed, conqueror, whether the lookup table loaded, and every conquered passive with its post-conquest stats. Call this for any build with a timeless jewel before trusting its numbers, and after swapping seeds or sockets.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          include_unallocated: {
+            type: "boolean",
+            description: "Also list conquered passives in range that are not allocated (useful when deciding where to path). Default false.",
+          },
+        },
+      },
+    },
+    {
       name: "lua_get_ailments",
       description: "Show non-damaging ailments (Shock, Chill, Scorch, Brittle, Sap) with what the DPS calculation is actually crediting next to what the main skill would inflict on the configured enemy. Call this for any build that shocks or chills: PoB applies a chance-based ailment only when its magnitude is entered by hand, so an uncounted shock silently understates every DPS figure. Magnitude is measured for the MAIN skill against the CURRENT enemy config, and it falls off steeply with enemy life, so re-read it per enemy rather than quoting one number for all content.",
       inputSchema: { type: "object", properties: {} },
