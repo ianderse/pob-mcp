@@ -643,8 +643,13 @@ function M.set_config(params)
       local alias = LEGACY_BOSS_ALIASES[value:lower()]
       if alias then value = alias end
     end
+    if value == '__unset__' and index[key] then
+      -- Clear an option back to PoB's default (e.g. drop a charge-count override).
+      input[key] = nil
+      applied[key] = '__unset__'
+      changed = true
     -- enemyLevel lives on the tab itself, not in the input table.
-    if key == 'enemyLevel' then
+    elseif key == 'enemyLevel' then
       local n = tonumber(value)
       if n then
         build.configTab.enemyLevel = n
