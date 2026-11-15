@@ -1,5 +1,5 @@
 import { describe, it, expect, jest, afterEach } from '@jest/globals';
-import { TradeApiClient } from '../../src/services/tradeClient';
+import { TradeApiClient, normalizeModArray } from '../../src/services/tradeClient';
 
 interface MakeRequestShim {
   makeRequest(method: string, url: string, body?: unknown): Promise<unknown>;
@@ -148,5 +148,22 @@ describe('TradeApiClient transient retry (exponential backoff)', () => {
     const elapsed = Date.now() - started;
     // base*2^0 + base*2^1 = 60ms minimum for two retries at base 20
     expect(elapsed).toBeGreaterThanOrEqual(55);
+  });
+});
+
+describe('normalizeModArray / fetchItems mod normalization', () => {
+  it('turns string and object-style mods into strings', () => {
+    expect(normalizeModArray(['+10 to Strength', { description: '+20 to Dexterity', hash: 'x', mods: [] }]))
+      .toEqual(['+10 to Strength', '+20 to Dexterity']);
+    expect(normalizeModArray(undefined)).toEqual([]);
+  });
+
+  it('normalizes mods at the fetchItems boundary', async () => {
+    const client = new TradeApiClient({ requestsPerSecond: 1000 });
+    jest.spyOn(client as unknown as MakeRequestShim, 'makeRequest').mockResolvedValue({
+      result: [{ id: 'a', item: { explicitMods: ['+10 to Strength', { description: '+20 to Dexterity' }] } }],
+    });
+    const [listing] = await client.fetchItems(['a']);
+    expect((listing.item as { explicitMods: string[] }).explicitMods).toEqual(['+10 to Strength', '+20 to Dexterity']);
   });
 });
