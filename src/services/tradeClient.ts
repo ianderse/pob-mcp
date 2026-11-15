@@ -9,6 +9,34 @@ import {
   ItemListing,
 } from '../types/tradeTypes.js';
 
+/**
+ * GGG's /api/trade/fetch endpoint may return explicitMods/implicitMods/craftedMods
+ * as plain strings or as rich objects `{ description, hash, mods: [...] }`.
+ * The rest of the codebase's ItemListing contract is `string[]`, so normalize
+ * here at the ingestion boundary rather than in every consumer.
+ */
+export function normalizeModArray(mods: unknown): string[] {
+  if (!Array.isArray(mods)) return [];
+  return mods.map((m) => {
+    if (typeof m === 'string') return m;
+    if (m && typeof m === 'object' && typeof (m as { description?: unknown }).description === 'string') {
+      return (m as { description: string }).description;
+    }
+    return String(m);
+  });
+}
+
+const MOD_FIELDS = ['explicitMods', 'implicitMods', 'craftedMods'] as const;
+
+function normalizeItemListing(listing: ItemListing): ItemListing {
+  if (!listing?.item) return listing;
+  const item: Record<string, unknown> = { ...listing.item };
+  for (const field of MOD_FIELDS) {
+    if (item[field] !== undefined) item[field] = normalizeModArray(item[field]);
+  }
+  return { ...listing, item: item as unknown as ItemListing['item'] };
+}
+
 /** 4xx or 429: retrying the identical request will not fix it. */
 class FinalApiError extends Error {}
 
@@ -124,7 +152,7 @@ export class TradeApiClient {
       this.makeRequest<FetchResult>('GET', url)
     );
 
-    const items = result.result || [];
+    const items = (result.result || []).map(normalizeItemListing);
     this.putInCache(cacheKey, items, this.defaultCacheTTL);
     return items;
   }
