@@ -1326,7 +1326,6 @@ function M.search_nodes(params)
   local includeAllocated = params.includeAllocated ~= false
 
   local results = {}
-  local count = 0
 
   local allocatedSet = {}
   if build.spec.allocNodes then
@@ -1335,9 +1334,10 @@ function M.search_nodes(params)
     end
   end
 
+  -- Every match is collected before sorting and truncating: stopping the
+  -- (unordered) pairs() walk at maxResults would return an arbitrary subset
+  -- that changes with the process's table history.
   for id, node in pairs(build.spec.nodes) do
-    if count >= maxResults then break end
-
     if not includeAllocated and allocatedSet[id] then
       goto continue
     end
@@ -1410,7 +1410,6 @@ function M.search_nodes(params)
         -- spending a point; callers need to tell them apart from real nodes.
         isBlighted = node.isBlighted == true,
       })
-      count = count + 1
     end
 
     ::continue::
@@ -1424,8 +1423,12 @@ function M.search_nodes(params)
     if aOrder ~= bOrder then
       return aOrder < bOrder
     end
-    return (a.name or '') < (b.name or '')
+    if (a.name or '') ~= (b.name or '') then
+      return (a.name or '') < (b.name or '')
+    end
+    return a.id < b.id
   end)
+  while #results > maxResults do table.remove(results) end
 
   return { nodes = results, count = #results }
 end
@@ -1456,6 +1459,8 @@ function M.get_mastery_options()
       })
     end
   end
+  -- pairs() order is not stable across loads; list masteries by node id.
+  table.sort(result, function(a, b) return a.nodeId < b.nodeId end)
   return { masteries = result }
 end
 
