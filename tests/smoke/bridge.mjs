@@ -24,7 +24,7 @@ try {
   for (const action of ['get_capabilities', 'get_items', 'get_skills', 'set_tree', 'generate_weighted_trade_query',
     'add_gem', 'set_config', 'save_build', 'search_nodes', 'get_mastery_options', 'calc_with',
     'create_spec', 'delete_spec', 'rename_spec', 'set_socket_group_enabled', 'set_gem_enabled',
-    'get_ailments', 'export_full_stats', 'get_timeless_jewels', 'parse_item']) {
+    'get_ailments', 'export_full_stats', 'get_timeless_jewels', 'parse_item', 'batch_modify']) {
     if (!capabilities.actions?.includes(action)) throw new Error(`missing adapter capability: ${action}`);
   }
   await client.loadBuildXml(await readFile(resolve('example-build.xml'), 'utf8'), 'bridge-smoke');
@@ -272,6 +272,23 @@ try {
     if (!await client.parseItem(bad).then(() => null, (err) => err)) throw new Error(`parse_item accepted ${JSON.stringify(bad)}`);
   }
   if ((await client.getItems()).length !== beforeItems.length) throw new Error('parse_item added the item to the build');
+
+  // batch_modify is all-or-nothing: a failing last change must undo the earlier ones.
+  const batchBefore = { stats: await client.getStats(), items: JSON.stringify((await client.getItems()).map((i) => [i.slot, i.name])), level: (await client.getBuildInfo()).level };
+  const batchFailure = await client.batchModify([
+    { type: 'set_level', level: 50 },
+    { type: 'equip_item', item_text: betterChest, slot: 'Body Armour' },
+    { type: 'set_config', config: { notARealOption: 1 } },
+  ]).then(() => null, (err) => err);
+  if (!batchFailure || !/rolled back, restored build verified identical/.test(batchFailure.message)) {
+    throw new Error(`a failing batch must report a verified rollback: ${batchFailure?.message}`);
+  }
+  const batchAfter = { stats: await client.getStats(), items: JSON.stringify((await client.getItems()).map((i) => [i.slot, i.name])), level: (await client.getBuildInfo()).level };
+  if (JSON.stringify(batchAfter) !== JSON.stringify(batchBefore)) throw new Error('batch_modify left changes behind after a failure');
+  const batchMalformed = await client.batchModify([{ type: 'set_level', level: 50 }, { type: 'nope' }]).then(() => null, (err) => err);
+  if (!batchMalformed || !/nothing was applied/.test(batchMalformed.message)) throw new Error('a malformed batch must be rejected before anything is applied');
+  const batchOk = await client.batchModify([{ type: 'set_level', level: 90 }]);
+  if (batchOk.applied !== 1 || !batchOk.delta.Life) throw new Error('a valid batch must apply and report a delta');
 
   await client.loadBuildXml(await readFile(gearedBuildXml, 'utf8'), 'weighted-query-smoke');
   const weighted = await client.generateWeightedTradeQuery('Amulet');

@@ -387,6 +387,7 @@ PoB installation or checkout containing the relevant mod tables.
 | `lua_simulate` | Try an item swap, flask toggle, passive or mastery change and read the delta, without changing the build |
 | `export_full_stats` | Every numeric stat PoB calculated (several hundred keys), optionally filtered by key substring |
 | `parse_item` | Dry-run an item text through PoB's parser without equipping it; flags mod lines PoB cannot read |
+| `batch_modify` | Apply several item/config/tree/flask/level edits atomically; rolls the build back if any one fails |
 | `lua_get_tree` | View passive tree: class, ascendancy, all allocated node IDs |
 | `lua_set_tree` | Replace passive tree allocation (preserves class if omitted) |
 | `update_tree_delta` | Add/remove individual nodes without replacing entire tree |

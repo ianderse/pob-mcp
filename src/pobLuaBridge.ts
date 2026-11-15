@@ -399,6 +399,20 @@ export interface ParsedItem {
   requirements: { level?: number; str?: number; dex?: number; int?: number };
 }
 
+/** One edit inside an atomic batch_modify call. */
+export type BatchChange =
+  | { type: "equip_item"; item_text: string; slot: string }
+  | { type: "set_config"; config: Record<string, string | number | boolean> }
+  | { type: "set_tree"; classId?: number; ascendClassId?: number; nodes: Array<number | string>; masteryEffects?: Record<string, number> }
+  | { type: "update_tree_delta"; addNodes?: Array<number | string>; removeNodes?: Array<number | string>; masteryEffects?: Record<string, number> }
+  | { type: "set_flask_active"; index: number; active: boolean }
+  | { type: "set_level"; level: number };
+
+export interface BatchModifyResult {
+  applied: number;
+  delta: Record<string, { before: number; after: number; change: number; percent?: number }>;
+}
+
 export class PoBLuaApiClient {
   private loadedFilePath?: string;
   private buildGeneration = 0;
@@ -776,6 +790,16 @@ export class PoBLuaApiClient {
     const res = await this.send({ action: "parse_item", params: { text } });
     if (!res.ok) throw new Error(res.error || "parse_item failed");
     return res.item as ParsedItem;
+  }
+
+  /**
+   * Apply several edits as one unit. Either all of them land or the build is
+   * restored from a snapshot and this rejects with the reason and the rollback outcome.
+   */
+  async batchModify(changes: BatchChange[]): Promise<BatchModifyResult> {
+    const res = await this.send({ action: "batch_modify", params: { changes } });
+    if (!res.ok) throw new Error(res.error || "batch_modify failed");
+    return res.result as BatchModifyResult;
   }
 
   async getTree(): Promise<TreeState> {
