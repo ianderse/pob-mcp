@@ -27,7 +27,6 @@ import { ItemRecommendationEngine } from "./services/itemRecommendationEngine.js
 
 // Import types
 import type {
-  PassiveTreeData,
   PoBBuild,
   TreeAnalysisResult,
 } from "./types.js";
@@ -183,12 +182,6 @@ class PoBMCPServer {
 
   private unlockToolGate(): void {
     this.toolGate.unlock();
-  }
-
-  // Tree Data Fetching
-  private async getTreeData(version: string = "3_26"): Promise<PassiveTreeData> {
-    // Delegate to TreeService
-    return await this.treeService.getTreeData(version);
   }
 
   // Tree Analysis Methods
