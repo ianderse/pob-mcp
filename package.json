@@ -26,7 +26,8 @@
     "test:smoke:crafting": "node tests/smoke/crafting-mcp.mjs",
     "test:smoke:persistence": "node tests/smoke/persistence.mjs",
     "test:smoke:race": "node tests/smoke/lua-client-race.mjs",
-    "test:smoke:truthfulness": "node tests/smoke/state-truthfulness.mjs"
+    "test:smoke:truthfulness": "node tests/smoke/state-truthfulness.mjs",
+    "test:smoke:dossier": "node tests/smoke/dossier-tree.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
