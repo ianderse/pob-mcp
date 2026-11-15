@@ -24,7 +24,7 @@ try {
   for (const action of ['get_capabilities', 'get_items', 'get_skills', 'set_tree', 'generate_weighted_trade_query',
     'add_gem', 'set_config', 'save_build', 'search_nodes', 'get_mastery_options', 'calc_with',
     'create_spec', 'delete_spec', 'rename_spec', 'set_socket_group_enabled', 'set_gem_enabled',
-    'get_ailments', 'export_full_stats', 'get_timeless_jewels']) {
+    'get_ailments', 'export_full_stats', 'get_timeless_jewels', 'parse_item']) {
     if (!capabilities.actions?.includes(action)) throw new Error(`missing adapter capability: ${action}`);
   }
   await client.loadBuildXml(await readFile(resolve('example-build.xml'), 'utf8'), 'bridge-smoke');
@@ -262,6 +262,16 @@ try {
   if (afterItems.length !== beforeItems.length || afterItems.find((i) => i.slot === 'Body Armour')?.name !== equippedChest.name) {
     throw new Error('simulation equipped the item it was only supposed to try');
   }
+
+  // parse_item is a dry run: PoB reads the text, the build never sees the item.
+  const parsed = await client.parseItem([...betterChest.split('\n'), 'Utterly Made Up Modifier of Doom'].join('\n'));
+  if (parsed.base !== 'Quilted Jacket' || !parsed.explicits.includes('+500 to maximum Life') || !parsed.unparsed.includes('Utterly Made Up Modifier of Doom')) {
+    throw new Error(`parse_item must read the base and mods and flag the unreadable line: ${JSON.stringify(parsed)}`);
+  }
+  for (const bad of ['', 'not an item']) {
+    if (!await client.parseItem(bad).then(() => null, (err) => err)) throw new Error(`parse_item accepted ${JSON.stringify(bad)}`);
+  }
+  if ((await client.getItems()).length !== beforeItems.length) throw new Error('parse_item added the item to the build');
 
   await client.loadBuildXml(await readFile(gearedBuildXml, 'utf8'), 'weighted-query-smoke');
   const weighted = await client.generateWeightedTradeQuery('Amulet');

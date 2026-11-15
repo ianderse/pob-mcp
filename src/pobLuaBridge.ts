@@ -379,6 +379,25 @@ export type FullStatsExport = Record<string, number> & {
   _minion?: Record<string, number>;
   _meta?: { treeVersion?: string; level?: number; buildName?: string };
 };
+/** What PoB's own parser made of an item text, without the item entering the build. */
+export interface ParsedItem {
+  name?: string;
+  base: string;
+  rarity?: string;
+  type?: string;
+  itemLevel?: number;
+  quality?: number;
+  corrupted: boolean;
+  identified: boolean;
+  implicits: string[];
+  explicits: string[];
+  crafted: string[];
+  fractured: string[];
+  enchants: string[];
+  /** Mod lines PoB kept as text but could not turn into a modifier, so they calculate as nothing. */
+  unparsed: string[];
+  requirements: { level?: number; str?: number; dex?: number; int?: number };
+}
 
 export class PoBLuaApiClient {
   private loadedFilePath?: string;
@@ -750,6 +769,13 @@ export class PoBLuaApiClient {
     const res = await this.send({ action: "export_full_stats" });
     if (!res.ok) throw new Error(res.error || "export_full_stats failed");
     return res.stats as FullStatsExport;
+  }
+
+  /** Dry-run an item text through PoB's parser; the loaded build is not touched. */
+  async parseItem(text: string): Promise<ParsedItem> {
+    const res = await this.send({ action: "parse_item", params: { text } });
+    if (!res.ok) throw new Error(res.error || "parse_item failed");
+    return res.item as ParsedItem;
   }
 
   async getTree(): Promise<TreeState> {
