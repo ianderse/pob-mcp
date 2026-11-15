@@ -6,6 +6,10 @@ import type { TreeComparison } from "../types.js";
 import type { PoBLuaApiClient } from "../pobLuaBridge.js";
 import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
 
+// The only stats the candidate scoring reads; asking calc_with for just these
+// keeps each simulation from shipping the whole PoB output over stdio.
+const SCORE_FIELDS = ['CombinedDPS', 'TotalDPS', 'TotalEHP', 'Life', 'Minion'];
+
 interface TreeHandlerContext {
   buildService: BuildService;
   treeService: TreeService;
@@ -458,7 +462,7 @@ export async function handleGetPassiveUpgrades(
 
   for (const node of candidates) {
     try {
-      const { output: out } = await luaClient.calcWith({ addNodes: [node.id] });
+      const { output: out } = await luaClient.calcWith({ addNodes: [node.id], fields: SCORE_FIELDS });
       if (!out) continue;
 
       // calcWith returns raw Lua output; minion stats are nested under out.Minion
@@ -579,7 +583,7 @@ export async function handleSuggestMasteries(context: PassiveUpgradesContext) {
     for (const effect of mastery.availableEffects) {
       try {
         const newMasteryEffects = { ...currentMasteryEffects, [Number(mastery.nodeId)]: effect.effectId };
-        const { output: out } = await luaClient.calcWith({ masteryEffects: newMasteryEffects });
+        const { output: out } = await luaClient.calcWith({ masteryEffects: newMasteryEffects, fields: SCORE_FIELDS });
         if (!out) continue;
         // calcWith returns raw Lua output; minion stats nested under out.Minion
         const outDPS = (out.CombinedDPS as number) || (out.TotalDPS as number) ||

@@ -289,9 +289,36 @@ handlers.get_config = function()
 end
 -- GetMiscCalculator hands back the unmodified build's output alongside the
 -- calculator, so the caller gets its comparison baseline without a second calc.
+-- Output keys only the Full DPS roll-up writes. That roll-up re-runs the whole
+-- calculation once per Full DPS skill, so it is skipped when `fields` names none
+-- of them (unless the caller set useFullDPS explicitly).
+local FULL_DPS_FIELDS = { FullDPS = true, FullDotDPS = true, SkillDPS = true }
+
+-- `fields` limits a stats table to the named top-level keys: a whole output is
+-- tens of KB, while a candidate search usually reads two or three numbers.
+local function pickFields(stats, fields)
+  local picked = {}
+  for _, name in ipairs(fields) do
+    if stats[name] ~= nil then picked[name] = stats[name] end
+  end
+  return picked
+end
+
 handlers.calc_with = function(params)
-  local out, base = BuildOps.calc_with(params or {})
+  params = params or {}
+  local fields = type(params.fields) == 'table' and params.fields or nil
+  if fields and params.useFullDPS == nil then
+    local wantsFullDPS = false
+    for _, name in ipairs(fields) do
+      if FULL_DPS_FIELDS[name] then wantsFullDPS = true end
+    end
+    if not wantsFullDPS then params.useFullDPS = false end
+  end
+  local out, base = BuildOps.calc_with(params)
   if out == nil then return { ok = false, error = base or 'operation failed' } end
+  if fields then
+    out, base = pickFields(out, fields), pickFields(base, fields)
+  end
   return { ok = true, output = out, base = base }
 end
 handlers.export_build_xml = op(BuildOps.export_build_xml, 'xml')

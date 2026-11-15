@@ -324,6 +324,8 @@ export interface CalcWithParams {
   repSlotName?: string;
   toggleFlask?: number;
   useFullDPS?: boolean;
+  /** Top-level stat names to return (output and base). Omitted: the whole output. Naming none of FullDPS/FullDotDPS/SkillDPS skips the Full DPS roll-up unless useFullDPS is set. */
+  fields?: string[];
 }
 
 export class PoBLuaApiClient {
