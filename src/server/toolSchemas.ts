@@ -485,6 +485,22 @@ export function getLuaToolSchemas(): ToolSchema[] {
       },
     },
     {
+      name: "lua_simulate",
+      description: "Answer a 'what if' about the loaded build without changing it: swap an item into a slot, toggle a flask, allocate or unallocate passives, or pick mastery effects, and get the resulting stats with the delta against the current build. This is the tool to reach for before recommending any gear or tree change, because it costs nothing to undo — nothing is written, nothing is saved, and the build the player has open is untouched. It also reports when the simulated gear would leave an attribute requirement unmet, which PoB itself will happily quote full DPS for even though the game would disable the item. What it does NOT do: it does not equip, buy, price or persist anything (use add_item for a real change); it does not check socket colours, links, item level or affix legality, so it will price a physically impossible item as if it existed; and it simulates one change at a time against the current build, not a sequence.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          itemText: { type: "string", description: "Full PoB item text to try in slotName. Requires slotName. The item is parsed and calculated, never equipped." },
+          slotName: { type: "string", description: "Equipment slot the item replaces, exactly as PoB names it: 'Body Armour', 'Weapon 1', 'Ring 1', 'Amulet'. A base type such as 'Chest' or 'Ring' is rejected. Use get_equipped_items for the slot names of this build." },
+          toggleFlask: { type: "number", description: "Flask slot 1-5 to FLIP: an active flask is simulated off, an inactive one on. The slot must hold a flask." },
+          addNodes: { type: "array", items: { type: "number" }, description: "Passive node IDs to allocate for this calculation." },
+          removeNodes: { type: "array", items: { type: "number" }, description: "Passive node IDs to unallocate for this calculation." },
+          masteryEffects: { type: "object", description: "Mastery effect choices as { nodeId: effectId } (see suggest_masteries)." },
+          useFullDPS: { type: "boolean", description: "Total the DPS of every enabled skill instead of the main one." },
+        },
+      },
+    },
+    {
       name: "lua_get_ailments",
       description: "Show non-damaging ailments (Shock, Chill, Scorch, Brittle, Sap) with what the DPS calculation is actually crediting next to what the main skill would inflict on the configured enemy. Call this for any build that shocks or chills: PoB applies a chance-based ailment only when its magnitude is entered by hand, so an uncounted shock silently understates every DPS figure. Magnitude is measured for the MAIN skill against the CURRENT enemy config, and it falls off steeply with enemy life, so re-read it per enemy rather than quoting one number for all content.",
       inputSchema: { type: "object", properties: {} },
@@ -982,13 +998,17 @@ export function getOptimizationToolSchemas(): ToolSchema[] {
     {
       name: "analyze_defenses",
       truncatable: true,
-      description: "Deep-dive into defensive layers (avoidance/mitigation/recovery): EHP, spell suppression, evasion, block, armour/PDR, life regen, leech. Use this when you specifically want detailed defense breakdown. validate_build already covers this — only call analyze_defenses separately if you need more defensive detail than validate_build provides.",
+      description: "Ranks a build's defences by the BINDING CONSTRAINT: the max hit PoB computes per damage type (physical/fire/cold/lightning/chaos), lowest first, so you can see which hit kills this character and how much headroom the rest have. Use this before recommending any defensive purchase — TotalEHP averages across damage types and will rank a patch to the strongest type about level with a patch to the weakest. Also reports the usual layers (avoidance/mitigation/recovery, suppression, block, armour/PDR, regen). Limits: max hits use CAPPED resistance, so types at the cap tie and overcap counts for nothing here; the figures are for the currently loaded config and enemy settings. validate_build does NOT report max hits, so call this one for any survivability ranking.",
       inputSchema: {
         type: "object",
         properties: {
           build_name: {
             type: "string",
             description: "Build to analyze",
+          },
+          sweep_resistances: {
+            type: "boolean",
+            description: "Measure how far the binding resistance is worth buying. Steps that resistance up 5% at a time on the real engine (a few seconds) and reports the point at which the floor changes hands, past which more of it buys nothing. Each step is a hypothetical calculation that swaps an equipped item for a copy carrying the extra resistance; the loaded build is never changed. Sweeps the lowest resisted max hit, so when physical is the overall floor it still ranks resistances and says physical owns the floor.",
           },
         },
         required: ["build_name"],
@@ -1214,7 +1234,7 @@ export function getValidationToolSchemas(): ToolSchema[] {
     {
       name: "validate_build",
       truncatable: true,
-      description: "Comprehensive build validation: resistances, life pool, defensive layers (avoidance/mitigation/recovery), mana sustain, accuracy, flask immunities, damage scaling. Provides prioritized critical/warning/info recommendations. PREFER this over get_build_issues + analyze_defenses — it covers both in one call. Do not call all three.",
+      description: "Comprehensive build validation: resistances, life pool, defensive layers (avoidance/mitigation/recovery), mana sustain, accuracy, flask immunities, damage scaling. Provides prioritized critical/warning/info recommendations. PREFER this over get_build_issues — it covers both in one call. It does NOT report per-damage-type max hits, so use analyze_defenses when the question is which damage type kills the character or where a defensive point should go.",
       inputSchema: {
         type: "object",
         properties: {

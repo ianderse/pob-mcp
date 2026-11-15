@@ -71,6 +71,24 @@ try {
   if (anoints.error || anoints.result?.isError) throw new Error(`find_best_anointment failed: ${JSON.stringify(anoints.error ?? anoints.result)}`);
   const anointText = anoints.result?.content?.[0]?.text || '';
   if (!anointText.includes('=== Best Anointment') || !anointText.includes('Evaluated ')) throw new Error(`anoint response was incomplete: ${anointText}`);
+  // The what-if tool has to reach the engine and come back with a real delta,
+  // over MCP rather than only through the bridge client.
+  const simulated = await request('tools/call', {
+    name: 'lua_simulate',
+    arguments: {
+      slotName: 'Body Armour',
+      itemText: ['Rarity: RARE', 'Smoke Jacket', 'Quilted Jacket', 'Item Level: 84', 'Quality: 20',
+        'LevelReq: 72', 'Implicits: 0', '+500 to maximum Life', '+50% to Cold Resistance',
+        '+50% to Lightning Resistance'].join('\n'),
+    },
+  });
+  if (simulated.error || simulated.result?.isError) throw new Error(`lua_simulate failed: ${JSON.stringify(simulated.error ?? simulated.result)}`);
+  const simulatedText = simulated.result?.content?.[0]?.text || '';
+  if (!simulatedText.includes('The loaded build is unchanged') || !/Life: [\d,]+ → [\d,]+ {2}\+/.test(simulatedText)) {
+    throw new Error(`lua_simulate did not report a life gain: ${simulatedText}`);
+  }
+  const badSlot = await request('tools/call', { name: 'lua_simulate', arguments: { slotName: 'Chest', itemText: 'Rarity: RARE\nX\nQuilted Jacket' } });
+  if (badSlot.result?.isError !== true) throw new Error('lua_simulate must reject a slot name PoB does not know');
   if (weightedSmoke) {
     if (!process.env.POE_SESSION_ID) throw new Error('POE_SESSION_ID is required for the weighted smoke test.');
     const weighted = await request('tools/call', { name: 'find_weighted_trade_items', arguments: { league: 'Standard', slot: 'Amulet', limit: 1 } });

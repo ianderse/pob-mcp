@@ -480,11 +480,48 @@ function M.is_allocatable(node)
   return true
 end
 
--- params: { addNodes?: number[], removeNodes?: number[], masteryEffects?: {[nodeId]: effectId}, useFullDPS?: boolean }
+-- params: { addNodes?: number[], removeNodes?: number[], masteryEffects?: {[nodeId]: effectId},
+--           repItem?: string (item text), repSlotName?: string, toggleFlask?: number (1-NUM_FLASK_SLOTS),
+--           useFullDPS?: boolean }
 function M.calc_with(params)
   if not build or not build.calcsTab then return nil, 'build not initialized' end
-  local calcFunc = build.calcsTab:GetMiscCalculator()
+  local calcFunc, baseOut = build.calcsTab:GetMiscCalculator()
   local override = {}
+  if params and (params.repItem ~= nil or params.repSlotName ~= nil) then
+    if type(params.repItem) ~= 'string' or type(params.repSlotName) ~= 'string' then
+      return nil, 'repItem (item text) and repSlotName must be given together'
+    end
+    if #params.repItem == 0 then return nil, 'repItem text cannot be empty' end
+    if #params.repItem > MAX_ITEM_TEXT_LENGTH then
+      return nil, string.format('repItem text too long (max %d bytes)', MAX_ITEM_TEXT_LENGTH)
+    end
+    -- CalcSetup matches repSlotName against itemsTab slot names, not base types.
+    -- A name it never matches ("Ring", "Chest") calculates happily and returns the
+    -- unchanged build, so reject it here rather than report a zero delta as truth.
+    if not (build.itemsTab and build.itemsTab.slots and build.itemsTab.slots[params.repSlotName]) then
+      return nil, 'unknown slot: ' .. params.repSlotName
+    end
+    local parsed, item = pcall(Compat.construct, 'Item', params.repItem)
+    if not parsed then return nil, 'invalid item text: ' .. tostring(item) end
+    if not item or not item.baseName then return nil, 'failed to parse item' end
+    item:NormaliseQuality()
+    -- Quality moves the item's mods, so rebuild them as ItemsTab does after normalising.
+    item:BuildModList()
+    override.repSlotName = params.repSlotName
+    override.repItem = item
+  end
+  if params and params.toggleFlask ~= nil then
+    local idx = tonumber(params.toggleFlask)
+    if not idx or idx < 1 or idx > NUM_FLASK_SLOTS then
+      return nil, string.format('invalid flask index (must be 1-%d)', NUM_FLASK_SLOTS)
+    end
+    local slot = build.itemsTab and build.itemsTab.slots and build.itemsTab.slots['Flask ' .. tostring(idx)]
+    -- The override toggles membership of env.flasks, so handing it an item that is
+    -- not in the slot would switch a flask ON that the character does not carry.
+    local flask = slot and slot.selItemId and build.itemsTab.items[slot.selItemId]
+    if not flask then return nil, 'no flask equipped in Flask ' .. tostring(idx) end
+    override.toggleFlask = flask
+  end
   if params and type(params.addNodes) == 'table' then
     override.addNodes = {}
     for _, id in ipairs(params.addNodes) do
@@ -541,7 +578,7 @@ function M.calc_with(params)
   if type(out) ~= 'table' then
     return nil, 'calc_with produced no stats table'
   end
-  return M.sanitize_for_json(shallowcopy(out))
+  return M.sanitize_for_json(shallowcopy(out)), M.sanitize_for_json(shallowcopy(baseOut))
 end
 
 

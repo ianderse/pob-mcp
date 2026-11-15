@@ -323,8 +323,8 @@ Finally, update the Claude Desktop configuration above and restart Claude Deskto
 ## Available Tools
 
 With `POB_LUA_ENABLED=true`, `POE_TRADE_ENABLED=true`, and `POE_SESSION_ID` set,
-the server advertises **104 tools**. It advertises **39** with Lua and Trade disabled,
-and **95** with Lua enabled and Trade disabled. Tool discovery is not a guarantee
+the server advertises **105 tools**. It advertises **39** with Lua and Trade disabled,
+and **96** with Lua enabled and Trade disabled. Tool discovery is not a guarantee
 that the required engine, data files, credentials, or network service are usable.
 
 ### XML-Based Tools (Always Available)
@@ -379,6 +379,7 @@ PoB installation or checkout containing the relevant mod tables.
 | `set_character_level` | Set level and recalculate all stats |
 | `lua_get_stats` | Get calculated stats (`category`: `offense`/`defense`/`all`) |
 | `lua_get_ailments` | Non-damaging ailment magnitude, and whether the DPS calc is crediting it |
+| `lua_simulate` | Try an item swap, flask toggle, passive or mastery change and read the delta, without changing the build |
 | `lua_get_tree` | View passive tree: class, ascendancy, all allocated node IDs |
 | `lua_set_tree` | Replace passive tree allocation (preserves class if omitted) |
 | `update_tree_delta` | Add/remove individual nodes without replacing entire tree |

@@ -45,6 +45,7 @@ POE_TRADE_ENABLED="true"                           # Enable Trade API tools
 | `lua_load_build` | Load build XML | "Load MyBuild.xml into Lua" |
 | `lua_get_stats` | Get calculated stats | "Get stats from Lua" |
 | `lua_get_ailments` | Shock/chill magnitude, and whether the calc counts it | "Is my shock being counted?" |
+| `lua_simulate` | What-if an item, flask, passive or mastery change, build untouched | "What if I wore this chest instead?" |
 | `lua_get_tree` | Get tree data | "Show me the tree" |
 | `lua_set_tree` | Update tree | "Set tree to nodes [list]" |
 

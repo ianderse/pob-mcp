@@ -4,7 +4,13 @@ import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
 import type { OptimizationConstraints } from "../types/optimization.js";
 import type { PassiveTreeData } from "../types.js";
-import { analyzeDefenses, formatDefensiveAnalysis } from "../defensiveAnalyzer.js";
+import {
+  DEFENSIVE_STAT_FIELDS,
+  analyzeDefenses,
+  formatDefensiveAnalysis,
+  formatResistanceSweep,
+} from "../defensiveAnalyzer.js";
+import { runResistanceSweep } from "../services/resistanceSweep.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { resolveBuildFile } from "../utils/pathSanitizer.js";
 import { loadBuildIfDifferent, readNamedBuild } from "../utils/namedBuild.js";
@@ -22,7 +28,8 @@ interface OptimizationHandlerContext {
 
 export async function handleAnalyzeDefenses(
   context: OptimizationHandlerContext,
-  buildName?: string
+  buildName?: string,
+  sweepResistances?: boolean
 ) {
   return wrapHandler('analyze defenses', async () => {
     if (!buildName) {
@@ -40,8 +47,9 @@ export async function handleAnalyzeDefenses(
     // If the same build is already loaded, preserve the current spec/item set selection.
     await loadBuildIfDifferent(luaClient, buildName, context.pobDirectory);
 
-    // Get stats from PoB
-    const stats = await luaClient.getStats();
+    // Ask for the fields by name: the default set carries no *MaximumHitTaken,
+    // so the binding damage type is missing from a bare getStats().
+    const stats = await luaClient.getStats([...DEFENSIVE_STAT_FIELDS]);
 
     // Chaos Inoculation sets Life to 1 and carries the pool as Energy Shield.
     const effectivePool = (toFiniteNumber(stats.Life) ?? 0) + (toFiniteNumber(stats.EnergyShield) ?? 0) + (toFiniteNumber(stats.Ward) ?? 0);
@@ -75,6 +83,32 @@ export async function handleAnalyzeDefenses(
 
     let text = `${contextHeader}\n\n`;
     text += formatDefensiveAnalysis(analysis);
+
+    const { binding, resistedBinding } = analysis.maxHits;
+    if (sweepResistances) {
+      if (!resistedBinding) {
+        text += '\n**Resistance Sweep:** skipped. PoB reported no resisted max hit to sweep against.\n';
+      } else {
+        // The defensive analysis is already in hand; a failed sweep must not discard it.
+        let sweep: Awaited<ReturnType<typeof runResistanceSweep>>;
+        try {
+          sweep = await runResistanceSweep(luaClient, resistedBinding.type);
+        } catch (error) {
+          sweep = { note: `Sweep failed: ${error instanceof Error ? error.message : String(error)}` };
+        }
+        const { summary, note } = sweep;
+        if (summary) text += `\n${formatResistanceSweep(summary)}\n`;
+        // A resistance cannot touch the physical max hit, so say so rather than
+        // letting the sweep read as "this is what fixes the character".
+        if (summary && binding && binding.type === 'Physical') {
+          text += `\nPhysical still owns the overall floor at ${Math.round(binding.maxHit).toLocaleString()}. ` +
+            'This sweep ranks resistance purchases against each other, not against the thing that kills you first.\n';
+        }
+        // Carries the reason when no sweep ran.
+        if (note) text += `\n${note}\n`;
+        if (!summary && !note) text += '\nSweep produced no result.\n';
+      }
+    }
 
     return {
       content: [

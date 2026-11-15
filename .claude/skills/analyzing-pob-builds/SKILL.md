@@ -51,6 +51,13 @@ missing file must raise an error; do not substitute the build already in memory.
 
 ## Verify mutations against their intended effect
 
+Measure a candidate with `lua_simulate` before mutating anything. It runs one
+hypothetical (item swap, flask toggle, passives, masteries) through the calculator
+and reports the delta against the unchanged build. Nothing is written, so there is
+nothing to undo. It also names an attribute requirement the swap would leave unmet;
+the other read paths quote full DPS for that gear. Mutate only when the change is
+not one `lua_simulate` can express, and then on a scratch build.
+
 ```text
 before = read the relevant live state
 apply one change
@@ -127,21 +134,22 @@ aspirational unless the player gave a budget that covers them.
 
 ## Compare defensive changes for the relevant damage
 
-For a resistance comparison, inspect the individual elemental maximum hits in
-addition to TotalEHP:
+`analyze_defenses` ranks the damage types by the maximum hit PoB computes for
+each, lowest first, and names the binding type. Read it before recommending a
+resistance. TotalEHP averages across damage types. On a measured level 99
+Occultist, +20% fire and +20% lightning resistance gave the same TotalEHP to nine
+decimals, but only fire raised the weakest resisted maximum hit (30,236 to 31,297).
 
-```text
-min(FireMaximumHitTaken, ColdMaximumHitTaken, LightningMaximumHitTaken)
-```
+If physical damage binds, no resistance purchase raises the floor. Maximum hit uses
+capped resistance, so capped types tie and overcap adds nothing to it. The ranking
+is still not a complete survival score: recovery, damage over time, and the chosen
+enemy scenario can change the priority.
 
-This measures the weakest elemental hit the configured model survives. It is not
-a complete survival score: physical damage, chaos damage, recovery, damage over
-time, and the chosen enemy scenario can change the priority.
-
-Sweep candidate values and combinations using the real calculator when a result
-is sensitive to a threshold. Increasing a resistance may still improve other
-metrics after another element becomes the weakest one. State which metric stops
-improving and which damage types the comparison excludes.
+`analyze_defenses(sweep_resistances: true)` runs one real calculation per step and
+reports where a resistance stops paying. Measure combinations with `lua_simulate`
+instead of adding single deltas: two changes that help alone can create a new floor
+together. State which metric stops improving and which damage types the comparison
+excludes.
 
 Replacing a weapon while retaining a shield is a different comparison from
 switching to dual wield. Measure the full intended equipment change.

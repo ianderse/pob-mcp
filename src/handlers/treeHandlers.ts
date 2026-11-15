@@ -441,7 +441,7 @@ export async function handleGetPassiveUpgrades(
 
   for (const node of candidates) {
     try {
-      const out = await luaClient.calcWith({ addNodes: [node.id] });
+      const { output: out } = await luaClient.calcWith({ addNodes: [node.id] });
       if (!out) continue;
 
       // calcWith returns raw Lua output; minion stats are nested under out.Minion
@@ -562,7 +562,7 @@ export async function handleSuggestMasteries(context: PassiveUpgradesContext) {
     for (const effect of mastery.availableEffects) {
       try {
         const newMasteryEffects = { ...currentMasteryEffects, [Number(mastery.nodeId)]: effect.effectId };
-        const out = await luaClient.calcWith({ masteryEffects: newMasteryEffects });
+        const { output: out } = await luaClient.calcWith({ masteryEffects: newMasteryEffects });
         if (!out) continue;
         // calcWith returns raw Lua output; minion stats nested under out.Minion
         const outDPS = (out.CombinedDPS as number) || (out.TotalDPS as number) ||

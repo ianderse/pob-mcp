@@ -142,8 +142,14 @@ async function buildPostLoadSummary(context: LuaHandlerContext, luaClient: PoBLu
         summaryLines.push(`**${info.name || name}** | Level ${info.level} ${info.className ?? ''}${info.ascendClassName ? ` (${info.ascendClassName})` : ''}`);
       }
 
-      const s = await luaClient.getStats(['Life', 'TotalDPS', 'CombinedDPS', 'MinionTotalDPS',
-        'FireResist', 'ColdResist', 'LightningResist', 'ChaosResist', 'TotalEHP']).catch(() => null);
+      // get_build_issues hands back the stats it fetched, and its field set already
+      // covers this summary. Fetching them again here cost a second recalculation
+      // (~24ms) over a bridge that can only serve one request at a time.
+      const issuesResult = await handleGetBuildIssues(
+        { getLuaClient: context.getLuaClient, ensureLuaClient: async () => {} }
+      ).catch(() => null);
+
+      const s = issuesResult?.stats ?? null;
       if (s) {
         const dps = Number(s.CombinedDPS || s.TotalDPS || s.MinionTotalDPS || 0);
         const dpsLabel = (s.MinionTotalDPS && !s.TotalDPS) ? 'Minion DPS' : 'DPS';
@@ -151,7 +157,6 @@ async function buildPostLoadSummary(context: LuaHandlerContext, luaClient: PoBLu
         summaryLines.push(`Resists: F${s.FireResist}% C${s.ColdResist}% L${s.LightningResist}% Ch${s.ChaosResist}%`);
       }
 
-      const issuesResult = await handleGetBuildIssues({ getLuaClient: context.getLuaClient, ensureLuaClient: async () => {} }).catch(() => null);
       if (issuesResult) {
         const { issues } = issuesResult;
         const topIssues = issues.filter(i => i.severity === 'error' || i.severity === 'warning').slice(0, 3);
@@ -999,5 +1004,170 @@ export async function handleSelectItemSet(context: LuaHandlerContext, id: number
   if (active) text += ` — ${active.title}`;
   text += `.\n\nStats have been recalculated for this item set.`;
   return { content: [{ type: "text" as const, text }] };
+  });
+}
+
+/** Stats worth reporting for a hypothetical, in the order a reader wants them. */
+const SIMULATED_STATS: Array<{ key: string; label: string }> = [
+  { key: 'CombinedDPS', label: 'Combined DPS' },
+  { key: 'TotalDPS', label: 'Total DPS' },
+  { key: 'Minion.CombinedDPS', label: 'Minion Combined DPS' },
+  { key: 'Minion.TotalDPS', label: 'Minion Total DPS' },
+  { key: 'TotalEHP', label: 'Effective HP' },
+  { key: 'Life', label: 'Life' },
+  { key: 'EnergyShield', label: 'Energy Shield' },
+  { key: 'Mana', label: 'Mana' },
+  { key: 'Armour', label: 'Armour' },
+  { key: 'Evasion', label: 'Evasion' },
+  { key: 'FireResist', label: 'Fire Resistance' },
+  { key: 'ColdResist', label: 'Cold Resistance' },
+  { key: 'LightningResist', label: 'Lightning Resistance' },
+  { key: 'ChaosResist', label: 'Chaos Resistance' },
+  { key: 'Str', label: 'Strength' },
+  { key: 'Dex', label: 'Dexterity' },
+  { key: 'Int', label: 'Intelligence' },
+];
+
+/** Always shown, so a report never reads as "nothing to see" by omission. */
+const HEADLINE_STATS = ['CombinedDPS', 'TotalEHP'];
+
+/**
+ * PoB reports a full set of stats for a character whose gear the game would
+ * disable, so an attribute requirement it does not meet has to be read off the
+ * same output the DPS came from.
+ */
+const ATTRIBUTE_REQUIREMENTS = [
+  { label: 'Strength', have: 'Str', required: 'ReqStr', sourceKey: 'ReqStrItem' },
+  { label: 'Dexterity', have: 'Dex', required: 'ReqDex', sourceKey: 'ReqDexItem' },
+  { label: 'Intelligence', have: 'Int', required: 'ReqInt', sourceKey: 'ReqIntItem' },
+];
+
+/** `Minion.TotalDPS` reads a nested key: calcWith leaves minion stats under out.Minion. */
+const statNumber = (out: any, key: string): number | undefined => {
+  const value = key.split('.').reduce((node: any, part) => node?.[part], out);
+  return typeof value === 'number' ? value : undefined;
+};
+
+const formatStat = (value: number): string =>
+  Math.abs(value) >= 100 ? Math.round(value).toLocaleString() : Number(value.toFixed(2)).toString();
+
+const formatDelta = (delta: number, before: number): string => {
+  const sign = delta > 0 ? '+' : '';
+  const percent = before !== 0 ? ` (${sign}${((delta / Math.abs(before)) * 100).toFixed(1)}%)` : '';
+  return `${sign}${formatStat(delta)}${percent}`;
+};
+
+interface UnmetRequirement {
+  label: string;
+  required: number;
+  have: number;
+  source?: string;
+  preExisting: boolean;
+}
+
+const requirementSource = (entry: any): string | undefined =>
+  entry?.sourceItem?.name ?? entry?.sourceGem?.nameSpec ?? entry?.source;
+
+const unmetRequirements = (output: any, base: any): UnmetRequirement[] =>
+  ATTRIBUTE_REQUIREMENTS.flatMap((attr) => {
+    // Both sides come from the simulated output: a swapped item moves the
+    // attribute it grants and the requirement it imposes at the same time.
+    const required = statNumber(output, attr.required);
+    const have = statNumber(output, attr.have);
+    if (required === undefined || have === undefined || required <= have) return [];
+    const baseRequired = statNumber(base, attr.required) ?? 0;
+    const baseHave = statNumber(base, attr.have) ?? 0;
+    return [{
+      label: attr.label,
+      required,
+      have,
+      source: requirementSource(output?.[attr.sourceKey]),
+      preExisting: baseRequired > baseHave,
+    }];
+  });
+
+export async function handleLuaSimulate(
+  context: LuaHandlerContext,
+  args: {
+    addNodes?: number[];
+    removeNodes?: number[];
+    masteryEffects?: Record<string, number>;
+    itemText?: string;
+    slotName?: string;
+    toggleFlask?: number;
+    useFullDPS?: boolean;
+  },
+) {
+  return wrapHandler('simulate change', async () => {
+    await context.ensureLuaClient();
+    const luaClient = context.getLuaClient();
+    if (!luaClient) throw new Error('Lua client not initialized');
+
+    const hypothesis = {
+      addNodes: args.addNodes,
+      removeNodes: args.removeNodes,
+      masteryEffects: args.masteryEffects,
+      repItem: args.itemText,
+      repSlotName: args.slotName,
+      toggleFlask: args.toggleFlask,
+    };
+    // useFullDPS changes how the calculation reports, not what it assumes, so a
+    // call carrying only that would report an honest zero delta as a failed
+    // override — the very signal this tool exists to make trustworthy.
+    if (Object.values(hypothesis).every((value) => value === undefined)) {
+      throw new Error('nothing to simulate: pass at least one of itemText+slotName, toggleFlask, addNodes, removeNodes or masteryEffects');
+    }
+
+    const { output, base } = await luaClient.calcWith({ ...hypothesis, useFullDPS: args.useFullDPS });
+
+    const described = [
+      args.itemText && args.slotName ? `swap ${args.slotName}` : undefined,
+      args.toggleFlask ? `toggle Flask ${args.toggleFlask}` : undefined,
+      args.addNodes?.length ? `allocate ${args.addNodes.length} node(s)` : undefined,
+      args.removeNodes?.length ? `unallocate ${args.removeNodes.length} node(s)` : undefined,
+      args.masteryEffects ? `${Object.keys(args.masteryEffects).length} mastery choice(s)` : undefined,
+    ].filter((part): part is string => part !== undefined);
+
+    const rows = SIMULATED_STATS.flatMap(({ key, label }) => {
+      const before = statNumber(base, key);
+      const after = statNumber(output, key);
+      if (before === undefined || after === undefined) return [];
+      const delta = after - before;
+      if (delta === 0 && !HEADLINE_STATS.includes(key)) return [];
+      const change = delta === 0 ? 'unchanged' : formatDelta(delta, before);
+      return [`  ${label}: ${formatStat(before)} → ${formatStat(after)}  ${change}`];
+    });
+
+    const moved = SIMULATED_STATS.some(({ key }) => {
+      const before = statNumber(base, key);
+      const after = statNumber(output, key);
+      return before !== undefined && after !== undefined && before !== after;
+    });
+
+    const lines = [
+      `=== Simulated: ${described.join(', ')} ===`,
+      '',
+      'The loaded build is unchanged; this is a hypothetical calculation only.',
+      '',
+      ...rows,
+    ];
+
+    // A zero delta is the shape a silently rejected override takes, so say so
+    // rather than let it read as a confirmed no-op.
+    if (!moved) {
+      lines.push('', 'None of the stats listed above moved. A change to something outside this list (block, suppression, crit, charges, ailments) would not show here, and a rejected override looks the same, so check before reporting this as no gain.');
+    }
+
+    const unmet = unmetRequirements(output, base);
+    if (unmet.length > 0) {
+      lines.push('', 'Attribute requirements not met — this gear would be disabled in game, so the numbers above are unreachable:');
+      for (const req of unmet) {
+        const source = req.source ? ` (required by ${req.source})` : '';
+        const blame = req.preExisting ? ' — already unmet before this change' : '';
+        lines.push(`  ${req.label}: needs ${req.required}, has ${req.have}${source}${blame}`);
+      }
+    }
+
+    return { content: [{ type: "text" as const, text: lines.join('\n') }] };
   });
 }

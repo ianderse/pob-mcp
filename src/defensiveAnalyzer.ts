@@ -15,7 +15,56 @@ import type { StatsExport } from "./pobLuaBridge.js";
  * An exceptional build has all 3, with strong values in each.
  */
 
+/**
+ * Stats analyzeDefenses needs. getStats() with no field list serves a general
+ * default set that carries no *MaximumHitTaken at all, so the binding damage
+ * type is invisible unless the caller asks for these by name.
+ */
+export const DEFENSIVE_STAT_FIELDS: readonly string[] = [
+  'Life', 'EnergyShield', 'Mana', 'Ward', 'Armour', 'Evasion',
+  'LifeRegen', 'LifeLeechGainRate', 'ManaRegen', 'ManaLeechGainRate', 'ESRecharge',
+  'BlockChance', 'SpellBlockChance', 'AttackDodgeChance', 'SpellDodgeChance',
+  'SpellSuppressionChance', 'EffectiveSpellSuppressionChance',
+  'PhysicalDamageReduction', 'EnduranceChargesMax', 'TotalEHP',
+  'FireResist', 'ColdResist', 'LightningResist', 'ChaosResist',
+  'FireResistOverCap', 'ColdResistOverCap', 'LightningResistOverCap', 'ChaosResistOverCap',
+  'PhysicalMaximumHitTaken', 'FireMaximumHitTaken', 'ColdMaximumHitTaken',
+  'LightningMaximumHitTaken', 'ChaosMaximumHitTaken',
+];
+
+export type DamageType = 'Physical' | 'Fire' | 'Cold' | 'Lightning' | 'Chaos';
+
+/** The elemental and chaos types, i.e. the ones a resistance purchase can move. */
+const RESISTED_TYPES: readonly DamageType[] = ['Fire', 'Cold', 'Lightning', 'Chaos'];
+
+interface MaxHitEntry {
+  type: DamageType;
+  maxHit: number;
+  /** Effective (already capped) resistance. Absent for physical. */
+  resist?: number;
+  /** Resistance bought past the cap, which moves the max hit by nothing. */
+  overcap?: number;
+  atCap: boolean;
+}
+
+interface MaxHitAnalysis {
+  available: boolean;
+  /** Ascending by max hit, so entries[0] is what kills the character first. */
+  entries: MaxHitEntry[];
+  binding?: MaxHitEntry;
+  runnerUp?: MaxHitEntry;
+  /**
+   * Lowest max hit among the types a resistance can move. Equal to `binding`
+   * unless physical is the overall floor, in which case this is the weakest
+   * link a resistance purchase is actually able to raise.
+   */
+  resistedBinding?: MaxHitEntry;
+  /** Runner-up divided by the binding max hit: how much headroom the rest have. */
+  headroomRatio?: number;
+}
+
 interface DefensiveAnalysis {
+  maxHits: MaxHitAnalysis;
   resistances: ResistanceAnalysis;
   lifePool: LifePoolAnalysis;
   avoidance: AvoidanceAnalysis;
@@ -75,7 +124,7 @@ interface SustainAnalysis {
 
 interface Recommendation {
   priority: 'critical' | 'high' | 'medium' | 'low';
-  category: 'resistance' | 'life' | 'mitigation' | 'sustain' | 'avoidance' | 'layers';
+  category: 'resistance' | 'life' | 'mitigation' | 'sustain' | 'avoidance' | 'layers' | 'binding';
   issue: string;
   solutions: string[];
   impact?: string;
@@ -85,6 +134,7 @@ interface Recommendation {
  * Analyze defensive stats from a build
  */
 export function analyzeDefenses(stats: StatsExport): DefensiveAnalysis {
+  const maxHits = analyzeMaxHits(stats);
   const resistances = analyzeResistances(stats);
   const lifePool = analyzeLifePool(stats);
   const avoidance = analyzeAvoidance(stats);
@@ -92,6 +142,7 @@ export function analyzeDefenses(stats: StatsExport): DefensiveAnalysis {
   const sustain = analyzeSustain(stats);
 
   const recommendations: Recommendation[] = [];
+  recommendations.push(...generateBindingConstraintRecommendations(maxHits));
   recommendations.push(...generateResistanceRecommendations(resistances));
   recommendations.push(...generateLifePoolRecommendations(lifePool));
   recommendations.push(...generateAvoidanceRecommendations(avoidance));
@@ -138,6 +189,7 @@ export function analyzeDefenses(stats: StatsExport): DefensiveAnalysis {
   const overallScore = calculateOverallScore(resistances, lifePool, mitigation, sustain, defensiveLayerCount);
 
   return {
+    maxHits,
     resistances,
     lifePool,
     avoidance,
@@ -156,6 +208,106 @@ function statNum(stats: StatsExport, key: string): number {
   const raw = stats[key] ?? stats[`Player${key}`];
   const n = typeof raw === 'number' ? raw : parseFloat(String(raw ?? ''));
   return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Rank the damage types by the hit that kills the character, lowest first.
+ *
+ * TotalEHP averages across damage types, so it scores a point spent on the
+ * strongest type about the same as a point spent on the weakest. The max hit
+ * per type is the number that decides which hit actually ends the run.
+ */
+export function analyzeMaxHits(stats: StatsExport): MaxHitAnalysis {
+  const damageTypes: DamageType[] = ['Physical', ...RESISTED_TYPES];
+
+  const entries = damageTypes
+    .map((type) => {
+      const maxHit = statNum(stats, `${type}MaximumHitTaken`);
+      const resist = type === 'Physical' ? undefined : statNum(stats, `${type}Resist`);
+      const overcap = type === 'Physical' ? undefined : statNum(stats, `${type}ResistOverCap`);
+      return {
+        type,
+        maxHit,
+        resist,
+        overcap,
+        // Overcap only exists once the total is past the cap; 75 is the cap
+        // unless the build raised it, which shows up as a capped resist too.
+        atCap: resist !== undefined && (Number(overcap) > 0 || resist >= 75),
+      };
+    })
+    .filter((entry) => entry.maxHit > 0)
+    .sort((a, b) => a.maxHit - b.maxHit);
+
+  if (entries.length === 0) {
+    return { available: false, entries: [] };
+  }
+
+  const binding = entries[0];
+  const runnerUp = entries.length > 1 ? entries[1] : undefined;
+
+  return {
+    available: true,
+    entries,
+    binding,
+    runnerUp,
+    resistedBinding: entries.find((entry) => entry.type !== 'Physical'),
+    headroomRatio: runnerUp ? runnerUp.maxHit / binding.maxHit : undefined,
+  };
+}
+
+function generateBindingConstraintRecommendations(maxHits: MaxHitAnalysis): Recommendation[] {
+  const binding = maxHits.binding;
+  if (!binding) return [];
+
+  const floor = `${binding.type} at ${Math.round(binding.maxHit).toLocaleString()} max hit`;
+  const gap = maxHits.headroomRatio
+    ? ` — the next type up survives ${maxHits.headroomRatio.toFixed(2)}x more`
+    : '';
+
+  if (binding.type === 'Physical') {
+    const resisted = maxHits.resistedBinding;
+    return [{
+      priority: 'high',
+      category: 'binding',
+      issue: `Binding constraint: ${floor}${gap}`,
+      solutions: [
+        'Resistance is not the lever here: no amount of it moves the physical max hit',
+        'Armour, endurance charges and flat physical reduction raise this floor',
+        'So does raw life/ES, which raises every type at once',
+        resisted
+          ? `If a resistance is being bought anyway, ${resisted.type} is the weakest of them at ${Math.round(resisted.maxHit).toLocaleString()}${resisted.atCap ? ' and already capped' : ` (${resisted.resist}%)`}`
+          : 'No resisted damage type reported a max hit',
+      ],
+      impact: 'Every other damage type has headroom, so physical is what kills this character first',
+    }];
+  }
+
+  if (binding.atCap) {
+    return [{
+      priority: 'medium',
+      category: 'binding',
+      issue: `Binding constraint: ${floor}, and the resistance is already at its cap${gap}`,
+      solutions: [
+        `More ${binding.type} resistance is credited as nothing at the cap${Number(binding.overcap) > 0 ? ` (${binding.overcap}% is already overcap)` : ''}`,
+        'Raise maximum resistance, life/ES, or a damage-taken reduction instead',
+      ],
+      impact: 'Buying more of a capped resistance reads as progress and measures as zero',
+    }];
+  }
+
+  return [{
+    priority: 'high',
+    category: 'binding',
+    issue: `Binding constraint: ${floor}, resistance ${binding.resist}%${gap}`,
+    solutions: [
+      `+${Math.max(0, 75 - Number(binding.resist))}% ${binding.type} resistance reaches the 75% cap`,
+      maxHits.runnerUp
+        ? `It stops paying once it passes ${maxHits.runnerUp.type} at ${Math.round(maxHits.runnerUp.maxHit).toLocaleString()}`
+        : 'It stops paying once it is no longer the lowest number',
+      'Run analyze_defenses with sweep_resistances to measure the exact stopping point',
+    ],
+    impact: 'This is the cheapest floor to raise, and the only one a resistance purchase moves',
+  }];
 }
 
 function analyzeResistances(stats: StatsExport): ResistanceAnalysis {
@@ -595,6 +747,149 @@ function calculateOverallScore(
   return 'poor';
 }
 
+export interface SweepStep {
+  /** Resistance added on top of the build's own, in percent. */
+  delta: number;
+  /** Effective resistance PoB reported at that step. */
+  resist: number;
+  /** Lowest max hit across all five damage types at that step. */
+  floor: number;
+  /** Which damage type owned the floor at that step. */
+  bindingType: DamageType;
+}
+
+interface SweepBaseline {
+  resist: number;
+  floor: number;
+  bindingType: DamageType;
+}
+
+export interface ResistanceSweepSummary {
+  element: DamageType;
+  baseline: SweepBaseline;
+  steps: SweepStep[];
+  /** The last purchase worth making, or undefined if every step still paid. */
+  stopAt?: SweepStep;
+  /** The type that owns the floor once this resistance stops being the lowest. */
+  handsOverTo?: DamageType;
+  /** Set when the resistance stopped rising, i.e. it hit its cap mid-sweep. */
+  cappedAt?: number;
+  /** The last step that moved the floor at all: everything past it is waste. */
+  lastImprovingDelta?: number;
+  /** Best floor the sweep reached, minus the baseline floor. */
+  floorGain: number;
+}
+
+/**
+ * Read a measured sweep and say where the resistance stops paying.
+ *
+ * A resistance buys nothing the moment it is no longer the lowest number, so
+ * the useful answer is the step at which the floor changes hands, not the
+ * step at which the resistance caps.
+ */
+export function summariseResistanceSweep(
+  element: DamageType,
+  baseline: SweepBaseline,
+  steps: SweepStep[]
+): ResistanceSweepSummary {
+  const handoff = steps.find((step) => step.bindingType !== element);
+  const capped = steps.find((step, index) => {
+    const previous = index === 0 ? baseline.resist : steps[index - 1].resist;
+    return step.resist === previous;
+  });
+
+  const improving = steps.filter((step, index) => {
+    const previousFloor = index === 0 ? baseline.floor : steps[index - 1].floor;
+    return step.floor > previousFloor;
+  });
+  const bestFloor = steps.reduce((best, step) => Math.max(best, step.floor), baseline.floor);
+
+  return {
+    element,
+    baseline,
+    steps,
+    stopAt: handoff ?? capped ?? undefined,
+    handsOverTo: handoff?.bindingType,
+    cappedAt: handoff ? undefined : capped?.resist,
+    lastImprovingDelta: improving.length > 0 ? improving[improving.length - 1].delta : undefined,
+    floorGain: bestFloor - baseline.floor,
+  };
+}
+
+export function formatResistanceSweep(summary: ResistanceSweepSummary): string {
+  const lines: string[] = [
+    `**${summary.element} Resistance Sweep (measured, one PoB calculation per step):**`,
+    `Baseline: ${summary.baseline.resist}% ${summary.element} resist, floor ${Math.round(summary.baseline.floor).toLocaleString()} (${summary.baseline.bindingType})`,
+  ];
+
+  for (const step of summary.steps) {
+    const marker = step.bindingType === summary.element ? ' ' : '←';
+    lines.push(
+      `  +${step.delta}% → ${step.resist}% resist, floor ${Math.round(step.floor).toLocaleString()} (${step.bindingType}) ${marker}`
+    );
+  }
+
+  if (summary.handsOverTo && summary.stopAt) {
+    lines.push(
+      '',
+      `Stop at +${summary.stopAt.delta}%. Past that the floor belongs to ${summary.handsOverTo} ` +
+        `at ${Math.round(summary.stopAt.floor).toLocaleString()}, and more ${summary.element} resistance moves it by nothing.`,
+      `Worth buying: +${Math.round(summary.floorGain).toLocaleString()} to the lowest resisted max hit.`
+    );
+  } else if (summary.cappedAt !== undefined) {
+    lines.push(
+      '',
+      `Stop at +${summary.lastImprovingDelta ?? 0}%: ${summary.element} resistance caps at ${summary.cappedAt}% ` +
+        'and every point past the cap is credited as zero.',
+      `Worth buying: +${Math.round(summary.floorGain).toLocaleString()} to the lowest resisted max hit.`
+    );
+  } else {
+    lines.push(
+      '',
+      `${summary.element} is still the binding constraint across the whole sweep, so every point measured so far pays.`,
+      `Measured gain: +${Math.round(summary.floorGain).toLocaleString()} to the lowest resisted max hit.`
+    );
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Print the max hit per damage type, lowest first.
+ *
+ * Types sitting at the resistance cap print identical numbers on purpose: the
+ * max hit uses the capped resistance, so overcap is worth exactly nothing here.
+ */
+function formatMaxHits(maxHits: MaxHitAnalysis): string {
+  if (!maxHits.available || !maxHits.binding) {
+    return '**Binding Constraint:** unavailable — PoB returned no *MaximumHitTaken stats for this build.\n\n';
+  }
+
+  const lines = ['**Binding Constraint — max hit taken, by damage type:**'];
+
+  for (const entry of maxHits.entries) {
+    const isBinding = entry === maxHits.binding;
+    const ratio = isBinding
+      ? '← BINDING, this is what kills you first'
+      : `${(entry.maxHit / maxHits.binding.maxHit).toFixed(2)}x the floor`;
+    const resistNote = entry.resist === undefined
+      ? ''
+      : ` [${entry.resist}% resist${Number(entry.overcap) > 0 ? `, +${entry.overcap}% overcap credited as nothing` : ''}]`;
+    lines.push(
+      `${isBinding ? '🚨' : '  '} ${entry.type.padEnd(9)} ${Math.round(entry.maxHit).toLocaleString().padStart(8)}${resistNote}  ${ratio}`
+    );
+  }
+
+  const cappedElements = maxHits.entries.filter((entry) => entry.atCap).map((entry) => entry.type);
+  if (cappedElements.length > 1) {
+    lines.push(
+      `Note: ${cappedElements.join(', ')} sit at the resistance cap, so their max hits tie. Buying more of a capped resistance moves this table by zero.`
+    );
+  }
+
+  return `${lines.join('\n')}\n\n`;
+}
+
 /**
  * Format defensive analysis as readable text
  */
@@ -609,7 +904,9 @@ export function formatDefensiveAnalysis(analysis: DefensiveAnalysis): string {
     critical: '🚨',
   };
   output += `Overall: ${scoreEmoji[analysis.overallScore]} ${analysis.overallScore.toUpperCase()}\n`;
-  output += `EHP: ${analysis.lifePool.ehp.toLocaleString()} (effective HP including mitigation)\n\n`;
+  output += `EHP: ${analysis.lifePool.ehp.toLocaleString()} (averaged across damage types — see the binding constraint below before ranking anything)\n\n`;
+
+  output += formatMaxHits(analysis.maxHits);
 
   // Defensive Layers summary
   output += `**Defensive Layers: ${analysis.defensiveLayerCount}/3**\n`;
