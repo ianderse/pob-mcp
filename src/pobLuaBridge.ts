@@ -671,10 +671,10 @@ export class PoBLuaApiClient {
 
     let xml: string;
     try {
-      xml = zlib.inflateSync(compressed).toString("utf8");
+      xml = zlib.inflateSync(compressed, { maxOutputLength: 64 * 1024 * 1024 }).toString("utf8");
     } catch (zlibErr) {
       try {
-        xml = zlib.inflateRawSync(compressed).toString("utf8");
+        xml = zlib.inflateRawSync(compressed, { maxOutputLength: 64 * 1024 * 1024 }).toString("utf8");
       } catch {
         const msg = zlibErr instanceof Error ? zlibErr.message : String(zlibErr);
         throw new Error(`Failed to decode import code: ${msg}`);

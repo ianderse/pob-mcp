@@ -408,6 +408,24 @@ export function getLuaToolSchemas(): ToolSchema[] {
       },
     },
     {
+      name: "lua_import_pobb",
+      description: "Fetch a build from a pobb.in or poedb.tw share link (https only; those two hosts only) and load it into the PoB engine via the same path as lua_import_code. Accepts https://pobb.in/<id>, https://pobb.in/u/<user>/<id>, https://poedb.tw/<locale>/PathOfBuilding?id=<id>, or a bare pobb.in ID. Downloads only the share code; nothing is uploaded. AUTO-RETURNS a brief summary like lua_import_code.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          url_or_id: {
+            type: "string",
+            description: "pobb.in or poedb.tw build URL, or a bare pobb.in build ID.",
+          },
+          name: {
+            type: "string",
+            description: "Display name for the imported build (optional).",
+          },
+        },
+        required: ["url_or_id"],
+      },
+    },
+    {
       name: "list_specs",
       description: "List all passive tree specs in the currently loaded build. Each spec can have a different tree allocation, class, and ascendancy.",
       inputSchema: { type: "object", properties: {} },

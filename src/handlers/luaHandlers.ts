@@ -5,6 +5,7 @@ import fs from "fs/promises";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { buildFileName, resolveBuildFile } from "../utils/pathSanitizer.js";
 import type { BuildService } from "../services/buildService.js";
+import { parsePobShareInput, fetchPobShareCode } from "../services/pobShareFetch.js";
 
 interface LuaHandlerContext {
   buildService?: Pick<BuildService, 'invalidateBuild'>;
@@ -249,6 +250,27 @@ export async function handleLuaImportCode(
         },
       ],
     };
+  });
+}
+
+/**
+ * Fetch a build's export code from a pobb.in / poedb.tw link, then load it
+ * through the same path as lua_import_code. Nothing is written to disk.
+ */
+export async function handleLuaImportPobb(
+  context: LuaHandlerContext,
+  urlOrId: string,
+  name?: string
+) {
+  return wrapHandler('import build from share link', async () => {
+    const target = parsePobShareInput(urlOrId);
+    const code = await fetchPobShareCode(target);
+    const result = await handleLuaImportCode(context, code, name || `${target.source} ${target.id}`);
+    const first = result.content[0];
+    if (first && first.type === "text") {
+      first.text = `Fetched from ${target.pageUrl}\n${first.text}`;
+    }
+    return result;
   });
 }
 
