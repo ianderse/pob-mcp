@@ -103,6 +103,19 @@ try {
     throw new Error(`configured shock should be credited: ${JSON.stringify(configured)}`);
   }
 
+  // '__unset__' clears a key back to PoB's default instead of storing a value
+  const unset = await client.setConfig({ conditionShockEffect: '__unset__' });
+  if (unset?.rejected?.conditionShockEffect || unset?.applied?.conditionShockEffect !== '__unset__') {
+    throw new Error(`__unset__ should clear a known key: ${JSON.stringify(unset)}`);
+  }
+  if ((await client.getConfig()).conditionShockEffect != null) {
+    throw new Error('__unset__ left a value behind for conditionShockEffect');
+  }
+  const unsetBogus = await client.setConfig({ notARealKey: '__unset__' });
+  if (!unsetBogus?.rejected?.notARealKey) {
+    throw new Error(`__unset__ on an unknown key must still be rejected: ${JSON.stringify(unsetBogus)}`);
+  }
+
   // enemyIsBoss: legacy names must land on the current list values exactly as
   // PoB's own XML import maps them; an unknown list value must be REJECTED
   // per key, never silently stored (it would match no branch in the engine).
