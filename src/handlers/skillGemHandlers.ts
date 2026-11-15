@@ -475,10 +475,12 @@ export async function handleGemUpgradePath(
   for (const group of groups) {
     const isMain = group.index === skills.mainSocketGroup;
     for (const gem of (group.gems ?? [])) {
-      const name: string = gem.name;
-      const level: number = gem.level ?? 1;
-      const quality: number = gem.quality ?? 0;
-      const isSupport = name.includes('Support') || name.includes('Mirage') || gem.isSupport;
+      // Gems can be bare strings, or objects whose name is empty (unnamed/unknown gem).
+      const name: string = typeof gem === 'string' ? gem : String(gem?.name ?? '');
+      if (!name) continue;
+      const level: number = gem?.level ?? 1;
+      const quality: number = gem?.quality ?? 0;
+      const isSupport = name.includes('Support') || name.includes('Mirage') || gem?.isSupport;
       const multiplier = isMain ? 3 : 1;
 
       // Level upgrade
