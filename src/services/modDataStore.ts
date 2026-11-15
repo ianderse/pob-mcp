@@ -10,7 +10,7 @@
 
 import fs from "fs";
 import path from "path";
-import { resolvePoBLayout } from "../utils/pobLayout.js";
+import { resolveConfiguredPoBLayout } from "../utils/pobLayout.js";
 
 export type AffixSlot = "Prefix" | "Suffix";
 
@@ -223,7 +223,7 @@ export class ModDataUnavailableError extends Error {}
  * questions. Nothing is read until a tool actually asks for it.
  */
 function loadFile(fileName: string, source: ModEntry["source"]): ModEntry[] {
-  const layout = resolvePoBLayout(process.env.POB_PATH || process.env.POB_FORK_PATH);
+  const layout = resolveConfiguredPoBLayout();
   const filePath = path.join(layout.src, "Data", fileName);
 
   const stat = ((): fs.Stats => {

@@ -1,4 +1,5 @@
-import https from "https";
+import fs from "fs";
+import path from "path";
 import type {
   PassiveTreeNode,
   PassiveTreeData,
@@ -10,6 +11,7 @@ import type {
   OptimizationSuggestion,
 } from "../types.js";
 import { BuildService } from "./buildService.js";
+import { resolveConfiguredPoBLayout } from "../utils/pobLayout.js";
 
 export class TreeService {
   private treeDataCache: Map<string, TreeDataCache> = new Map();
@@ -19,20 +21,20 @@ export class TreeService {
     this.buildService = buildService;
   }
 
-  async getTreeData(version: string = "3_26"): Promise<PassiveTreeData> {
-    // Check cache first
-    const cached = this.treeDataCache.get(version);
+  /** A build without a tree version reads as the newest tree the configured PoB has. */
+  async getTreeData(version?: string): Promise<PassiveTreeData> {
+    const resolvedVersion = version && version !== "Unknown" ? version : this.latestTreeVersion();
+
+    const cached = this.treeDataCache.get(resolvedVersion);
     if (cached) {
-      console.error(`[Tree Cache] Hit for version ${version}`);
+      console.error(`[Tree Cache] Hit for version ${resolvedVersion}`);
       return cached.data;
     }
 
-    // Cache miss - fetch from source
-    console.error(`[Tree Cache] Miss for version ${version}`);
-    const treeData = await this.fetchTreeDataFromRepo(version);
+    console.error(`[Tree Cache] Miss for version ${resolvedVersion}`);
+    const treeData = this.readTreeData(resolvedVersion);
 
-    // Store in cache
-    this.treeDataCache.set(version, {
+    this.treeDataCache.set(resolvedVersion, {
       data: treeData,
       timestamp: Date.now(),
     });
@@ -50,53 +52,50 @@ export class TreeService {
     }
   }
 
-  async fetchTreeDataFromRepo(version: string = "3_26"): Promise<PassiveTreeData> {
-    console.error(`[Tree Data] Fetching tree data for version ${version}...`);
+  /**
+   * Tree data comes from the same PoB the Lua bridge runs. A new league's tree
+   * reaches PoB's dev branch weeks before master, so a version this PoB lacks
+   * is an error: another league's nodes would answer with the wrong tree.
+   */
+  private readTreeData(version: string): PassiveTreeData {
+    const treeDataDir = path.join(resolveConfiguredPoBLayout().src, "TreeData");
+    const treeFile = path.join(treeDataDir, version, "tree.lua");
+    if (!fs.existsSync(treeFile)) {
+      throw new Error(
+        `Path of Building has no passive tree ${version} at ${treeFile}. ` +
+        `It has: ${this.availableTreeVersions(treeDataDir).join(", ")}. ` +
+        `Point POB_PATH at a PoB checkout that has ${version}.`
+      );
+    }
 
-    const url = `https://raw.githubusercontent.com/PathOfBuildingCommunity/PathOfBuilding/master/src/TreeData/${version}/tree.lua`;
+    const treeData = this.parseTreeLua(fs.readFileSync(treeFile, "utf8"), version);
+    if (treeData.nodes.size === 0) {
+      throw new Error(`Parsed no passive nodes from ${treeFile}; its format may have changed.`);
+    }
+    console.error(`[Tree Data] Parsed ${treeData.nodes.size} nodes from ${treeFile}`);
+    return treeData;
+  }
 
-    return new Promise((resolve, reject) => {
-      https.get(url, (response) => {
-        if (response.statusCode === 404) {
-          // Version not found, try fallback to 3_26
-          console.error(`[Tree Data] Version ${version} not found, falling back to 3_26`);
-          if (version !== "3_26") {
-            this.fetchTreeDataFromRepo("3_26").then(resolve).catch(reject);
-            return;
-          }
-          reject(new Error(`Failed to fetch tree data: HTTP ${response.statusCode}`));
-          return;
-        }
-        if (response.statusCode !== 200) {
-          reject(new Error(`Failed to fetch tree data: HTTP ${response.statusCode}`));
-          return;
-        }
+  private availableTreeVersions(treeDataDir: string): string[] {
+    return fs.existsSync(treeDataDir)
+      ? fs.readdirSync(treeDataDir).filter((name) => fs.existsSync(path.join(treeDataDir, name, "tree.lua")))
+      : [];
+  }
 
-        let data = '';
-        response.on('data', (chunk) => {
-          data += chunk;
-        });
-
-        response.on('end', () => {
-          try {
-            const treeData = this.parseTreeLua(data, version);
-            console.error(`[Tree Data] Successfully parsed ${treeData.nodes.size} nodes`);
-            resolve(treeData);
-          } catch (error) {
-            reject(new Error(`Failed to parse tree data: ${error}`));
-          }
-        });
-      }).on('error', (error) => {
-        reject(new Error(`Network error fetching tree data: ${error.message}`));
-      });
-    });
+  /** PoB's own latestTreeVersion: the last entry of treeVersionList. */
+  private latestTreeVersion(): string {
+    const gameVersionsFile = path.join(resolveConfiguredPoBLayout().src, "GameVersions.lua");
+    const treeVersionList = fs.readFileSync(gameVersionsFile, "utf8").match(/treeVersionList\s*=\s*\{([^}]*)\}/);
+    const latest = treeVersionList?.[1].match(/"[^"]+"/g)?.at(-1)?.slice(1, -1);
+    if (!latest) throw new Error(`Could not read treeVersionList from ${gameVersionsFile}`);
+    return latest;
   }
 
   private parseTreeLua(luaContent: string, version: string): PassiveTreeData {
     const nodes = new Map<string, PassiveTreeNode>();
 
     // Extract nodes with brace counting for proper nesting
-    const nodeStartPattern = /\[(\d+)\]=\s*\{/g;
+    const nodeStartPattern = /\[(\d+)\]\s*=\s*\{/g;
 
     let match;
     while ((match = nodeStartPattern.exec(luaContent)) !== null) {
@@ -143,16 +142,16 @@ export class TreeService {
     };
 
     // Extract name
-    const nameMatch = content.match(/\["name"\]=\s*"([^"]+)"/);
+    const nameMatch = content.match(/\["name"\]\s*=\s*"([^"]+)"/);
     if (nameMatch) node.name = nameMatch[1];
 
     // Extract icon
-    const iconMatch = content.match(/\["icon"\]=\s*"([^"]+)"/);
+    const iconMatch = content.match(/\["icon"\]\s*=\s*"([^"]+)"/);
     if (iconMatch) node.icon = iconMatch[1];
 
     // Extract stats (can be multiple)
     const stats: string[] = [];
-    const statsMatch = content.match(/\["stats"\]=\s*\{([^}]+)\}/);
+    const statsMatch = content.match(/\["stats"\]\s*=\s*\{([^}]+)\}/);
     if (statsMatch) {
       const statsContent = statsMatch[1];
       const statPattern = /"([^"]+)"/g;
@@ -164,20 +163,21 @@ export class TreeService {
     if (stats.length > 0) node.stats = stats;
 
     // Extract boolean flags
-    if (content.includes('["isKeystone"]= true')) node.isKeystone = true;
-    if (content.includes('["isNotable"]= true')) node.isNotable = true;
-    if (content.includes('["isMastery"]= true')) node.isMastery = true;
-    if (content.includes('["isJewelSocket"]= true')) node.isJewelSocket = true;
-    if (content.includes('["isAscendancyStart"]= true')) node.isAscendancyStart = true;
+    const isTrue = (key: string) => new RegExp(`\\["${key}"\\]\\s*=\\s*true`).test(content);
+    if (isTrue("isKeystone")) node.isKeystone = true;
+    if (isTrue("isNotable")) node.isNotable = true;
+    if (isTrue("isMastery")) node.isMastery = true;
+    if (isTrue("isJewelSocket")) node.isJewelSocket = true;
+    if (isTrue("isAscendancyStart")) node.isAscendancyStart = true;
 
     // Extract ascendancy name if present
-    const ascendancyNameMatch = content.match(/\["ascendancyName"\]=\s*"([^"]+)"/);
+    const ascendancyNameMatch = content.match(/\["ascendancyName"\]\s*=\s*"([^"]+)"/);
     if (ascendancyNameMatch) {
       node.ascendancyName = ascendancyNameMatch[1];
     }
 
     // Extract connections (allowing for multiline and nested content)
-    const outMatch = content.match(/\["out"\]=\s*\{([^}]*)\}/);
+    const outMatch = content.match(/\["out"\]\s*=\s*\{([^}]*)\}/);
     if (outMatch) {
       const outContent = outMatch[1];
       // Match quoted numbers: "12345"
@@ -187,7 +187,7 @@ export class TreeService {
       }
     }
 
-    const inMatch = content.match(/\["in"\]=\s*\{([^}]*)\}/);
+    const inMatch = content.match(/\["in"\]\s*=\s*\{([^}]*)\}/);
     if (inMatch) {
       const inContent = inMatch[1];
       // Match quoted numbers: "12345"
@@ -736,38 +736,17 @@ export class TreeService {
         return null; // No tree data in build
       }
 
-      // Determine tree version from build
-      let treeVersion = this.buildService.extractBuildVersion(build);
-      if (treeVersion === "Unknown") {
-        treeVersion = "3_26";
-      }
-
-      // Get tree data (with caching)
-      const treeData = await this.getTreeData(treeVersion);
+      const treeData = await this.getTreeData(this.buildService.extractBuildVersion(build));
 
       // Map node IDs to details
       const { nodes: allocatedNodes, invalidIds } = await this.mapNodesToDetails(nodeIds, treeData);
 
       // If there are invalid nodes, fail with error
       if (invalidIds.length > 0) {
-        const requestedVersion = treeVersion;
-        const actualVersion = treeData.version;
-        let errorMsg = `Invalid passive tree data detected.\n\nThe following node IDs could not be found in the passive tree data:\n${invalidIds.map(id => `- Node ID: ${id}`).join('\n')}\n\n`;
-
-        if (requestedVersion !== actualVersion) {
-          errorMsg += `Build tree version: ${requestedVersion}\n`;
-          errorMsg += `Available tree data: ${actualVersion} (fell back because ${requestedVersion} data not available yet)\n\n`;
-          errorMsg += `This means your build uses passive tree nodes from PoE ${requestedVersion} that don't exist in ${actualVersion}.\n`;
-          errorMsg += `Path of Building Community hasn't released tree data for ${requestedVersion} yet.\n\n`;
-          errorMsg += `Options:\n`;
-          errorMsg += `1. Wait for PoB to release ${requestedVersion} tree data\n`;
-          errorMsg += `2. Use a build from an earlier patch (${actualVersion} or earlier)\n`;
-          errorMsg += `3. The analysis may work partially - some stats will be shown but tree analysis will fail\n`;
-        } else {
-          errorMsg += `This usually means:\n1. The build is from an outdated league/patch\n2. The build file is corrupted\n3. The passive tree data needs to be refreshed\n\nPlease verify the build is from the current league or use a build from the active league.`;
-        }
-
-        throw new Error(errorMsg);
+        throw new Error(
+          `Invalid passive tree data detected.\n\nThe following node IDs could not be found in the ${treeData.version} passive tree data:\n${invalidIds.map(id => `- Node ID: ${id}`).join('\n')}\n\n` +
+          `This usually means:\n1. The build is from an outdated league/patch\n2. The build file is corrupted\n3. The passive tree data needs to be refreshed\n\nPlease verify the build is from the current league or use a build from the active league.`
+        );
       }
 
       // Categorize nodes

@@ -1,4 +1,7 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { TreeService } from '../src/services/treeService';
 import { BuildService } from '../src/services/buildService';
 import type { PassiveTreeNode, PassiveTreeData, PoBBuild } from '../src/types';
@@ -321,6 +324,57 @@ describe('TreeService', () => {
 
       expect(result.nodes).toHaveLength(0);
       expect(result.invalidIds).toHaveLength(0);
+    });
+  });
+
+  describe('getTreeData', () => {
+    const originalPoBPath = process.env.POB_PATH;
+    let pobSrc: string;
+
+    const writePoBFile = (relativePath: string, content: string) => {
+      const filePath = path.join(pobSrc, relativePath);
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, content);
+    };
+
+    beforeEach(() => {
+      pobSrc = fs.mkdtempSync(path.join(os.tmpdir(), 'pob-src-'));
+      process.env.POB_PATH = pobSrc;
+      writePoBFile('GameVersions.lua', 'treeVersionList = { "3_28", "3_29",\n\t"3_30_ruthless", "3_30" }\nlatestTreeVersion = treeVersionList[#treeVersionList]\n');
+      // PoB 2.67 wrote `]= ` with spaces; the 3.30 export writes `] = ` with tabs.
+      writePoBFile('TreeData/3_29/tree.lua', 'return {\n    ["nodes"]= {\n        [100]= {\n            ["name"]= "Iron Reflexes",\n            ["isKeystone"]= true,\n            ["out"]= {\n                "200"\n            },\n            ["stats"]= {\n                "Converts all Evasion Rating to Armour"\n            }\n        }\n    }\n}\n');
+      writePoBFile('TreeData/3_30/tree.lua', 'return {\n\t["nodes"] = {\n\t\t[10661] = {\n\t\t\t["isKeystone"] = true,\n\t\t\t["name"] = "Iron Reflexes",\n\t\t\t["out"] = {\n\t\t\t\t"8544",\n\t\t\t},\n\t\t\t["stats"] = {\n\t\t\t\t"Converts all Evasion Rating to Armour",\n\t\t\t},\n\t\t},\n\t},\n}\n');
+    });
+
+    afterEach(() => {
+      fs.rmSync(pobSrc, { recursive: true, force: true });
+      if (originalPoBPath === undefined) delete process.env.POB_PATH;
+      else process.env.POB_PATH = originalPoBPath;
+    });
+
+    it.each([
+      ['3_29', '100', '200'],
+      ['3_30', '10661', '8544'],
+    ])('reads %s tree data from the configured PoB', async (version, nodeId, outId) => {
+      const treeData = await treeService.getTreeData(version);
+
+      expect(treeData.version).toBe(version);
+      expect(treeData.nodes.get(nodeId)).toMatchObject({
+        name: 'Iron Reflexes',
+        isKeystone: true,
+        out: [outId],
+        stats: ['Converts all Evasion Rating to Armour'],
+      });
+    });
+
+    it.each([undefined, 'Unknown'])('reads PoB\'s latest tree for version %s', async (version) => {
+      const treeData = await treeService.getTreeData(version);
+
+      expect(treeData.version).toBe('3_30');
+    });
+
+    it('rejects a version the configured PoB lacks instead of using another tree', async () => {
+      await expect(treeService.getTreeData('3_31')).rejects.toThrow(/no passive tree 3_31.*It has: .*3_29.*3_30/s);
     });
   });
 

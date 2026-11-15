@@ -98,6 +98,10 @@ export function resolvePoBLayout(explicitSrc?: string): PoBLayout {
   return checkoutLayout(path.join(os.homedir(), "Projects", "PathOfBuilding", "src"));
 }
 
+/** The PoB this server is configured to use: POB_PATH, else the installed app. */
+export const resolveConfiguredPoBLayout = (): PoBLayout =>
+  resolvePoBLayout(process.env.POB_PATH || process.env.POB_FORK_PATH);
+
 /** Where the installed PoB actually writes builds. */
 export function defaultBuildsDirectory(): string {
   const home = os.homedir();
