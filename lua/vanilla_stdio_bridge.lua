@@ -122,7 +122,11 @@ local function evaluate_anoint_candidates(params)
         else skipped = skipped + 1 end
       end
     end
-    table.sort(candidates, function(a, b) return a.score > b.score end)
+    -- Ties (common: many notables add nothing) keep a fixed order by node id.
+    table.sort(candidates, function(a, b)
+      if a.score ~= b.score then return a.score > b.score end
+      return (tonumber(a.nodeId) or 0) < (tonumber(b.nodeId) or 0)
+    end)
     local limit = math.min(math.max(tonumber(params.limit) or 50, 1), 500)
     while #candidates > limit do table.remove(candidates) end
     return { ok = true, candidates = candidates, base = { CombinedDPS = baseDps, TotalEHP = baseEhp }, evaluated = evaluated, skipped = skipped, slot = slotName, baseType = item.baseName or repSlotName, focus = params.focus or 'both' }
