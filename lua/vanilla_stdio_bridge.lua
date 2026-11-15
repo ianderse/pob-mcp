@@ -171,7 +171,16 @@ local function generate_weighted_trade_query(params)
   local ok, result = pcall(function()
     local generator = BuildOps.construct('TradeQueryGenerator', build.itemsTab.tradeQuery)
     local query, warning
-    generator.requesterCallback = function(_, generated, err) query, warning = generated, err end
+    -- PoB 2.67 hands over the whole request body as JSON. PoB dev (3.30) hands
+    -- over only the inner query table and adds sort and engine in TradeQuery.
+    generator.requesterCallback = function(_, generated, err)
+      if type(generated) == 'table' then
+        query = { query = generated, sort = { ['statgroup.0'] = 'desc' }, engine = 'new' }
+      else
+        query = generated
+      end
+      warning = err
+    end
     generator.requesterContext = {}
     generator.tradeTypeIndex = 2 -- available listings, matching the MCP default
     generator:StartQuery(slot, options)
