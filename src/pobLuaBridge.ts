@@ -250,6 +250,8 @@ interface MasteryOptions {
 /** new_build / load_build_xml / import_code envelope result (state facts only) */
 interface BuildLoadResult {
   ok: true;
+  /** True when PoB converted the build to the current game version while loading. */
+  converted?: boolean;
 }
 
 /** save_build */
@@ -704,7 +706,7 @@ export class PoBLuaApiClient {
     const res = await this.send({ action: "load_build_xml", params: { xml: normalizeEol(xml), name } });
     if (!res.ok) throw new Error(res.error || "load_build_xml failed");
     this.loadedFilePath = sourcePath ? path.resolve(sourcePath) : undefined;
-    return { ok: true };
+    return res.converted === true ? { ok: true, converted: true } : { ok: true };
   }
 
   /**

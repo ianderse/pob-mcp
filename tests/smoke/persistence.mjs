@@ -132,7 +132,7 @@ error('No reachable mastery in engine tree data')`,
     savedTree: (await readBuild('mastery')).Tree }));
   console.log('ok: save_tree mastery selection survives native PoB XML import');
   assert(!(await fs.readdir(directory)).some(name => /^\.pob-(save|write)-/.test(name)));
-  assert.match(await call('lua_load_build', { build_xml: '<Invalid/>', name: 'invalid' }, true), /did not initialize/);
+  assert.match(await call('lua_load_build', { build_xml: '<Invalid/>', name: 'invalid' }, true), /did not initialize|PoB prompt/);
   console.log('ok: a native import that closes the build is reported as a failure');
 } finally {
   await engine.stop();
