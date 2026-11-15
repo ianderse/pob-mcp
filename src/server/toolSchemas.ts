@@ -523,6 +523,17 @@ export function getLuaToolSchemas(): ToolSchema[] {
       },
     },
     {
+      name: "export_full_stats",
+      truncatable: true,
+      description: "Dump every numeric stat PoB calculated for the loaded build's main skill (several hundred keys), plus per-skill DPS and minion stats. Use it when lua_get_stats does not carry the stat you need (for example a specific damage-type conversion, a hit-pool or cost figure, or a *MaximumHitTaken key), or to check the exact key name before passing it to another tool. Pass `filter` to keep only keys containing a substring; an unfiltered call is large. Limits: raw engine keys with no labels or units, values for the main skill only (full-DPS rows are listed under _skillDPS), and non-numeric stats are omitted. Read-only.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          filter: { type: "string", description: "Case-insensitive substring; only stat keys containing it are returned (e.g. 'Resist', 'Leech', 'Minion')." },
+        },
+      },
+    },
+    {
       name: "lua_get_ailments",
       description: "Show non-damaging ailments (Shock, Chill, Scorch, Brittle, Sap) with what the DPS calculation is actually crediting next to what the main skill would inflict on the configured enemy. Call this for any build that shocks or chills: PoB applies a chance-based ailment only when its magnitude is entered by hand, so an uncounted shock silently understates every DPS figure. Magnitude is measured for the MAIN skill against the CURRENT enemy config, and it falls off steeply with enemy life, so re-read it per enemy rather than quoting one number for all content.",
       inputSchema: { type: "object", properties: {} },

@@ -328,6 +328,7 @@ end
 handlers.export_build_xml = op(BuildOps.export_build_xml, 'xml')
 handlers.add_item_text = op(BuildOps.add_item_text, 'item')
 handlers.create_socket_group = op(BuildOps.create_socket_group, 'socketGroup')
+handlers.export_full_stats = op(BuildOps.export_full_stats, 'stats')
 handlers.add_gem = op(BuildOps.add_gem, 'gem')
 handlers.search_nodes = op(BuildOps.search_nodes, 'results')
 handlers.get_mastery_options = op(BuildOps.get_mastery_options, 'result')

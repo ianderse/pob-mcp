@@ -401,6 +401,41 @@ export async function handleLuaGetStats(context: LuaHandlerContext, category?: s
 }
 
 /**
+ * Every numeric stat the engine computed. lua_get_stats serves curated sets; this
+ * is for a stat those sets never carried, so a `filter` substring keeps the
+ * hundreds of keys from being dumped into the conversation when one is wanted.
+ */
+export async function handleExportFullStats(context: LuaHandlerContext, filter?: string) {
+  return wrapHandler('export full stats', async () => {
+    await context.ensureLuaClient();
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized');
+    }
+
+    const all = await luaClient.exportFullStats();
+    const needle = typeof filter === 'string' ? filter.trim().toLowerCase() : '';
+    const picked: Record<string, unknown> = {};
+    let total = 0;
+    for (const [key, value] of Object.entries(all)) {
+      if (key.startsWith('_')) {
+        picked[key] = value;
+        continue;
+      }
+      total += 1;
+      if (!needle || key.toLowerCase().includes(needle)) picked[key] = value;
+    }
+    const shown = Object.keys(picked).filter((k) => !k.startsWith('_')).length;
+    const header = needle
+      ? `=== Full PoB stats matching "${needle}": ${shown} of ${total} ===`
+      : `=== Full PoB stats: ${total} numeric values ===`;
+    return {
+      content: [{ type: "text" as const, text: `${header}\n\n${JSON.stringify(picked, null, 2)}` }],
+    };
+  });
+}
+
+/**
  * Non-damaging ailments, showing what the DPS calculation is crediting next to
  * what the skill would actually inflict. Those two disagree for every
  * chance-based ailment, because PoB applies only guaranteed or hand-configured

@@ -171,6 +171,13 @@ Expose atomic tools that map to the PoB API. Names prefixed `lua_` to avoid conf
   - Output: stat deltas as text. `slotName` must be an itemsTab slot name ("Body Armour"),
     not a base type; `toggleFlask` flips the flask in that slot rather than setting it.
 
+- `export_full_stats`
+  - Description: Every finite numeric key in the main output, unfiltered, plus `_skillDPS`,
+    `_minion` and `_meta`. The bridge action is `export_full_stats`; the MCP tool adds an
+    optional `filter` substring so the full set is not dumped when one stat is wanted.
+  - Input: `{}` (bridge) / `{ filter?: string }` (MCP)
+  - Output: `{ stats: Record<string, number> }`
+
 - `lua_get_tree`
   - Description: Return current passive tree data.
   - Input: `{}`
