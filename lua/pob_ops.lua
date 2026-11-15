@@ -615,8 +615,13 @@ function M.calc_with(params)
     end
     build.spec.masterySelections = build.spec.masterySelections or {}
     for nodeId, effectId in pairs(params.masteryEffects) do
-      build.spec.masterySelections[tonumber(nodeId)] = effectId
+      -- JSON object keys/values arrive as strings; PoB keys and compares numerically.
+      build.spec.masterySelections[tonumber(nodeId)] = tonumber(effectId) or effectId
     end
+    -- A mastery's stats live on node.sd/modList, which PoB only rewrites from
+    -- masterySelections inside BuildAllDependsAndPaths. Without this rebuild the
+    -- override was ignored and every mastery simulation returned current stats.
+    build.spec:BuildAllDependsAndPaths()
   end
   -- pcall returns (ok, result...): the first value is the success flag, not
   -- the stats table. Reading it as the result made every simulation silently
@@ -627,6 +632,7 @@ function M.calc_with(params)
   -- persist masteries the caller never committed.
   if origMastery then
     build.spec.masterySelections = origMastery
+    build.spec:BuildAllDependsAndPaths()
   end
   if not calcOk then
     return nil, 'calc_with failed: ' .. tostring(out)
