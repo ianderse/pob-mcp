@@ -154,8 +154,23 @@ describe('handleLuaSimulate', () => {
       }),
     );
 
-    expect(text).toContain('No reported stat moved');
+    expect(text).toContain('None of the stats listed above moved');
     expect(text).toContain('Combined DPS: 1,000,000 → 1,000,000  unchanged');
+  });
+
+  it('reports minion DPS, which the calculator nests under Minion', async () => {
+    const text = textOf(
+      await handleLuaSimulate(
+        contextReturning({
+          output: output({ Minion: { CombinedDPS: 300_000, TotalDPS: 280_000 } }),
+          base: output({ Minion: { CombinedDPS: 200_000, TotalDPS: 190_000 } }),
+        }),
+        { addNodes: [1] },
+      ),
+    );
+
+    expect(text).toContain('Minion Combined DPS: 200,000 → 300,000  +100,000 (+50.0%)');
+    expect(text).not.toContain('None of the stats listed above moved');
   });
 
   it('omits unchanged stats other than the headline pair', async () => {

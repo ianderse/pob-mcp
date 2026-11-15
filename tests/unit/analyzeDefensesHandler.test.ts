@@ -134,6 +134,21 @@ describe('handleAnalyzeDefenses', () => {
     expect(simulated.length).toBeGreaterThan(1);
   });
 
+  it('keeps the defensive analysis when the sweep itself fails', async () => {
+    const { client } = fakeClient();
+    const failing = {
+      ...client,
+      calcWith: async () => {
+        throw new Error('engine blew up');
+      },
+    };
+
+    const text = textOf(await handleAnalyzeDefenses(context(failing), 'occ-vortex', true));
+
+    expect(text).toContain('Binding Constraint');
+    expect(text).toContain('Sweep failed: engine blew up');
+  });
+
   it('measures the sweep without equipping anything', async () => {
     // The sweep used to append the probe modifier to a real item and restore the
     // build from a snapshot afterwards. A failed restore left the probe in the

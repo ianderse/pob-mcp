@@ -93,7 +93,7 @@ export async function runResistanceSweep(
   // Substituting the carrier unmodified must reproduce the build exactly. If it
   // does not, the item text did not round-trip and every step measured through
   // it would be reporting the carrier rather than the resistance.
-  const control = await client.calcWith({ repItem: carrier.raw, repSlotName: carrier.slot });
+  const control = await client.calcWith({ repItem: carrier.raw, repSlotName: carrier.slot, useFullDPS: false });
   const baseline = readFloor(control.base, element);
   const controlFloor = readFloor(control.output, element);
   if (!baseline) {
@@ -112,6 +112,7 @@ export async function runResistanceSweep(
     const { output } = await client.calcWith({
       repItem: `${carrier.raw}\n+${delta}% to ${element} Resistance`,
       repSlotName: carrier.slot,
+      useFullDPS: false,
     });
     const measured = readFloor(output, element);
     if (!measured) break;

@@ -1008,7 +1008,7 @@ export function getOptimizationToolSchemas(): ToolSchema[] {
           },
           sweep_resistances: {
             type: "boolean",
-            description: "Measure how far the binding resistance is worth buying. Steps that resistance up 5% at a time on the real engine (a few seconds) and reports the point at which the floor changes hands, past which more of it buys nothing. Mutates the loaded build during the sweep and restores it from a snapshot afterwards. Skipped when physical is the binding constraint, since no resistance moves it.",
+            description: "Measure how far the binding resistance is worth buying. Steps that resistance up 5% at a time on the real engine (a few seconds) and reports the point at which the floor changes hands, past which more of it buys nothing. Each step is a hypothetical calculation that swaps an equipped item for a copy carrying the extra resistance; the loaded build is never changed. Sweeps the lowest resisted max hit, so when physical is the overall floor it still ranks resistances and says physical owns the floor.",
           },
         },
         required: ["build_name"],

@@ -1011,6 +1011,8 @@ export async function handleSelectItemSet(context: LuaHandlerContext, id: number
 const SIMULATED_STATS: Array<{ key: string; label: string }> = [
   { key: 'CombinedDPS', label: 'Combined DPS' },
   { key: 'TotalDPS', label: 'Total DPS' },
+  { key: 'Minion.CombinedDPS', label: 'Minion Combined DPS' },
+  { key: 'Minion.TotalDPS', label: 'Minion Total DPS' },
   { key: 'TotalEHP', label: 'Effective HP' },
   { key: 'Life', label: 'Life' },
   { key: 'EnergyShield', label: 'Energy Shield' },
@@ -1040,8 +1042,11 @@ const ATTRIBUTE_REQUIREMENTS = [
   { label: 'Intelligence', have: 'Int', required: 'ReqInt', sourceKey: 'ReqIntItem' },
 ];
 
-const statNumber = (out: any, key: string): number | undefined =>
-  typeof out?.[key] === 'number' ? out[key] : undefined;
+/** `Minion.TotalDPS` reads a nested key: calcWith leaves minion stats under out.Minion. */
+const statNumber = (out: any, key: string): number | undefined => {
+  const value = key.split('.').reduce((node: any, part) => node?.[part], out);
+  return typeof value === 'number' ? value : undefined;
+};
 
 const formatStat = (value: number): string =>
   Math.abs(value) >= 100 ? Math.round(value).toLocaleString() : Number(value.toFixed(2)).toString();
@@ -1150,7 +1155,7 @@ export async function handleLuaSimulate(
     // A zero delta is the shape a silently rejected override takes, so say so
     // rather than let it read as a confirmed no-op.
     if (!moved) {
-      lines.push('', 'No reported stat moved. Check the override reached the engine before reporting this as no gain.');
+      lines.push('', 'None of the stats listed above moved. A change to something outside this list (block, suppression, crit, charges, ailments) would not show here, and a rejected override looks the same, so check before reporting this as no gain.');
     }
 
     const unmet = unmetRequirements(output, base);

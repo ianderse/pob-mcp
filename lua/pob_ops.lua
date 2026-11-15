@@ -505,6 +505,8 @@ function M.calc_with(params)
     if not parsed then return nil, 'invalid item text: ' .. tostring(item) end
     if not item or not item.baseName then return nil, 'failed to parse item' end
     item:NormaliseQuality()
+    -- Quality moves the item's mods, so rebuild them as ItemsTab does after normalising.
+    item:BuildModList()
     override.repSlotName = params.repSlotName
     override.repItem = item
   end
