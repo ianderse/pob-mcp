@@ -11,21 +11,23 @@
  *
  *   node scripts/generate-item-format.mjs [--check]
  *
- * Reads POB_PATH, the same variable the Lua bridge uses: a PathOfBuilding
+ * Reads the engine the same way the server does: an installed PoB, or a
  * checkout's src/ directory.
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+// The server's own resolver, from the compiled output.
+const { resolvePoBLayout } = await import("../build/utils/pobLayout.js").catch((error) => {
+  console.error(`generate-item-format: cannot load build/utils/pobLayout.js (${error.code ?? error.message}). Run: npm run build`);
+  process.exit(1);
+});
 
-// POB_PATH points at the checkout's src/ directory; POB_FORK_PATH is the
-// legacy alias the bridge still accepts. Everything here wants src/, so unlike
-// pobLuaBridge there is no need to strip back to the checkout root.
-const POB_SRC =
-  process.env.POB_PATH ??
-  process.env.POB_FORK_PATH ??
-  path.resolve("..", "PathOfBuilding", "src");
+// Resolved the way the server resolves it, so an installed PoB needs no
+// configuration. POB_PATH still wins, and points at a checkout's src/.
+const LAYOUT = resolvePoBLayout(process.env.POB_PATH || process.env.POB_FORK_PATH);
+const POB_SRC = LAYOUT.src;
 const ITEM_LUA = path.join(POB_SRC, "Classes", "Item.lua");
 const OUT = path.resolve("src", "data", "itemFormat.generated.ts");
 const checkOnly = process.argv.includes("--check");
@@ -35,16 +37,16 @@ function fail(msg) {
   process.exit(1);
 }
 
-// No checkout: --check cannot compare against Item.lua, and regenerating
+// No PoB: --check cannot compare against Item.lua, and regenerating
 // without one would destroy the tables. Exit with guidance instead. The
 // parser's behaviour is covered offline by the item-oracle fixture suite.
 if (!fs.existsSync(ITEM_LUA)) {
   console.error(
-    `generate-item-format: no PoB checkout at ${ITEM_LUA}.\n` +
+    `generate-item-format: no Path of Building found (looked for ${ITEM_LUA}).\n` +
       (checkOnly
-        ? "--check needs POB_PATH (a PathOfBuilding checkout's src/) to compare tables against Item.lua.\n" +
+        ? "--check needs an installed Path of Building, or POB_PATH set to a checkout's src/, to compare tables against Item.lua.\n" +
           "itemParser's behaviour is still covered offline by tests/fixtures/item-oracle.json."
-        : "Set POB_PATH to a PathOfBuilding checkout's src/ directory.")
+        : "Install Path of Building, or set POB_PATH to a checkout's src/ directory.")
   );
   process.exit(1);
 }
@@ -207,9 +209,13 @@ if (names.length !== descriptors.length || descriptors.length !== tags.length) {
 }
 
 const version = (() => {
-  // manifest.xml sits at the checkout root, one level above src/.
-  const manifest = path.join(POB_SRC, "..", "manifest.xml");
-  if (!fs.existsSync(manifest)) return "unknown";
+  // A checkout keeps manifest.xml at its root, one level above src/. An
+  // installed app keeps it inside src/ instead.
+  const manifest = [
+    path.join(POB_SRC, "..", "manifest.xml"),
+    path.join(POB_SRC, "manifest.xml"),
+  ].find((p) => fs.existsSync(p));
+  if (!manifest) return "unknown";
   const xml = fs.readFileSync(manifest, "utf-8");
   const number = xml.match(/number="([^"]+)"/)?.[1] ?? "unknown";
   // A checkout's manifest carries only the release number; the branch and commit
@@ -222,7 +228,12 @@ const version = (() => {
     spawnSync("git", ["-C", root, ...args], { encoding: "utf-8" }).stdout?.trim();
   const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   const commit = git(["rev-parse", "--short", "HEAD"]);
-  return branch && commit ? `${number} (${branch} @ ${commit})` : number;
+  // Only a checkout is its own git tree; an installed app would pick up an ancestor's.
+  if (LAYOUT.kind === "checkout" && branch && commit) return `${number} (${branch} @ ${commit})`;
+  // An installed app is not a git tree, so the manifest's own branch is all
+  // there is to add.
+  const manifestBranch = xml.match(/branch="([^"]+)"/)?.[1];
+  return manifestBranch ? `${number} (${manifestBranch})` : number;
 })();
 
 const data = {
