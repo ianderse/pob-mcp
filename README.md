@@ -325,8 +325,8 @@ Finally, update the Claude Desktop configuration above and restart Claude Deskto
 ## Available Tools
 
 With `POB_LUA_ENABLED=true`, `POE_TRADE_ENABLED=true`, and `POE_SESSION_ID` set,
-the server advertises **106 tools**. It advertises **39** with Lua and Trade disabled,
-and **97** with Lua enabled and Trade disabled. Tool discovery is not a guarantee
+the server advertises **113 tools**. It advertises **40** with Lua and Trade disabled,
+and **104** with Lua enabled and Trade disabled. Tool discovery is not a guarantee
 that the required engine, data files, credentials, or network service are usable.
 
 ### XML-Based Tools (Always Available)
