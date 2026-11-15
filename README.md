@@ -238,12 +238,13 @@ brew install luajit
 sudo apt-get install luajit
 ```
 
-Newer PoB sources can use compound assignment such as `count += 1`, which standard
-LuaJIT cannot parse. The revision recorded by this repo's item-format fixtures
-(`ed354c2`) uses that syntax in
+Newer PoB sources can use compound assignment such as `count += 1`. The revision
+recorded by this repo's item-format fixtures (`ed354c2`) uses that syntax in
 [`Modules/Main.lua`](https://github.com/PathOfBuildingCommunity/PathOfBuilding/blob/ed354c2/src/Modules/Main.lua).
-For those sources, supply a patched, PoB-compatible command-line interpreter and
-set `POB_CMD` to its path. This repository does not provide an installer for it.
+LuaJIT v2.1 builds from July 2026 on parse it (commit `a2ce8114`), and so does the
+current Homebrew `luajit`. With an older system package, supply a newer or patched
+interpreter and set `POB_CMD` to its path. This repository does not provide an
+installer for it.
 On Windows, a CLI executable is still required; PoB's `lua51.dll` alone is not a
 command-line interpreter.
 
@@ -628,8 +629,9 @@ before using a system package; some PoB revisions require patched syntax support
 
 **`'=' expected near '+'` (or another compound-assignment operator)**
 The interpreter cannot parse the chosen PoB source. Increasing the timeout or
-installing a Lua module will not add syntax support. Use a compatible interpreter
-and verify it with the compile-only command in the setup section.
+installing a Lua module will not add syntax support. Upgrade LuaJIT or use a
+compatible interpreter, and verify it with the compile-only command in the setup
+section.
 
 **`HeadlessWrapper.lua:1: unexpected symbol near '#'`**
 PoB's launcher files start with a `#@` line. LuaJIT builds from 20 Oct 2026 on read a
