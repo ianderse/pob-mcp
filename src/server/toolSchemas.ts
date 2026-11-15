@@ -180,7 +180,7 @@ export function getToolSchemas(): ToolSchema[] {
     },
     {
       name: "find_path_to_node",
-      description: "Find the shortest path from your current tree to a specific passive node. Uses loaded Lua bridge build when no build_name is provided.",
+      description: "Find the shortest path from your current tree to a specific passive node. Uses loaded Lua bridge build when no build_name is provided. Supply from_node_id to route between any two arbitrary nodes regardless of the current build (e.g. measuring distance between keystones). Each node in the result includes its name, type and stat lines.",
       inputSchema: {
         type: "object",
         properties: {
@@ -191,6 +191,10 @@ export function getToolSchemas(): ToolSchema[] {
           target_node_id: {
             type: "string",
             description: "ID of the target passive node",
+          },
+          from_node_id: {
+            type: "string",
+            description: "Route from this specific node instead of the build's allocated frontier. Enables any-node-to-any-node routing independent of the current build.",
           },
         },
         required: ["target_node_id"],

@@ -131,7 +131,8 @@ export async function routeToolCall(
       return await handleFindPath(
         treeContext,
         args.build_name as string,
-        args.target_node_id as string
+        args.target_node_id as string,
+        args.from_node_id as string | undefined
       );
 
     // Lua bridge tools

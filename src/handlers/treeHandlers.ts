@@ -198,7 +198,8 @@ export async function handleGetNearbyNodes(
 export async function handleFindPath(
   context: TreeHandlerContext,
   buildName: string | undefined,
-  targetNodeId: string
+  targetNodeId: string,
+  fromNodeId?: string
 ) {
   try {
     let allocatedNodeIds: string[] = [];
@@ -227,7 +228,7 @@ export async function handleFindPath(
       }
     }
 
-    if (allocatedNodeIds.length === 0) {
+    if (allocatedNodeIds.length === 0 && !fromNodeId) {
       return {
         content: [{
           type: "text" as const,
@@ -236,7 +237,7 @@ export async function handleFindPath(
       };
     }
 
-    const allocatedNodes = new Set<string>(allocatedNodeIds);
+    let allocatedNodes = new Set<string>(allocatedNodeIds);
     const treeData = await context.treeService.getTreeData(treeVersion);
 
     // Check if target node exists
@@ -245,7 +246,16 @@ export async function handleFindPath(
       throw new Error(`Node ${targetNodeId} not found in tree data`);
     }
 
-    // Check if target is already allocated
+    // from_node_id routes from that single node instead of the build's allocated
+    // frontier, enabling any-node-to-any-node routing.
+    if (fromNodeId) {
+      if (!treeData.nodes.has(fromNodeId)) {
+        throw new Error(`from_node_id ${fromNodeId} not found in tree data`);
+      }
+      allocatedNodes = new Set([fromNodeId]);
+    }
+
+    // Check if target is already allocated (or is the starting node)
     if (allocatedNodes.has(targetNodeId)) {
       return {
         content: [
@@ -276,12 +286,16 @@ export async function handleFindPath(
     }
 
     // Format output
-    const textLines: string[] = [
-      `=== Path to ${targetNode.name || "Node " + targetNodeId} ===`,
-      '',
-      `Build: ${buildName || '(in-memory build)'}`,
-      `Target: ${targetNode.name || "Unknown"} [${targetNodeId}]`,
-    ];
+    const routeDesc = fromNodeId
+      ? `from ${treeData.nodes.get(fromNodeId)?.name || "Node " + fromNodeId} to ${targetNode.name || "Node " + targetNodeId}`
+      : `to ${targetNode.name || "Node " + targetNodeId}`;
+    const textLines: string[] = [`=== Path ${routeDesc} ===`, ''];
+    if (fromNodeId) {
+      textLines.push(`From: ${treeData.nodes.get(fromNodeId)?.name || "Unknown"} [${fromNodeId}]`);
+    } else {
+      textLines.push(`Build: ${buildName || '(in-memory build)'}`);
+    }
+    textLines.push(`Target: ${targetNode.name || "Unknown"} [${targetNodeId}]`);
     if (targetNode.isKeystone) textLines.push('Type: KEYSTONE');
     else if (targetNode.isNotable) textLines.push('Type: Notable');
     textLines.push('');
@@ -292,7 +306,10 @@ export async function handleFindPath(
 
       textLines.push(`**${pathLabel}**`);
       textLines.push(`Total Cost: ${path.cost} passive points`);
-      textLines.push(`Nodes to Allocate: ${path.nodes.length}`, '');
+      const keystones = path.nodes.filter(id => treeData.nodes.get(id)?.isKeystone).length;
+      const notables = path.nodes.filter(id => { const n = treeData.nodes.get(id); return n?.isNotable && !n?.isKeystone; }).length;
+      const travel = path.nodes.length - keystones - notables;
+      textLines.push(`Nodes to Allocate: ${path.nodes.length}  (${keystones > 0 ? keystones + ' keystone, ' : ''}${notables} notable, ${travel} travel)`, '');
 
       textLines.push('Allocation Order:');
       for (let j = 0; j < path.nodes.length; j++) {
