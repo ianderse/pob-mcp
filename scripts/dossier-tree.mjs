@@ -20,12 +20,14 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import process from "node:process";
 import { parseArgs } from "node:util";
 import { XMLParser } from "fast-xml-parser";
 import { resolvePoBLayout } from "../build/utils/pobLayout.js";
 
-const LAYOUT_SCRIPT = path.resolve("scripts", "dossier-tree-layout.lua");
+// Beside this file, whatever directory the script is run from.
+const LAYOUT_SCRIPT = fileURLToPath(new URL("./dossier-tree-layout.lua", import.meta.url));
 const POB_CMD = process.env.POB_CMD ?? "luajit";
 
 function fail(message) {
@@ -62,6 +64,10 @@ const spec = specs[specNumber - 1];
 if (!spec) fail(`spec ${specNumber} does not exist; ${args.build} has ${specs.length}.`);
 if (!spec.treeVersion) fail(`spec ${specNumber} records no treeVersion.`);
 
+// The version comes from the build file and becomes a directory whose tree.lua
+// is executed, so it must name a directory, not a path.
+if (!/^\w+$/.test(spec.treeVersion)) fail(`spec ${specNumber} has an invalid treeVersion ${JSON.stringify(spec.treeVersion)}.`);
+
 const allocated = new Set(String(spec.nodes ?? "").split(",").filter(Boolean));
 const planned = (args.planned ?? "").split(",").map((id) => id.trim()).filter(Boolean);
 
@@ -80,7 +86,12 @@ const result = spawnSync(POB_CMD, [LAYOUT_SCRIPT, treeDir], {
 });
 if (result.error) fail(`could not run ${POB_CMD}: ${result.error.message}. Set POB_CMD to a LuaJIT binary.`);
 if (result.status !== 0) fail(`reading ${treeDir} failed:\n${result.stderr}`);
-const layout = JSON.parse(result.stdout);
+let layout;
+try {
+  layout = JSON.parse(result.stdout);
+} catch (error) {
+  fail(`${LAYOUT_SCRIPT} printed no valid layout for ${treeDir}: ${error.message}`);
+}
 
 const nodesById = new Map(layout.nodes.map((node) => [node.id, node]));
 const missing = [...allocated].filter((id) => !nodesById.has(id));
@@ -239,6 +250,10 @@ function renderAscendancy() {
 
 // ---- output -----------------------------------------------------------------
 
+if (planned.length > 0 && !ascendancy) {
+  fail(`--planned needs an ascendancy, and spec ${specNumber} has none.`);
+}
+if (new Set(planned).size !== planned.length) fail("--planned lists a node twice.");
 const unknownPlanned = planned.filter((id) => nodesById.get(id)?.ascendancyName !== ascendancy);
 if (unknownPlanned.length > 0) {
   fail(`--planned names nodes outside the ${ascendancy ?? "(no)"} ascendancy on tree ${spec.treeVersion}: ${unknownPlanned.join(", ")}`);

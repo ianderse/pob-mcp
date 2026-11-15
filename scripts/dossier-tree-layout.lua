@@ -58,10 +58,12 @@ local function orbitAngles(nodesInOrbit)
 end
 
 local anglesByOrbit = {}
-for orbit, count in ipairs(tree.constants.skillsPerOrbit) do
+-- Trees before 3.17 carry no orbit constants; PassiveTree.lua falls back to these.
+local skillsPerOrbit = tree.constants.skillsPerOrbit or { 1, 6, 12, 12, 40 }
+for orbit, count in ipairs(skillsPerOrbit) do
 	anglesByOrbit[orbit] = orbitAngles(count)
 end
-local radii = tree.constants.orbitRadii
+local radii = tree.constants.orbitRadii or { 0, 82, 162, 335, 493 }
 
 local function kindOf(node)
 	if node.isKeystone then return "keystone" end
