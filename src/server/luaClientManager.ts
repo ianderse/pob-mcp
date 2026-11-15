@@ -7,6 +7,7 @@
 import { PoBLuaApiClient } from '../pobLuaBridge.js';
 import { noteIgnoredError } from '../utils/errorHandling.js';
 import { BOOTSTRAP_BUILD_NAME } from './bootstrapBuild.js';
+import { resolveLuaCommand } from '../utils/luaCommand.js';
 import path from 'node:path';
 
 /**
@@ -120,10 +121,11 @@ export class LuaClientManager {
   private async initClient(): Promise<void> {
     console.error('[Lua Bridge] Initializing client...');
 
+    const launch = resolveLuaCommand(process.env, [repoPath('lua', 'vanilla_stdio_bridge.lua')]);
     const stdioClient = new PoBLuaApiClient({
       cwd: process.env.POB_PATH || process.env.POB_FORK_PATH,
-      cmd: process.env.POB_CMD,
-      args: process.env.POB_ARGS ? process.env.POB_ARGS.split(/\s+/).filter(Boolean) : [repoPath('lua', 'vanilla_stdio_bridge.lua')],
+      cmd: launch.cmd,
+      args: launch.args,
       // The repo-owned adapter calls HeadlessWrapper as a library; nothing in
       // the PoB checkout may take over stdin/stdout first.
       env: { POB_API_STDIO: '0' },
