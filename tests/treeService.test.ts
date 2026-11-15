@@ -376,6 +376,10 @@ describe('TreeService', () => {
       expect(treeData.version).toBe('3_30');
     });
 
+    it('rejects a version that is not a plain directory name', async () => {
+      await expect(treeService.getTreeData('../3_29')).rejects.toThrow(/Invalid passive tree version/);
+    });
+
     it('rejects a version the configured PoB lacks instead of using another tree', async () => {
       await expect(treeService.getTreeData('3_31')).rejects.toThrow(/no passive tree 3_31.*It has: .*3_29.*3_30/s);
     });

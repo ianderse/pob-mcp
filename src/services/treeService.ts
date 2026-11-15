@@ -58,6 +58,10 @@ export class TreeService {
    * is an error: another league's nodes would answer with the wrong tree.
    */
   private readTreeData(version: string): PassiveTreeData {
+    // The version can come from a build file, so it must name a directory, not a path.
+    if (!/^\w+$/.test(version)) {
+      throw new Error(`Invalid passive tree version ${JSON.stringify(version)}.`);
+    }
     const treeDataDir = path.join(resolveConfiguredPoBLayout().src, "TreeData");
     const treeFile = path.join(treeDataDir, version, "tree.lua");
     if (!fs.existsSync(treeFile)) {
