@@ -171,6 +171,12 @@ export async function handleSetConfig(
     output += `  New Value: ${formatValue(appliedValue !== undefined ? appliedValue : args.value)}\n\n`;
   }
 
+  // Custom modifiers are applied line by line; a line PoB cannot parse does nothing.
+  const unparsed = result?.rejected?.customModsUnparsed;
+  if (args.config_name === 'customMods' && unparsed) {
+    output += `WARNING: Path of Building could not parse these lines, so they have NO effect: ${unparsed}\n\n`;
+  }
+
   if (newStats.TotalDPS != null) {
     output += `=== Current Stats ===\n`;
     output += `Total DPS: ${formatNumber(toFiniteNumber(newStats.TotalDPS) ?? 0)}\n`;

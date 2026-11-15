@@ -671,6 +671,51 @@ function M.set_config(params)
       input[key] = nil
       applied[key] = '__unset__'
       changed = true
+    -- Custom Modifiers. Current PoB keeps them as named groups per config set
+    -- (configSet.customModsList); older PoB reads input.customMods. Write a
+    -- dedicated "pob-mcp" group so the user's own groups are never overwritten
+    -- (empty string removes ours), and report any line PoB cannot parse instead
+    -- of silently dropping it.
+    elseif key == 'customMods' then
+      if type(value) ~= 'string' then
+        rejected[key] = 'expected a string of modifier lines'
+      else
+        local tab = build.configTab
+        local set = tab.configSets and tab.configSets[tab.activeConfigSetId]
+        if set and set.customModsList then
+          local block
+          for i, b in ipairs(set.customModsList) do
+            if b.title == 'pob-mcp' then
+              block = b
+              if value == '' then table.remove(set.customModsList, i) end
+              break
+            end
+          end
+          if value ~= '' then
+            if not block then
+              block = { title = 'pob-mcp', enabled = true, text = '' }
+              table.insert(set.customModsList, block)
+            end
+            block.text, block.enabled = value, true
+          end
+          if #set.customModsList == 0 then
+            table.insert(set.customModsList, { title = 'Default', enabled = true, text = '' })
+          end
+        else
+          input.customMods = value
+        end
+        local unparsed = {}
+        for line in value:gmatch('([^\n]*)\n?') do
+          local stripped = line:match('^%s*(.-)%s*$')
+          if stripped ~= '' then
+            local mods, extra = modLib.parseMod(stripped)
+            if not mods or extra then table.insert(unparsed, stripped) end
+          end
+        end
+        applied[key] = value
+        if #unparsed > 0 then rejected.customModsUnparsed = table.concat(unparsed, ' | ') end
+        changed = true
+      end
     -- enemyLevel lives on the tab itself, not in the input table.
     elseif key == 'enemyLevel' then
       local n = tonumber(value)

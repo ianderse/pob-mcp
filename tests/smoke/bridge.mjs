@@ -116,6 +116,19 @@ try {
     throw new Error(`__unset__ on an unknown key must still be rejected: ${JSON.stringify(unsetBogus)}`);
   }
 
+  // customMods: applies, reports lines PoB cannot parse, and an empty string clears it
+  const cmBefore = (await client.getStats(['Life'])).Life;
+  const cm = await client.setConfig({ customMods: '+1000 to maximum Life\nthis is not a modifier' });
+  if (cm?.rejected?.customMods || cm?.rejected?.customModsUnparsed !== 'this is not a modifier') {
+    throw new Error(`customMods should apply and report the unparseable line: ${JSON.stringify(cm)}`);
+  }
+  const cmAfter = (await client.getStats(['Life'])).Life;
+  if (!(cmAfter > cmBefore)) throw new Error(`customMods did not change Life: ${cmBefore} -> ${cmAfter}`);
+  const cmClear = await client.setConfig({ customMods: '' });
+  if (cmClear?.rejected?.customModsUnparsed || (await client.getStats(['Life'])).Life !== cmBefore) {
+    throw new Error('empty customMods should clear the modifiers back to the original Life');
+  }
+
   // enemyIsBoss: legacy names must land on the current list values exactly as
   // PoB's own XML import maps them; an unknown list value must be REJECTED
   // per key, never silently stored (it would match no branch in the engine).
