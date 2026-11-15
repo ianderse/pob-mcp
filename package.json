@@ -10,6 +10,7 @@
     "generate:item-format:check": "node scripts/generate-item-format.mjs --check",
     "generate:item-oracle": "node scripts/generate-item-oracle.mjs",
     "generate:item-oracle:check": "node scripts/generate-item-oracle.mjs --check",
+    "dossier:tree": "node scripts/dossier-tree.mjs",
     "start": "node build/index.js",
     "dev": "tsc --watch",
     "test": "jest",

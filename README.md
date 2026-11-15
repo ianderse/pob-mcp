@@ -648,6 +648,17 @@ npm run build   # compile TypeScript
 npm run dev     # watch mode
 ```
 
+### Drawing a build's passive tree
+
+```bash
+npm run dossier:tree -- --build "/path/to/Build.xml" --out ./dossier [--spec N] [--planned id,id] [--icons]
+```
+
+Writes `tree.svg`, and `ascendancy.svg` when the spec has an ascendancy, for the
+offline build reports the `building-character-dossiers` agent skill describes.
+The tree version, class, ascendancy, and allocation come from the selected spec;
+node positions come from the same PoB the server uses.
+
 ## Path of Building XML Structure
 
 PoB builds are XML files with:
