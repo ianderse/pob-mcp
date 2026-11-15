@@ -1,6 +1,6 @@
 ---
 name: analyzing-pob-builds
-description: Use when analyzing a Path of Exile build through the pob MCP server, comparing upgrades, or verifying changes to items, gems, passives, and configuration.
+description: Use when analyzing a Path of Exile build through the pob MCP server, comparing or pricing upgrades, or verifying changes to items, gems, passives, and configuration.
 ---
 
 # Analyzing PoB Builds
@@ -116,6 +116,14 @@ gear is modeled as a minion loadout.
 Price specific rare affixes as well as uniques when shopping is requested. Keep
 league, price date, listing assumptions, and measured build deltas alongside the
 recommendation. Do not assume a rare is cheaper without checking.
+
+Price every purchase recommendation in the player's current league, with the
+exact item or affix filters the recommendation needs. When the market cannot be
+queried, use a price the player supplies and label it as player-reported. Never
+use a guide's price or another league's price. Count the full cost of the change:
+displaced stats, resistance and attribute repairs, sockets, and passive points.
+List what the player can buy now first. Mark scarce or multi-divine options as
+aspirational unless the player gave a budget that covers them.
 
 ## Compare defensive changes for the relevant damage
 
