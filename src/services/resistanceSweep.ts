@@ -28,7 +28,7 @@ export interface SweepClient {
   calcWith(params: CalcWithParams): Promise<{ output: any; base: any }>;
 }
 
-export interface SweepResult {
+interface SweepResult {
   summary?: ResistanceSweepSummary;
   /** Why no sweep ran. */
   note?: string;

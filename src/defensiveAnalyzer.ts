@@ -37,7 +37,7 @@ export type DamageType = 'Physical' | 'Fire' | 'Cold' | 'Lightning' | 'Chaos';
 /** The elemental and chaos types, i.e. the ones a resistance purchase can move. */
 const RESISTED_TYPES: readonly DamageType[] = ['Fire', 'Cold', 'Lightning', 'Chaos'];
 
-export interface MaxHitEntry {
+interface MaxHitEntry {
   type: DamageType;
   maxHit: number;
   /** Effective (already capped) resistance. Absent for physical. */
@@ -47,7 +47,7 @@ export interface MaxHitEntry {
   atCap: boolean;
 }
 
-export interface MaxHitAnalysis {
+interface MaxHitAnalysis {
   available: boolean;
   /** Ascending by max hit, so entries[0] is what kills the character first. */
   entries: MaxHitEntry[];
@@ -758,7 +758,7 @@ export interface SweepStep {
   bindingType: DamageType;
 }
 
-export interface SweepBaseline {
+interface SweepBaseline {
   resist: number;
   floor: number;
   bindingType: DamageType;
