@@ -153,6 +153,14 @@ Expose atomic tools that map to the PoB API. Names prefixed `lua_` to avoid conf
   - Description: Return computed stats from PoB calc engine.
   - Input: `{ fields?: string[] } // optional field whitelist`
 
+- `lua_get_timeless_jewels`
+  - Description: Each socketed timeless jewel as the engine applied it: seed, conqueror,
+    whether its lookup table loaded, and every conquered passive with its post-conquest
+    stats. Also reports whether `Inflate` (zlib) works; without it every timeless jewel is
+    a silent no-op. Warns when a jewel is unallocated, unloaded, or conquers nothing.
+  - Input: `{ include_unallocated?: boolean }`
+  - Output: text report.
+
 - `lua_get_ailments`
   - Description: Non-damaging ailments with the magnitude the calc applies alongside the
     magnitude the skill would inflict. PoB applies a chance-based ailment only when its

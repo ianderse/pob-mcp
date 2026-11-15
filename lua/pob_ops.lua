@@ -1587,5 +1587,70 @@ function M.get_mastery_options()
   return { masteries = result }
 end
 
+-- Timeless jewels as PoB actually applied them. For each socketed timeless jewel:
+-- its seed, conqueror, whether its lookup table loaded, and every passive it
+-- conquered with the stats PoB now gives that passive. A jewel whose `lutLoaded` is
+-- false, or that conquers nothing while allocated, is a silent no-op in the calc.
+-- Output: { zlib = bool, jewels = [ { itemId, name, socketNodeId, socketAllocated,
+--   seed, conqueror = {type, id}, jewelType, lutLoaded, conqueredCount,
+--   conquered = [ { nodeId, name, originalName, type, allocated, stats = [string] } ] } ] }
+local TIMELESS_TYPE_BY_CONQUEROR = {
+  vaal = 1, karui = 2, maraketh = 3, templar = 4, eternal = 5, kalguur = 6,
+  abyss_murderous = 7, abyss_searching = 8, abyss_hypnotic = 9, abyss_ghastly = 10, abyss_special = 11,
+}
+-- zlib stream of the string 'timeless'. Timeless lookup tables are zlib data read
+-- through Inflate, so round-tripping a known stream shows whether it can work.
+local ZLIB_PROBE = string.char(120, 156, 43, 201, 204, 77, 205, 73, 45, 46, 6, 0, 15, 70, 3, 103)
+function M.get_timeless_jewels()
+  if not build or not build.spec or not build.itemsTab then return nil, 'build/spec not initialized' end
+  local spec = build.spec
+  local okInflate, inflated = pcall(function() return Inflate and Inflate(ZLIB_PROBE) end)
+  local zlibOk = okInflate and inflated == 'timeless'
+  local jewels = {}
+  for socketId, itemId in pairs(spec.jewels or {}) do
+    local item = build.itemsTab.items[itemId]
+    local conqueredBy = item and item.jewelData and item.jewelData.conqueredBy
+    if conqueredBy then
+      local jewelType = TIMELESS_TYPE_BY_CONQUEROR[conqueredBy.conqueror and conqueredBy.conqueror.type]
+      local lut = data and data.timelessJewelLUTs and jewelType and data.timelessJewelLUTs[jewelType]
+      local conquered = {}
+      for id, node in pairs(spec.nodes) do
+        if node.conqueredBy and node.type ~= 'Socket' and node.conqueredBy.id == conqueredBy.id
+          and node.conqueredBy.conqueror and node.conqueredBy.conqueror.type == conqueredBy.conqueror.type then
+          local original = spec.tree.nodes[id]
+          local stats = {}
+          for _, line in ipairs(node.sd or {}) do table.insert(stats, line) end
+          table.insert(conquered, {
+            nodeId = id,
+            name = node.dn,
+            originalName = original and original.dn or nil,
+            type = node.type,
+            allocated = spec.allocNodes[id] ~= nil,
+            stats = stats,
+          })
+        end
+      end
+      table.sort(conquered, function(a, b)
+        if a.allocated ~= b.allocated then return a.allocated end
+        return a.nodeId < b.nodeId
+      end)
+      table.insert(jewels, {
+        itemId = itemId,
+        name = item.title or item.name,
+        socketNodeId = socketId,
+        socketAllocated = spec.allocNodes[socketId] ~= nil,
+        seed = conqueredBy.id,
+        conqueror = { type = conqueredBy.conqueror.type, id = conqueredBy.conqueror.id },
+        jewelType = jewelType,
+        lutLoaded = lut ~= nil and (lut.data ~= nil or next(lut) ~= nil),
+        conqueredCount = #conquered,
+        conquered = conquered,
+      })
+    end
+  end
+  table.sort(jewels, function(a, b) return a.socketNodeId < b.socketNodeId end)
+  return { zlib = zlibOk, jewels = jewels }
+end
+
 
 return M

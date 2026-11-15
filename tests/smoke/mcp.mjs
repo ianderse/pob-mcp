@@ -39,6 +39,7 @@ try {
     ['lua_get_build_snapshot', {}],
     ['lua_get_stats', {}],
     ['lua_get_ailments', {}],
+    ['lua_get_timeless_jewels', {}],
     ['get_equipped_items', {}],
     ['get_skill_setup', { main_only: false }],
     ['lua_get_tree', { include_node_ids: true }],
@@ -51,6 +52,12 @@ try {
   ]) {
     const response = await request('tools/call', { name, arguments: args });
     if (response.error || response.result?.isError) throw new Error(`${name} failed: ${JSON.stringify(response.error ?? response.result)}`);
+    if (name === 'lua_get_timeless_jewels') {
+      const text = response.result?.content?.[0]?.text || '';
+      if (!text.includes('=== Timeless Jewels ===') || text.includes('no working Inflate')) {
+        throw new Error(`lua_get_timeless_jewels reports no zlib or an unexpected shape: ${text}`);
+      }
+    }
     if (name === 'lua_get_ailments' && !response.result.content?.[0]?.text?.includes('=== Non-Damaging Ailments ===')) {
       throw new Error(`lua_get_ailments returned an unexpected response: ${JSON.stringify(response.result)}`);
     }

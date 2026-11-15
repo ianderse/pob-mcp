@@ -22,7 +22,7 @@ try {
   for (const action of ['get_capabilities', 'get_items', 'get_skills', 'set_tree', 'generate_weighted_trade_query',
     'add_gem', 'set_config', 'save_build', 'search_nodes', 'get_mastery_options', 'calc_with',
     'create_spec', 'delete_spec', 'rename_spec', 'set_socket_group_enabled', 'set_gem_enabled',
-    'get_ailments', 'export_full_stats']) {
+    'get_ailments', 'export_full_stats', 'get_timeless_jewels']) {
     if (!capabilities.actions?.includes(action)) throw new Error(`missing adapter capability: ${action}`);
   }
   await client.loadBuildXml(await readFile(resolve('example-build.xml'), 'utf8'), 'bridge-smoke');

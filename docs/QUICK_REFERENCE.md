@@ -44,6 +44,7 @@ POE_TRADE_ENABLED="true"                           # Enable Trade API tools
 | `lua_stop` | Stop bridge | "Stop the Lua bridge" |
 | `lua_load_build` | Load build XML | "Load MyBuild.xml into Lua" |
 | `lua_get_stats` | Get calculated stats | "Get stats from Lua" |
+| `lua_get_timeless_jewels` | Timeless jewel seed, conqueror and conquered passives, and whether the jewel is applied | "Is my Lethal Pride doing anything?" |
 | `lua_get_ailments` | Shock/chill magnitude, and whether the calc counts it | "Is my shock being counted?" |
 | `lua_simulate` | What-if an item, flask, passive or mastery change, build untouched | "What if I wore this chest instead?" |
 | `export_full_stats` | Every calculated stat, not just the curated set | "What is the exact key for my max hit?" |
