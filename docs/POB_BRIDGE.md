@@ -191,6 +191,13 @@ Expose atomic tools that map to the PoB API. Names prefixed `lua_` to avoid conf
     that PoB kept as text but could not turn into modifiers.
   - Input: `{ text: string }` (max 10240 bytes)
   - Output: `{ item: {...} }`
+- `batch_modify`
+  - Description: Validate every change, snapshot the build with `SaveDB`, apply the changes in
+    order and, on the first failure (or raised error), reload the snapshot and compare stats
+    to the pre-batch numbers. Config keys PoB rejects, tree nodes it drops and unknown slots
+    count as failures.
+  - Input: `{ changes: Array<{ type: 'equip_item'|'set_config'|'set_tree'|'update_tree_delta'|'set_flask_active'|'set_level', ... }> }` (max 25)
+  - Output: `{ result: { applied, delta } }`, or an error that reports the rollback outcome.
 
 - `lua_get_tree`
   - Description: Return current passive tree data.

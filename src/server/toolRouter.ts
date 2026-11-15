@@ -17,7 +17,7 @@ import { handleStartWatching, handleStopWatching, handleGetRecentChanges, handle
 import { handleCompareTrees, handleGetNearbyNodes, handleFindPath, handleConnectNodes, handleGetPassiveUpgrades, handleSuggestMasteries } from "../handlers/treeHandlers.js";
 import { handleGetBuildIssues, formatIssuesResponse } from "../handlers/buildGoalsHandlers.js";
 import { handleFindBestAnointment } from "../handlers/anointHandlers.js";
-import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaSaveBuild, handleLuaLoadBuild, handleLuaImportCode, handleLuaImportPobb, handleLuaGetAilments, handleLuaGetTimelessJewels, handleLuaSimulate, handleParseItem, handleExportFullStats,
+import { handleLuaStart, handleLuaStop, handleLuaNewBuild, handleLuaSaveBuild, handleLuaLoadBuild, handleLuaImportCode, handleLuaImportPobb, handleLuaGetAilments, handleLuaGetTimelessJewels, handleLuaSimulate, handleParseItem, handleExportFullStats, handleBatchModify,
   handleLuaGetStats, handleLuaGetBuildSnapshot, handleLuaGetTree, handleLuaSetTree, handleSearchTreeNodes, handleLuaGetBuildInfo, handleLuaReloadBuild, handleUpdateTreeDelta, handleCreateSpec, handleListSpecs, handleSelectSpec, handleDeleteSpec, handleRenameSpec, handleListItemSets, handleSelectItemSet } from "../handlers/luaHandlers.js";
 import { handleAddItem, handleGetEquippedItems, handleToggleFlask, handleGetSkillSetup, handleSetMainSkill, handleCreateSocketGroup, handleAddGem, handleSetGemLevel, handleSetGemQuality, handleRemoveSkill, handleRemoveGem, handleSetupSkillWithGems, handleAddMultipleItems, handleSetSocketGroupEnabled, handleSetGemEnabled } from "../handlers/itemSkillHandlers.js";
 import { handleAnalyzeDefenses, handleSuggestOptimalNodes, handleOptimizeTree } from "../handlers/optimizationHandlers.js";
@@ -282,6 +282,9 @@ export async function routeToolCall(
 
     case "parse_item":
       return await handleParseItem(luaContext, args?.text as string | undefined);
+
+    case "batch_modify":
+      return await handleBatchModify(luaContext, args?.changes as Parameters<typeof handleBatchModify>[1]);
 
     case "lua_get_stats":
       return await handleLuaGetStats(luaContext, args?.category as string | undefined);

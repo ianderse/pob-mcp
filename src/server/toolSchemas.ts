@@ -581,6 +581,28 @@ export function getLuaToolSchemas(): ToolSchema[] {
       },
     },
     {
+      name: "batch_modify",
+      description: "Apply several edits to the loaded build as ONE atomic unit: all of them land, or none do. The build is snapshotted first; if any change is rejected or fails, the snapshot is restored and the error says which change failed and whether the restored build was verified identical. Returns the stat delta of the whole batch. Use it to set up a coherent scenario (gear + config + tree + level) without leaving the build half-edited if one step is wrong. Changes run in order, up to 25. Limits: this really edits the in-memory build (use lua_simulate for a what-if that writes nothing); nothing is saved to disk; a batch is rejected up front if any change is malformed; config keys PoB does not recognise, tree nodes it cannot allocate and unknown slot names count as failures and trigger the rollback; skill/gem edits are not supported here (use the dedicated gem tools).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          changes: {
+            type: "array",
+            maxItems: 25,
+            description: "Ordered edits. Each has a `type`: equip_item {item_text, slot (exact PoB slot name, e.g. 'Body Armour')}; set_config {config: {optionName: value}}; set_tree {classId?, ascendClassId?, nodes: number[], masteryEffects?}; update_tree_delta {addNodes?, removeNodes?, masteryEffects?}; set_flask_active {index 1-5, active: boolean}; set_level {level 1-100}.",
+            items: {
+              type: "object",
+              properties: {
+                type: { type: "string", enum: ["equip_item", "set_config", "set_tree", "update_tree_delta", "set_flask_active", "set_level"] },
+              },
+              required: ["type"],
+            },
+          },
+        },
+        required: ["changes"],
+      },
+    },
+    {
       name: "lua_get_ailments",
       description: "Show non-damaging ailments (Shock, Chill, Scorch, Brittle, Sap) with what the DPS calculation is actually crediting next to what the main skill would inflict on the configured enemy. Call this for any build that shocks or chills: PoB applies a chance-based ailment only when its magnitude is entered by hand, so an uncounted shock silently understates every DPS figure. Magnitude is measured for the MAIN skill against the CURRENT enemy config, and it falls off steeply with enemy life, so re-read it per enemy rather than quoting one number for all content.",
       inputSchema: { type: "object", properties: {} },

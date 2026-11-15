@@ -1729,4 +1729,163 @@ function M.get_timeless_jewels()
 end
 
 
+-- Atomic multi-change edit. Every change is validated before anything is touched,
+-- the build is snapshotted as XML, and the first change that fails (or raises)
+-- reloads the snapshot, so the caller gets either all of the changes or none.
+local MAX_BATCH_CHANGES = 25
+
+local function finiteNumbers(tbl)
+  local out = {}
+  for k, v in pairs(tbl or {}) do
+    if type(k) == 'string' and type(v) == 'number' and v == v and v ~= math.huge and v ~= -math.huge then
+      out[k] = v
+    end
+  end
+  return out
+end
+
+-- Reject a malformed change before the build is touched, so a typo in change 7
+-- costs nothing instead of an apply-and-rollback of changes 1-6.
+local function validateBatchChange(change)
+  if type(change) ~= 'table' then return 'change must be an object' end
+  local ctype = change.type
+  if ctype == 'equip_item' then
+    if type(change.item_text) ~= 'string' or #change.item_text == 0 then return 'equip_item needs item_text' end
+    if #change.item_text > MAX_ITEM_TEXT_LENGTH then
+      return string.format('item_text too long (max %d bytes)', MAX_ITEM_TEXT_LENGTH)
+    end
+    if type(change.slot) ~= 'string' or change.slot == '' then return 'equip_item needs slot (an exact PoB slot name such as "Body Armour")' end
+  elseif ctype == 'set_config' then
+    if type(change.config) ~= 'table' or next(change.config) == nil then return 'set_config needs a non-empty config object' end
+  elseif ctype == 'set_tree' then
+    if type(change.nodes) ~= 'table' then return 'set_tree needs a nodes array' end
+  elseif ctype == 'update_tree_delta' then
+    if type(change.addNodes) ~= 'table' and type(change.removeNodes) ~= 'table' then
+      return 'update_tree_delta needs addNodes and/or removeNodes'
+    end
+  elseif ctype == 'set_flask_active' then
+    local idx = tonumber(change.index)
+    if not idx or idx < 1 or idx > NUM_FLASK_SLOTS or type(change.active) ~= 'boolean' then
+      return string.format('set_flask_active needs index 1-%d and a boolean active', NUM_FLASK_SLOTS)
+    end
+  elseif ctype == 'set_level' then
+    local lvl = tonumber(change.level)
+    if not lvl or lvl < MIN_PLAYER_LEVEL or lvl > MAX_PLAYER_LEVEL then
+      return string.format('set_level needs level %d-%d', MIN_PLAYER_LEVEL, MAX_PLAYER_LEVEL)
+    end
+  else
+    return 'unknown change type: ' .. tostring(ctype)
+  end
+  return nil
+end
+
+-- Returns true on success, or false plus a reason. Ops report failure by
+-- returning nil, err; a few also report a partial application in the table
+-- they return, which an atomic batch must treat as failure too.
+local function applyBatchChange(change)
+  local ctype = change.type
+  local res, err
+  if ctype == 'equip_item' then
+    res, err = M.add_item_text({ text = change.item_text, slotName = change.slot })
+  elseif ctype == 'set_config' then
+    res, err = M.set_config(change.config)
+    if res and next(res.rejected or {}) ~= nil then
+      local parts = {}
+      for key, why in pairs(res.rejected) do table.insert(parts, tostring(key) .. ': ' .. tostring(why)) end
+      table.sort(parts)
+      return false, 'config rejected (' .. table.concat(parts, '; ') .. ')'
+    end
+  elseif ctype == 'set_tree' then
+    res, err = M.set_tree(change)
+  elseif ctype == 'update_tree_delta' then
+    res, err = M.update_tree_delta(change)
+    if res and res.droppedNodes and #res.droppedNodes > 0 then
+      local ids = {}
+      for _, id in ipairs(res.droppedNodes) do table.insert(ids, tostring(id)) end
+      return false, 'nodes could not be allocated (disconnected or invalid): ' .. table.concat(ids, ', ')
+    end
+  elseif ctype == 'set_flask_active' then
+    res, err = M.set_flask_active(change)
+  elseif ctype == 'set_level' then
+    res, err = M.set_level(change.level)
+  end
+  if not res then return false, tostring(err or 'operation failed') end
+  return true
+end
+
+-- params: { changes = { { type = 'equip_item'|'set_config'|'set_tree'|'update_tree_delta'|
+--                                 'set_flask_active'|'set_level', ... }, ... } }
+-- Returns { applied, delta } on success. On failure returns nil, message; the
+-- message says whether the snapshot was restored and whether the restored build
+-- reproduces the original stats.
+function M.batch_modify(params)
+  if not build or not build.calcsTab then return nil, 'build not initialized' end
+  if type(params) ~= 'table' or type(params.changes) ~= 'table' or #params.changes == 0 then
+    return nil, 'changes must be a non-empty array'
+  end
+  local changes = params.changes
+  if #changes > MAX_BATCH_CHANGES then
+    return nil, string.format('too many changes (max %d)', MAX_BATCH_CHANGES)
+  end
+  for i, change in ipairs(changes) do
+    local bad = validateBatchChange(change)
+    if bad then return nil, string.format('change %d invalid: %s (nothing was applied)', i, bad) end
+  end
+  if type(_G.loadBuildFromXML) ~= 'function' then return nil, 'cannot snapshot: headless wrapper not initialized' end
+
+  local output, err = M.get_main_output()
+  if not output then return nil, err end
+  local before = finiteNumbers(output)
+
+  -- No snapshot, no batch: without one a mid-batch failure could not be undone.
+  local snapshot = build:SaveDB('batch-rollback')
+  if type(snapshot) ~= 'string' or #snapshot == 0 then
+    return nil, 'cannot snapshot the build, so nothing was applied'
+  end
+  local buildName = build.buildName and tostring(build.buildName) or 'API Build'
+
+  local function rollback()
+    local loaded, loadErr = pcall(_G.loadBuildFromXML, snapshot, buildName)
+    if not loaded then return 'ROLLBACK FAILED, the build is in an unknown state: ' .. tostring(loadErr) end
+    if not build or not build.calcsTab then return 'ROLLBACK FAILED, the build did not reload' end
+    local restored = M.get_main_output()
+    if not restored then return 'rolled back, but stats could not be re-read to verify' end
+    local after = finiteNumbers(restored)
+    local differing = {}
+    for k, v in pairs(before) do
+      if after[k] == nil or math.abs(after[k] - v) > 1e-6 * math.max(1, math.abs(v)) then
+        table.insert(differing, k)
+      end
+    end
+    if #differing > 0 then
+      table.sort(differing)
+      return string.format('rolled back, but %d stat(s) differ from before (e.g. %s)', #differing, differing[1])
+    end
+    return 'rolled back, restored build verified identical'
+  end
+
+  for i, change in ipairs(changes) do
+    local called, ok, why = pcall(applyBatchChange, change)
+    if not called then ok, why = false, tostring(ok) end
+    if not ok then
+      return nil, string.format('change %d (%s) failed: %s; %s', i, tostring(change.type), tostring(why), rollback())
+    end
+  end
+
+  build.buildFlag = true
+  local afterOutput = M.get_main_output()
+  if not afterOutput then
+    return nil, 'could not read stats after the changes; ' .. rollback()
+  end
+  local after = finiteNumbers(afterOutput)
+  local delta = {}
+  for k, v in pairs(after) do
+    local b = before[k]
+    if b ~= nil and math.abs(v - b) > 1e-6 then
+      delta[k] = { before = b, after = v, change = v - b, percent = b ~= 0 and ((v - b) / math.abs(b) * 100) or nil }
+    end
+  end
+  return { applied = #changes, delta = delta }
+end
+
 return M

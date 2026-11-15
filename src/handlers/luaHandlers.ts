@@ -1,4 +1,4 @@
-import type { AilmentReport, PoBLuaApiClient } from "../pobLuaBridge.js";
+import type { AilmentReport, BatchChange, PoBLuaApiClient } from "../pobLuaBridge.js";
 import { noteIgnoredError } from '../utils/errorHandling.js';
 import { handleGetBuildIssues } from "./buildGoalsHandlers.js";
 import fs from "fs/promises";
@@ -397,6 +397,49 @@ export async function handleLuaGetStats(context: LuaHandlerContext, category?: s
         },
       ],
     };
+  });
+}
+
+const BATCH_HEADLINE_STATS = ['Life', 'EnergyShield', 'TotalEHP', 'CombinedDPS', 'TotalDPS', 'FullDPS', 'FireResist', 'ColdResist', 'LightningResist', 'ChaosResist'];
+const BATCH_MAX_ROWS = 30;
+
+/**
+ * Apply several build edits atomically. The bridge snapshots the build, applies
+ * the changes in order, and on the first failure restores the snapshot, so the
+ * player's build is never left half-edited.
+ */
+export async function handleBatchModify(context: LuaHandlerContext, changes: BatchChange[] | undefined) {
+  return wrapHandler('batch modify', async () => {
+    if (!Array.isArray(changes) || changes.length === 0) {
+      throw new Error('changes must be a non-empty array');
+    }
+    await context.ensureLuaClient();
+    const luaClient = context.getLuaClient();
+    if (!luaClient) {
+      throw new Error('Lua client not initialized');
+    }
+
+    const { applied, delta } = await luaClient.batchModify(changes);
+    const keys = Object.keys(delta);
+    const headline = BATCH_HEADLINE_STATS.filter((k) => k in delta);
+    const rest = keys
+      .filter((k) => !headline.includes(k))
+      .sort((a, b) => Math.abs(delta[b].percent ?? 0) - Math.abs(delta[a].percent ?? 0));
+    const shown = [...headline, ...rest].slice(0, BATCH_MAX_ROWS);
+    const rows = shown.map((k) => {
+      const d = delta[k];
+      const pct = d.percent === undefined ? '' : ` (${d.percent >= 0 ? '+' : ''}${d.percent.toFixed(1)}%)`;
+      return `  ${k}: ${formatStat(d.before)} → ${formatStat(d.after)}${pct}`;
+    });
+    const lines = [
+      `=== Batch applied: ${applied} change(s) ===`,
+      '',
+      'All changes were applied to the loaded build in memory (save_build / lua_save_build to persist).',
+      '',
+      keys.length === 0 ? 'No stat changed.' : `${keys.length} stat(s) changed${keys.length > shown.length ? `, showing ${shown.length}` : ''}:`,
+      ...rows,
+    ];
+    return { content: [{ type: "text" as const, text: lines.join('\n') }] };
   });
 }
 

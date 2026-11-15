@@ -49,6 +49,7 @@ POE_TRADE_ENABLED="true"                           # Enable Trade API tools
 | `lua_simulate` | What-if an item, flask, passive or mastery change, build untouched | "What if I wore this chest instead?" |
 | `export_full_stats` | Every calculated stat, not just the curated set | "What is the exact key for my max hit?" |
 | `parse_item` | Validate item text with PoB's parser, build untouched | "Will PoB understand this item?" |
+| `batch_modify` | All-or-nothing multi-edit of gear, config, tree, flasks, level | "Set up this scenario, undo it if any step fails" |
 | `lua_get_tree` | Get tree data | "Show me the tree" |
 | `lua_set_tree` | Update tree | "Set tree to nodes [list]" |
 
